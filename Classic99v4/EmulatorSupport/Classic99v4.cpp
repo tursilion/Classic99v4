@@ -1,4 +1,14 @@
-// Classic99v4.cpp : Defines the entry point for the application.
+// Classic99 v4xx - Copyright 2020 by Mike Brent (HarmlessLion.com)
+// See License.txt, but the answer is "just ask me first". ;)
+
+// This file needs to provide the core functionality for the emulator
+// - ability to select a system
+// - management of resources (Memory, I/O) for each CPU (just a middle-man)
+// - timing management, including debug/single step per CPU
+// - sound output management
+// - video output management
+// - input management (keyboard and joysticks)
+
 // Expects to build with the Allegro5 library located in D:\Work\Allegro5\Build
 // Funny to come back to Allegro after so many years...
 // Today is 11/7/2020
@@ -8,27 +18,31 @@
 #include <stdio.h>
 #include "Classic99v4.h"
 
-#ifdef WIN32
+#ifdef ALLEGRO_WINDOWS
 #include <Windows.h>        // for outputdebugstring
 #endif
 
 // display
-ALLEGRO_DISPLAY *myWnd = NULL;
+ALLEGRO_DISPLAY *myWnd = nullptr;
 int width = 256;
 int height = 192;
 int wndFlags =  ALLEGRO_WINDOWED        // or ALLEGRO_FULLSCREEN_WINDOW | ALLEGRO_FRAMELESS
              |  ALLEGRO_RESIZABLE
+#ifdef ALLEGRO_LINUX
+             |  ALLEGRO_GTK_TOPLEVEL    // needed for menus under X
+#endif
              |  0                       // or ALLEGRO_DIRECT3D or ALLEGRO_OPENGL
              |  ALLEGRO_GENERATE_EXPOSE_EVENTS;    // maybe?
 
 // debug
-#define DEBUGLEN 120
-char lines[34][DEBUGLEN];               // debug lines
-ALLEGRO_MUTEX *DebugCS = NULL;          // we should assume that mutexes are NOT re-entrant!
+#define DEBUGLEN 240
+#define DEBUGLINES 34
+char debugLines[DEBUGLINES][DEBUGLEN];  // debug lines
+int currentDebugLine = 0;               // next line to write to
+bool bDebugDirty = true;                // never been drawn, must be dirty!
+ALLEGRO_MUTEX *DebugCS = nullptr;       // we should assume that this mutex is NOT re-entrant!
 
-/////////////////////////////////////////////////////////////////////////
 // Write a line to the debug buffer displayed on the debug screen
-/////////////////////////////////////////////////////////////////////////
 void debug_write(const char *s, ...) {
 	char buf[1024];
 
@@ -37,9 +51,25 @@ void debug_write(const char *s, ...) {
 
     // TODO: disk log here if configured
 
-#ifdef WIN32
+#ifdef ALLEGRO_WINDOWS
 	OutputDebugStringA(buf);
 	OutputDebugStringA("\n");
+#endif
+
+#if 0
+    // TODO: trying the Allegro log
+    // This works, but it just appends the window forever... would be bad
+    // for long runs.
+    static ALLEGRO_TEXTLOG *txtLog;
+    if (nullptr == txtLog) {
+        // TODO: note we need to add the log's events to the queue
+        // so we can detect when it's closed
+        txtLog = al_open_native_text_log("Classic99 Log", 0);
+    }
+    if (nullptr != txtLog) {
+        al_append_native_text_log(txtLog, buf);
+        al_append_native_text_log(txtLog, "\n");
+    }
 #endif
 
     // now trim to the final saved length
@@ -47,16 +77,37 @@ void debug_write(const char *s, ...) {
 
 	al_lock_mutex(DebugCS);
 
-    // TODO: this always should have been a ring buffer... ;)
-	memcpy(&lines[0][0], &lines[1][0], 33*DEBUGLEN);				// scroll data
-	strncpy(&lines[33][0], buf, DEBUGLEN);							// copy in new line
-	memset(&lines[33][strlen(buf)], 0x20, DEBUGLEN-strlen(buf));	// clear rest of line
-	lines[33][DEBUGLEN-1]='\0';										// zero terminate (paranoia)
+        // copy the line in - we already enforced the size above
+	    strcpy(&debugLines[currentDebugLine][0], buf);
 
-	al_unlock_mutex(DebugCS);
+        // next line
+        ++currentDebugLine;
+        if (currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
 
-    // TODO: notify the debug window
-	//bDebugDirty=true;												// flag redraw
+        // flag redraw
+        bDebugDirty=true;
+
+    al_unlock_mutex(DebugCS);
+
+}
+
+// copy out the debug log - using a function now with a copy because the ring
+// buffer could otherwise cause odd alignment, and we want to control how long
+// we hold the mutex without worrying about how long the OS needs to draw
+// buf must be a pointer to an array of size [DEBUGLINES][DEBUGLEN]
+void get_debug(char *buf[DEBUGLEN]) {
+    al_lock_mutex(DebugCS);
+
+        int n = currentDebugLine;
+        for (int i = 0; i<DEBUGLINES; ++i) {
+            strcpy(buf[i], debugLines[n++]);
+            if (n >= DEBUGLINES) n = 0;
+        }
+
+        // assume this is being used to redraw the debug
+        bDebugDirty = false;
+
+    al_unlock_mutex(DebugCS);
 }
 
 // Cleanup - shared function to release resources
@@ -69,7 +120,7 @@ void Cleanup() {
 // fatal error - write to log and message box, then exit
 void fail(const char *str) {
     debug_write("Exitting: %s", str);
-    al_show_native_message_box(myWnd, "Classic99", "Fatal error", str, NULL, ALLEGRO_MESSAGEBOX_ERROR);
+    al_show_native_message_box(myWnd, "Classic99", "Fatal error", str, nullptr, ALLEGRO_MESSAGEBOX_ERROR);
     Cleanup();
     exit(99);
 }
@@ -79,8 +130,11 @@ int main(int argc, char **argv) {
     // set up mutexes before anything else
     DebugCS = al_create_mutex();
 
-    // now we can start starting
-    debug_write("Starting Classic99 version " VERSION);
+    // clear out the debug buffer
+    for (int i=0; i<DEBUGLINES; ++i) {
+        memset(debugLines[i], ' ', DEBUGLEN);
+        debugLines[i][DEBUGLEN-1] = '\0';
+    }
 
     // set up Allegro
     if (!al_init()) {
@@ -96,6 +150,16 @@ int main(int argc, char **argv) {
         debug_write("Warning: failed to initialize dialog add-on");
     }
 
+    // Platform specific init goes here
+#ifdef ALLEGRO_ANDROID
+    // TODO: these are from the sample code - do I need them? Want them?
+    al_install_touch_input();
+    al_android_set_apk_file_interface();
+#endif
+
+    // now we can start starting
+    debug_write("Starting Classic99 version " VERSION);
+
     // create an event queue, register as we go
     ALLEGRO_EVENT_QUEUE *evtQ = al_create_event_queue();
 
@@ -107,7 +171,7 @@ int main(int argc, char **argv) {
     al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 0, ALLEGRO_SUGGEST);  // suggest no multisampling
     // al_set_new_window_position(x, y);                // TODO
     myWnd = al_create_display(width, height);
-    if (NULL == myWnd) {
+    if (nullptr == myWnd) {
         printf("Failed to create display\n");
         return 98;
     }

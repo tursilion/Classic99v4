@@ -1,34 +1,66 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Emulator Support">
+      <UniqueIdentifier>{0307496b-f0c2-41ef-9bc8-baec31f23292}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CPUs">
+      <UniqueIdentifier>{6c8a1589-3062-4369-bcc9-49ff59b148a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="VDPs">
+      <UniqueIdentifier>{2ae2bb70-c6cf-4446-b8c7-32a97e6444ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="PSGs">
+      <UniqueIdentifier>{f15caa34-ef34-42d0-a4f1-6eaac15baa80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Disk">
+      <UniqueIdentifier>{02e4b97c-d2f9-4e37-bac6-147769611ba8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Keyboard">
+      <UniqueIdentifier>{e6029769-d051-403e-914e-e676fc1e94b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Expansions">
+      <UniqueIdentifier>{b6347363-073e-4b2e-81f7-2ae0ac1e81b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Systems">
+      <UniqueIdentifier>{5172dbe1-a2c9-4f98-b8b1-c07285ad8104}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Systems\Coleco">
+      <UniqueIdentifier>{6f65f8ad-1113-4040-9c02-8c782ff48b33}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Systems\Texas Instruments">
+      <UniqueIdentifier>{5520cf39-e9c6-4991-b0f7-16d6c26eb782}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Resource.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="EmulatorSupport\Classic99v4.h">
+      <Filter>Emulator Support</Filter>
     </ClInclude>
-    <ClInclude Include="Classic99v4.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Resource.h">
+      <Filter>Emulator Support</Filter>
     </ClInclude>
     <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
+      <Filter>Emulator Support</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="Classic99v4.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClInclude Include="EmulatorSupport\cpu.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\System.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\peripheral.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\vdp.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\psg.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -36,11 +68,43 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="small.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Classic99v4.ico">
       <Filter>Resource Files</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="EmulatorSupport\Classic99v4.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
+    <ClCompile Include="VDPs\TMS9918.cpp">
+      <Filter>VDPs</Filter>
+    </ClCompile>
+    <ClCompile Include="VDPs\TMS9918A.cpp">
+      <Filter>VDPs</Filter>
+    </ClCompile>
+    <ClCompile Include="VDPs\F18A_19.cpp">
+      <Filter>VDPs</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems\Coleco\ColecoVision.cpp">
+      <Filter>Systems\Coleco</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems\Coleco\Phoenix.cpp">
+      <Filter>Systems\Coleco</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems\TexasInstruments\TI994.cpp">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems\TexasInstruments\TI994A.cpp">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems\TexasInstruments\TI994A_22.cpp">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClCompile>
+    <ClCompile Include="VDPs\V9938.cpp">
+      <Filter>VDPs</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="License.txt" />
   </ItemGroup>
 </Project>
