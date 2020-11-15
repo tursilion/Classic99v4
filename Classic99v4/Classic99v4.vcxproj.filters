@@ -103,6 +103,12 @@
     <ClCompile Include="VDPs\V9938.cpp">
       <Filter>VDPs</Filter>
     </ClCompile>
+    <ClCompile Include="EmulatorSupport\System.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
+    <ClCompile Include="EmulatorSupport\peripheral.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="License.txt" />

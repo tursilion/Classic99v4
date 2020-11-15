@@ -24,6 +24,7 @@
 #define PERIPHERAL_IO_PARALLEL2_IN   0x40
 #define PERIPHERAL_IO_PARALLEL2_OUT  0x80
 
+// this one is NOT pure virtual so the base class can be used as a dummy object
 class Classic99Peripheral {
 public:
     Classic99Peripheral() {
@@ -35,6 +36,10 @@ public:
         // release the lock object
         al_destroy_mutex(periphLock);
     };
+
+    // dummy read and write
+    virtual int read(int addr, bool allowSideEffects) { (void)addr; (void)allowSideEffects; return 0; }
+    virtual void write(int addr, bool allowSideEffects, int data) { (void)addr; (void)allowSideEffects; (void)data; }
 
     // TODO: timing interface
     // TODO: debug interface
@@ -54,7 +59,9 @@ private:
     ALLEGRO_MUTEX *periphLock;      // our object lock
 
     friend class Classic99System;   // allowed access to our lock methods
-}
+};
+
+extern Classic99Peripheral dummyPeripheral;
 
 
 #endif

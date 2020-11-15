@@ -16,36 +16,29 @@
 // maximum number of PSGs supported
 #define MAX_PSGS 2
 
-// this defines the base class for a Classic99System - all systems
+// a dummy peripheral to respond where nothing is mapped
+extern Classic99Peripheral dummyPeripheral;
+
+// maps an address or IO to a peripheral class
+class PeripheralMap {
+public:
+    PeripheralMap() { who = &dummyPeripheral; addr = 0; }
+    PeripheralMap(Classic99Peripheral *inWho, int inAddr) { who = inWho; addr = inAddr; }
+
+protected:
+    Classic99Peripheral *who;   // which peripheral to call
+    int addr;                   // what address to tell the peripheral
+
+    friend class Classic99System;
+};
+
+// this defines the pure virtual base class for a Classic99System - all systems
 // must derive from this class. This is used largely to provide an
 // interface for creating and registering the system components.
 class Classic99System {
 public:
-    Classic99System() {
-        mainVDP = nullptr;
-        for (int i=0; i<MAX_CPUS; ++i) {
-            mainCPU[i] = nullptr;
-        }
-        for (int i=0; i<MAX_PSGS; ++i) {
-            mainPSG[i] = nullptr;
-        }
-    };
-    virtual ~Classic99System() {
-        // before destroying, make sure everyone has forgotten about us!
-        if (mainVDP != nullptr) {
-            delete mainVDP;
-        }
-        for (int i=0; i<MAX_CPUS; ++i) {
-            if (mainCPU[i] != nullptr) {
-                delete mainCPU[i];
-            }
-        }
-        for (int i=0; i<MAX_PSGS; ++i) {
-            if (mainPSG[i] != nullptr) {
-                delete mainPSG[i];
-            }
-        }
-    }
+    Classic99System();
+    virtual ~Classic99System();
 
     // Setup the system, create everything needed
     virtual bool initSystem() = 0;      // create the needed components and register them
@@ -86,63 +79,44 @@ public:
     virtual bool mapOutput(int periph, int ioMask, Classic99System *pSys) { (void)periph; (void)ioMask; (void)pSys; return false; }
     virtual void unmapOutputs(Classic99System *pSys) { (void)pSys; }
 
+    // The CPUs normally default into these maps, but some CPUs might have their own handlers
+    int readMemoryByte(int address, bool allowSideEffects);
+    void writeMemoryByte(int address, bool allowSideEffects, int data);
+    int readIOByte(int address, bool allowSideEffects);
+    void writeIOByte(int address, bool allowSideEffects, int data);
+
     // the core (and others) may need access to this object's basic hardware
     // note these methods are allowed to return NULL if the hardware doesn't exist
     // each lock MUST be followed by an unlock, and you may NOT access the
     // returned pointer after unlocking.
 
     // note: we only support one VDP for now
-    virtual Classic99VDP *lockVDP() {
-        if (nullptr != mainVDP) {
-            mainVDP->lock();
-            return mainVDP;
-        } else {
-            return NULL;
-        }
-    }
-    virtual void unlockVDP(Classic99VDP *vdp) {
-        if (nullptr != vdp) {
-            vdp->unlock();
-        }
-    }
+    virtual Classic99VDP *lockVDP();
+    virtual void unlockVDP(Classic99VDP *vdp);
 
     // note: support up to MAX_CPUS cpus
     virtual bool isCPU(int cpu) { return ((cpu < MAX_CPUS) && (mainCPU[cpu] != nullptr)); }
-    virtual Classic99CPU *lockCPU(int cpu) {
-        if (isCPU(cpu)) {
-            mainCPU[cpu]->lock();
-            return mainCPU[cpu];
-        } else {
-            return nullptr;
-        }
-    }
-    virtual void unlockCPU(Classic99CPU *cpu) {
-        if (cpu != nullptr) {
-            cpu->unlock();
-        }
-    }
+    virtual Classic99CPU *lockCPU(int cpu);
+    virtual void unlockCPU(Classic99CPU *cpu);
 
     // note: support up to MAX_PSGs PSGs
     virtual bool isPSG(int psg) { return ((psg < MAX_PSGS) && (mainPSG[psg] != nullptr)); }
-    virtual Classic99PSG *lockPSG(int psg) {
-        if (isPSG(psg)) {
-            mainPSG[psg]->lock();
-            return mainPSG[psg];
-        } else {
-            return nullptr;
-        }
-    }
-    virtual void unlockPSG(Classic99PSG *psg) {
-        if (psg != nullptr) {
-            psg->unlock();
-        }
-    }
+    virtual Classic99PSG *lockPSG(int psg);
+    virtual void unlockPSG(Classic99PSG *psg);
 
 private:
     Classic99VDP *mainVDP;
     Classic99CPU *mainCPU[MAX_CPUS];
     Classic99PSG *mainPSG[MAX_PSGS];
 
+    // derived classes are expected to allocate these
+    // read and write are separate because some systems are clever...
+    PeripheralMap *memorySpaceRead;
+    PeripheralMap *memorySpaceWrite;
+    PeripheralMap *ioSpaceRead;
+    PeripheralMap *ioSpaceWrite;
+    int memorySize;     // power of 2 mask
+    int ioSize;         // power of 2 mask
 };
 
 
