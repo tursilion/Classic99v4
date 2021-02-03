@@ -30,7 +30,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -163,17 +163,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CPUs\tms9900.h" />
     <ClInclude Include="EmulatorSupport\Classic99v4.h" />
-    <ClInclude Include="EmulatorSupport\cpu.h" />
+    <ClInclude Include="EmulatorSupport\debuglog.h" />
     <ClInclude Include="EmulatorSupport\peripheral.h" />
-    <ClInclude Include="EmulatorSupport\psg.h" />
-    <ClInclude Include="EmulatorSupport\vdp.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="EmulatorSupport\System.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CPUs\tms9900.cpp" />
     <ClCompile Include="EmulatorSupport\Classic99v4.cpp" />
+    <ClCompile Include="EmulatorSupport\debuglog.cpp" />
     <ClCompile Include="EmulatorSupport\peripheral.cpp" />
     <ClCompile Include="EmulatorSupport\System.cpp" />
     <ClCompile Include="Systems\Coleco\ColecoVision.cpp" />

@@ -1,16 +1,14 @@
-// Classic99 v4xx - Copyright 2020 by Mike Brent (HarmlessLion.com)
+// Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
 #include "System.h"
 
+// there is one global system object, eventually. This points to it.
+Classic99System *theCore = NULL;
+
+// base class implementation
 Classic99System::Classic99System() {
-    mainVDP = nullptr;
-    for (int i=0; i<MAX_CPUS; ++i) {
-        mainCPU[i] = nullptr;
-    }
-    for (int i=0; i<MAX_PSGS; ++i) {
-        mainPSG[i] = nullptr;
-    }
+    coreLock = al_create_mutex_recursive();
 
     // derived class MUST allocate these objects!
     // the single dummies at least prevent crashes
@@ -23,68 +21,37 @@ Classic99System::Classic99System() {
 }
 
 Classic99System::~Classic99System() {
-    // before destroying, make sure everyone has forgotten about us!
-    if (mainVDP != nullptr) {
-        delete mainVDP;
-    }
-    for (int i=0; i<MAX_CPUS; ++i) {
-        if (mainCPU[i] != nullptr) {
-            delete mainCPU[i];
-        }
-    }
-    for (int i=0; i<MAX_PSGS; ++i) {
-        if (mainPSG[i] != nullptr) {
-            delete mainPSG[i];
-        }
-    }
+    // release the lock object
+    al_destroy_mutex(coreLock);
 }
 
-// note: we only support one VDP for now
-Classic99VDP *Classic99System::lockVDP() {
-    if (nullptr != mainVDP) {
-        mainVDP->lock();
-        return mainVDP;
-    } else {
-        return NULL;
-    }
-}
-void Classic99System::unlockVDP(Classic99VDP *vdp) {
-    if (nullptr != vdp) {
-        vdp->unlock();
-    }
+// handle allocating memory space in the general flat case
+bool Classic99System::claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+    if (sysAdr >= memorySize) return false;
+    memorySpaceRead[sysAdr].updateMap(periph, periphAdr);
+    return true;
 }
 
-Classic99CPU *Classic99System::lockCPU(int cpu) {
-    if (isCPU(cpu)) {
-        mainCPU[cpu]->lock();
-        return mainCPU[cpu];
-    } else {
-        return nullptr;
-    }
-}
-void Classic99System::unlockCPU(Classic99CPU *cpu) {
-    if (cpu != nullptr) {
-        cpu->unlock();
-    }
+bool Classic99System::claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+    if (sysAdr >= memorySize) return false;
+    memorySpaceWrite[sysAdr].updateMap(periph, periphAdr);
+    return true;
 }
 
-Classic99PSG *Classic99System::lockPSG(int psg) {
-    if (isPSG(psg)) {
-        mainPSG[psg]->lock();
-        return mainPSG[psg];
-    } else {
-        return nullptr;
-    }
+bool Classic99System::claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+    if (sysAdr >= ioSize) return false;
+    ioSpaceRead[sysAdr].updateMap(periph, periphAdr);
+    return true;
 }
-void Classic99System::unlockPSG(Classic99PSG *psg) {
-    if (psg != nullptr) {
-        psg->unlock();
-    }
+
+bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+    if (sysAdr >= ioSize) return false;
+    ioSpaceWrite[sysAdr].updateMap(periph, periphAdr);
+    return true;
 }
 
 // read and write are normally handled here, at the system level,
-// since most machines use a rather flat architecture. CPUs can
-// decide what to do on their own, of course.
+// since most machines use a rather flat architecture.
 
 // read from a memory address
 // address - system address being accessed
@@ -93,7 +60,7 @@ int Classic99System::readMemoryByte(int address, bool allowSideEffects) {
     if (address >= memorySize) {
         address &= memorySize;
     }
-    return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, allowSideEffects);
+    return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, false, allowSideEffects);
 }
 
 // write to a memory address
@@ -104,7 +71,7 @@ void Classic99System::writeMemoryByte(int address, bool allowSideEffects, int da
     if (address >= memorySize) {
         address &= memorySize;
     }
-    memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, allowSideEffects, data);
+    memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, false, allowSideEffects, data);
 }
 
 // read from an IO address
@@ -114,7 +81,7 @@ int Classic99System::readIOByte(int address, bool allowSideEffects) {
     if (address >= ioSize) {
         address &= ioSize;
     }
-    return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, allowSideEffects);
+    return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, true, allowSideEffects);
 }
 
 // write to an IO address
@@ -125,6 +92,11 @@ void Classic99System::writeIOByte(int address, bool allowSideEffects, int data) 
     if (address >= ioSize) {
         address &= ioSize;
     }
-    ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, allowSideEffects, data);
+    ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, true, allowSideEffects, data);
+}
+
+// process any active debug systems, poll peripherals, etc...
+// TODO
+void Classic99System::processDebug() {
 }
 

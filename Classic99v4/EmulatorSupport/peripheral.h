@@ -1,4 +1,4 @@
-// Classic99 v4xx - Copyright 2020 by Mike Brent (HarmlessLion.com)
+// Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
 #ifndef EMULATOR_SUPPORT_PERIPHERAL_H
@@ -6,23 +6,78 @@
 
 #include <allegro5/allegro.h>
 
+// Port emulation today is rather high level, and probably won't contain control bits
+// but when we someday need them, then we'll figure it out...
+enum PORTTYPE {
+    NULL_PORT,
+
+    SERIAL_PORT,
+    PARALLEL_PORT,
+    GAME_PORT,
+    KEYBOARD_PORT,
+    MOUSE_PORT
+};
+
+// object for tracking breakpoints
+class BREAKPOINT {
+public:
+    // breakpoint mask types
+    static const int BREAKPOINT_MASK_READ = 0x01;
+    static const int BREAKPOINT_MASK_WRITE = 0x02;
+    static const int BREAKPOINT_MASK_IO = 0x04;
+
+    static const int BREAKPOINT_MASK_ACCESS = BREAKPOINT_MASK_READ | BREAKPOINT_MASK_WRITE;
+    static const int BREAKPOINT_MASK_READ_IO = BREAKPOINT_MASK_READ | BREAKPOINT_MASK_IO;
+    static const int BREAKPOINT_MASK_WRITE_IO = BREAKPOINT_MASK_WRITE | BREAKPOINT_MASK_IO;
+    static const int BREAKPOINT_MASK_ACCESS_IO = BREAKPOINT_MASK_IO | BREAKPOINT_MASK_ACCESS;
+
+    BREAKPOINT() :
+        typeMask(0), page(0), address(0), dataMask(0), data(0) { 
+    };
+    BREAKPOINT(int inType, int inPage, int inAdr, int inMask, int inData) :
+        typeMask(inType), page(inPage), address(inAdr), dataMask(inMask), data(inData) { 
+    };
+
+    BREAKPOINT& operator=(const BREAKPOINT &other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        typeMask = other.typeMask;
+        page = other.page;
+        address = other.address;
+        dataMask = other.dataMask;
+        data = other.data;
+
+        return *this;
+    };
+
+    inline bool operator==(const BREAKPOINT& rhs) {
+        if ((typeMask == rhs.typeMask) &&
+            (page == rhs.page) && 
+            (address == rhs.address) &&
+            (dataMask == rhs.dataMask) &&
+            (data == rhs.data)) {
+            return true;
+        }
+        return false;
+    }
+    inline bool operator!=(const BREAKPOINT& rhs) {
+        return !((*this)==rhs);
+    }
+
+    int typeMask;   // access mask as above
+    int page;       // page on peripheral, or 0
+    int address;    // system address, or 0
+    int dataMask;   // a mask to apply to data comparisons, or zero if ignored
+    int data;       // the data to compare using dataMask
+};
+
+// per memory range, should be fine
+const int MAX_BREAKPOINTS = 32;
+
 // The base peripheral interface allows for instantiating and destroying
 // a peripheral instance, as well as providing a debug interface for it
-
-// peripheral IO types (bitmask)
-// TODO: This lets the system see what can be hooked up, when
-// I have that ability, anyway.
-// Intended for things like serial ports, modems, modem emulators,
-// printers, and maybe even direct connections between devices...
-#define PERIPHERAL_IO_NONE           0x00
-#define PERIPHERAL_IO_SERIAL1_IN     0x01
-#define PERIPHERAL_IO_SERIAL1_OUT    0x02
-#define PERIPHERAL_IO_PARALLEL1_IN   0x04
-#define PERIPHERAL_IO_PARALLEL1_OUT  0x08
-#define PERIPHERAL_IO_SERIAL2_IN     0x10
-#define PERIPHERAL_IO_SERIAL2_OUT    0x20
-#define PERIPHERAL_IO_PARALLEL2_IN   0x40
-#define PERIPHERAL_IO_PARALLEL2_OUT  0x80
 
 // this one is NOT pure virtual so the base class can be used as a dummy object
 class Classic99Peripheral {
@@ -31,18 +86,66 @@ public:
         // create the lock object - we can't be certain that
         // we don't need a recursive mutex since others can use it
         periphLock = al_create_mutex_recursive();
+        trackIsActive = false;
+        page = 0;
+        myName = "Dummy";
+        index = 0;
+        formattedName[0] = '\0';
     }
     virtual ~Classic99Peripheral() {
         // release the lock object
         al_destroy_mutex(periphLock);
     };
 
-    // dummy read and write
-    virtual int read(int addr, bool allowSideEffects) { (void)addr; (void)allowSideEffects; return 0; }
-    virtual void write(int addr, bool allowSideEffects, int data) { (void)addr; (void)allowSideEffects; (void)data; }
+    // dummy read and write - IO flag is unused on most, but just in case they need to know
+    virtual int read(int addr, bool isIO, bool allowSideEffects) { (void)addr; (void)allowSideEffects; return 0; }
+    virtual void write(int addr, bool isIO, bool allowSideEffects, int data) { (void)addr; (void)allowSideEffects; (void)data; }
 
-    // TODO: timing interface
-    // TODO: debug interface
+    // interface code
+    virtual int hasAvailablePorts() { return 0; }    // number of pluggable ports (for serial, parallel, etc)
+    virtual int usesPlugPorts() { return 0; }   // number of ports that it has for attaching to (can't see this being more than 1)
+    virtual PORTTYPE getAvailablePort(int idx) { (void)idx; return NULL_PORT; }     // type of port exposed to connect to
+    virtual PORTTYPE getPlugPort(int idx) { (void)idx; return NULL_PORT; }          // type of port we need to plug into
+
+    // send or receive a byte (or word) of data to a port, false on failure - what this means is device dependent
+    virtual bool sendPortData(int portIdx, int data) { return false; }       // this calls out to a plugged device
+    virtual bool receivePortData(int portIdx, int data) { return false; }    // this receives from a plugged device (normally only AFTER that device has called send)
+
+    // file access for disks and cartridges
+    virtual int hasFileSystems() { return 0; }          // keep life simple, normally 0 or 1
+    virtual const char* getFileMask() { return ""; }    // return a file selector mask string, windows-style with NUL separators and double-NUL at the end
+    virtual bool loadFileData(unsigned char *buffer, int address, int length) { (void)buffer; (void)address; (void)length; return false; }  // passed from core, copy data if you need it cause it's destroyed after this call, return false if something is wrong with it
+
+    // interface
+    virtual bool init() { return true; }                                    // claim resources from the core system
+    virtual bool operate(unsigned long long timestamp) { return true; }     // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
+    virtual bool cleanup() { return true; }                                 // release everything claimed in init, save NV data, etc
+
+    // debug interface
+    virtual void getDebugSize(int &x, int &y) { x=0; y=0; }       // dimensions of a text mode output screen - either being 0 means none
+    virtual void getDebugWindow(char *buffer) { (void)buffer; }   // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+
+    // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
+    virtual int saveStateSize() { return 0; }       // number of bytes needed to save state
+    virtual bool saveState(unsigned char *buffer) { (void)buffer; return true; }    // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
+    virtual bool restoreState(unsigned char *buffer) { (void)buffer; return true; } // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
+
+    // addresses are from the system point of view
+    void addBreakpoint(BREAKPOINT &inBreak);      // add a breakpoint on access to this device - should be checked for all accesses
+    void removeBreakpoint(BREAKPOINT &inBreak);   // add a breakpoint on access to this device - should be checked for all accesses
+    virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);              // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
+    BREAKPOINT getBreakpoint(int idx);                                                    // returns a copy of the indexed breakpoint, or a breakpoint with a typeMask of 0 if invalid index (used to enumerate)
+
+    // flags used by the core to track active peripherals during memory access
+    void setActive() { trackIsActive = true; }
+    volatile bool isActive() { return trackIsActive; }
+    void clearActive() { trackIsActive = false; }
+
+    // index and name creation
+    void setIndex(int in);
+
+    // name retrieval 
+    const char *getName() { return formattedName; }
 
 protected:
     virtual void lock() {
@@ -55,8 +158,19 @@ protected:
         al_unlock_mutex(periphLock);
     }
 
+    const char *myName;             // a name to report back to the user
+
 private:
     ALLEGRO_MUTEX *periphLock;      // our object lock
+
+    int index;                      // our implementation index
+    char formattedName[128];        // the two combined
+
+    BREAKPOINT breaks[MAX_BREAKPOINTS];     // list of device breakpoints
+    int page;                               // a semi-opaque value used by implementations for memory paging in breakpoints
+    
+    volatile bool trackIsActive;            // flag for the memory update - used by setActive/isActive/clearActive
+
 
     friend class Classic99System;   // allowed access to our lock methods
 };

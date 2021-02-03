@@ -1,4 +1,4 @@
-// Classic99 v4xx - Copyright 2020 by Mike Brent (HarmlessLion.com)
+// Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
 // This file needs to provide the core functionality for the emulator
@@ -11,18 +11,25 @@
 
 // Expects to build with the Allegro5 library located in D:\Work\Allegro5\Build
 // Funny to come back to Allegro after so many years...
-// Today is 11/7/2020
+// Today is 11/7/2020, 2/2/2021
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_native_dialog.h>
 #include <stdio.h>
 #include "Classic99v4.h"
+#include "debuglog.h"
 
 #ifdef ALLEGRO_WINDOWS
 #include <Windows.h>        // for outputdebugstring
 #endif
 
-// display
+// display -- TODO: move this to a global "TV" object at window res and/or power of two?? and let the caller register bitplanes
+// I'm thinking the TV only bothers with a background color, everything else is rendered on top (preferably in hardware).
+// we just allow subwindows that have a position and resolution, and then we only need to fill that in for each layer.
+// Sprites are 32x32 pixel layers with an offset (though still need a collision buffer), F18A bitmap overlay fits this
+// nicely, text mode would be a subwindow too, and F18A can register /two/ bitplanes since it has two screens.
+// Need a create layer and a destroy layer method, since things like overlay can vary in size, and then we don't need
+// to keep unused resolutions around. Would need to choose a minimum resolution to work in.
 ALLEGRO_DISPLAY *myWnd = nullptr;
 int width = 256;
 int height = 192;
@@ -42,74 +49,6 @@ int currentDebugLine = 0;               // next line to write to
 bool bDebugDirty = true;                // never been drawn, must be dirty!
 ALLEGRO_MUTEX *DebugCS = nullptr;       // we should assume that this mutex is NOT re-entrant!
 
-// Write a line to the debug buffer displayed on the debug screen
-void debug_write(const char *s, ...) {
-	char buf[1024];
-
-	_vsnprintf(buf, 1023, s, (char*)((&s)+1));
-	buf[1023]='\0';     // allow a longer string out to OutputDebugString
-
-    // TODO: disk log here if configured
-
-#ifdef ALLEGRO_WINDOWS
-	OutputDebugStringA(buf);
-	OutputDebugStringA("\n");
-#endif
-
-#if 0
-    // TODO: trying the Allegro log
-    // This works, but it just appends the window forever... would be bad
-    // for long runs.
-    static ALLEGRO_TEXTLOG *txtLog;
-    if (nullptr == txtLog) {
-        // TODO: note we need to add the log's events to the queue
-        // so we can detect when it's closed
-        txtLog = al_open_native_text_log("Classic99 Log", 0);
-    }
-    if (nullptr != txtLog) {
-        al_append_native_text_log(txtLog, buf);
-        al_append_native_text_log(txtLog, "\n");
-    }
-#endif
-
-    // now trim to the final saved length
-	buf[DEBUGLEN-1]='\0';
-
-	al_lock_mutex(DebugCS);
-
-        // copy the line in - we already enforced the size above
-	    strcpy(&debugLines[currentDebugLine][0], buf);
-
-        // next line
-        ++currentDebugLine;
-        if (currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
-
-        // flag redraw
-        bDebugDirty=true;
-
-    al_unlock_mutex(DebugCS);
-
-}
-
-// copy out the debug log - using a function now with a copy because the ring
-// buffer could otherwise cause odd alignment, and we want to control how long
-// we hold the mutex without worrying about how long the OS needs to draw
-// buf must be a pointer to an array of size [DEBUGLINES][DEBUGLEN]
-void get_debug(char *buf[DEBUGLEN]) {
-    al_lock_mutex(DebugCS);
-
-        int n = currentDebugLine;
-        for (int i = 0; i<DEBUGLINES; ++i) {
-            strcpy(buf[i], debugLines[n++]);
-            if (n >= DEBUGLINES) n = 0;
-        }
-
-        // assume this is being used to redraw the debug
-        bDebugDirty = false;
-
-    al_unlock_mutex(DebugCS);
-}
-
 // Cleanup - shared function to release resources
 void Cleanup() {
     debug_write("Cleaning up...");
@@ -127,14 +66,7 @@ void fail(const char *str) {
 
 // MAN I wanted this basic signature in the old Classic99... ;)
 int main(int argc, char **argv) {
-    // set up mutexes before anything else
-    DebugCS = al_create_mutex();
-
-    // clear out the debug buffer
-    for (int i=0; i<DEBUGLINES; ++i) {
-        memset(debugLines[i], ' ', DEBUGLEN);
-        debugLines[i][DEBUGLEN-1] = '\0';
-    }
+    debug_init();
 
     // set up Allegro
     if (!al_init()) {

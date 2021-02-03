@@ -46,19 +46,16 @@
     <ClInclude Include="targetver.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
-    <ClInclude Include="EmulatorSupport\cpu.h">
-      <Filter>Emulator Support</Filter>
-    </ClInclude>
     <ClInclude Include="EmulatorSupport\System.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
     <ClInclude Include="EmulatorSupport\peripheral.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
-    <ClInclude Include="EmulatorSupport\vdp.h">
-      <Filter>Emulator Support</Filter>
+    <ClInclude Include="CPUs\tms9900.h">
+      <Filter>CPUs</Filter>
     </ClInclude>
-    <ClInclude Include="EmulatorSupport\psg.h">
+    <ClInclude Include="EmulatorSupport\debuglog.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
   </ItemGroup>
@@ -107,6 +104,12 @@
       <Filter>Emulator Support</Filter>
     </ClCompile>
     <ClCompile Include="EmulatorSupport\peripheral.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
+    <ClCompile Include="CPUs\tms9900.cpp">
+      <Filter>CPUs</Filter>
+    </ClCompile>
+    <ClCompile Include="EmulatorSupport\debuglog.cpp">
       <Filter>Emulator Support</Filter>
     </ClCompile>
   </ItemGroup>
