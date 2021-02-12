@@ -148,21 +148,10 @@ public:
     const char *getName() { return formattedName; }
 
 protected:
-    virtual void lock() {
-        // lock ourselves
-        al_lock_mutex(periphLock);
-    }
-
-    virtual void unlock() {
-        // unlock ourselves
-        al_unlock_mutex(periphLock);
-    }
-
     const char *myName;             // a name to report back to the user
-
-private:
     ALLEGRO_MUTEX *periphLock;      // our object lock
 
+private:
     int index;                      // our implementation index
     char formattedName[128];        // the two combined
 

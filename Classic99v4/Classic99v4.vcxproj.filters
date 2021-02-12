@@ -35,6 +35,9 @@
     <Filter Include="Systems\Texas Instruments">
       <UniqueIdentifier>{5520cf39-e9c6-4991-b0f7-16d6c26eb782}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Memories">
+      <UniqueIdentifier>{e9b50e28-fc47-4835-a81e-7f9f072deef3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EmulatorSupport\Classic99v4.h">
@@ -56,6 +59,15 @@
       <Filter>CPUs</Filter>
     </ClInclude>
     <ClInclude Include="EmulatorSupport\debuglog.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\tv.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\automutex.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\autobitmap.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
   </ItemGroup>
@@ -110,6 +122,30 @@
       <Filter>CPUs</Filter>
     </ClCompile>
     <ClCompile Include="EmulatorSupport\debuglog.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\ColecoVisionROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\PhoenixROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994A22GROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994AGROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994AROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994GROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994ROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="EmulatorSupport\tv.cpp">
       <Filter>Emulator Support</Filter>
     </ClCompile>
   </ItemGroup>

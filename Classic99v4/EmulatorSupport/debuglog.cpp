@@ -1,11 +1,12 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#include <stdio.h>
-#ifdef _WIN32
+#include <allegro5/allegro.h>
+#ifdef ALLEGRO_WINDOWS
 #include <Windows.h>
 #endif
-#include <allegro5/allegro.h>
+#include <stdio.h>
+#include "automutex.h"
 
 #define DEBUGLEN 120
 #define DEBUGLINES 34
@@ -36,7 +37,7 @@ void debug_write(const char *s, ...)
 	_vsnprintf(buf, bufSize-1, s, (va_list)((wchar_t*)((&s)+1)));
 	buf[bufSize-1]='\0';
 
-#ifdef _WIN32
+#ifdef ALLEGRO_WINDOWS
     // output to Windows debug listing...
 	OutputDebugString(buf);
 	OutputDebugString("\n");
@@ -45,16 +46,17 @@ void debug_write(const char *s, ...)
     // truncate to rolling array size
 	buf[DEBUGLEN-1]='\0';
 
-    al_lock_mutex(debugLock);
+    {
+        autoMutex lock(debugLock);
 	
-	memset(&lines[currentDebugLine][0], ' ', DEBUGLEN);	    // clear line
-	strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN);    // copy in new line
-	lines[currentDebugLine][DEBUGLEN-1]='\0';               // zero terminate
-    if (++currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
+	    memset(&lines[currentDebugLine][0], ' ', DEBUGLEN);	    // clear line
+	    strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN);    // copy in new line
+	    lines[currentDebugLine][DEBUGLEN-1]='\0';               // zero terminate
+        if (++currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
 
-    al_unlock_mutex(debugLock);
+    	bDebugDirty=true;									    // flag redraw
+    }
 
-	bDebugDirty=true;									    // flag redraw
 }
 
 // size of the debug text output
@@ -68,14 +70,14 @@ void fetch_debug(char *buf) {
     // buf MUST be debug_size() x*y bytes long
     memset(buf, ' ', DEBUGLINES*(DEBUGLEN+2));
 
-    al_lock_mutex(debugLock);
+    {
+        autoMutex mutex(debugLock);
 
-    int line = currentDebugLine;
-    for (int idx=0; idx<DEBUGLINES; ++idx) {
-        sprintf(buf, "%s\r\n", lines[line++]);
-        buf += DEBUGLEN+2;
+        int line = currentDebugLine;
+        for (int idx=0; idx<DEBUGLINES; ++idx) {
+            sprintf(buf, "%s\r\n", lines[line++]);
+            buf += DEBUGLEN+2;
+        }
     }
-
-    al_unlock_mutex(debugLock);
 }
 

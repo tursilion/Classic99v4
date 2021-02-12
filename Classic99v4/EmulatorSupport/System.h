@@ -59,19 +59,10 @@ public:
     // debug interface - mainly for breakpoints, part of the main loop
     void processDebug();
 
-    // locks/unlocks
-    void lock() {
-        // lock ourselves
-        al_lock_mutex(coreLock);
-    }
-    void unlock() {
-        // unlock ourselves
-        al_unlock_mutex(coreLock);
-    }
-
-private:
+protected:
     ALLEGRO_MUTEX *coreLock;      // our object lock
 
+private:
     // derived classes are expected to allocate these
     // read and write are separate because some systems are clever...
     PeripheralMap *memorySpaceRead;
@@ -81,9 +72,5 @@ private:
     int memorySize;     // power of 2 mask
     int ioSize;         // power of 2 mask
 };
-
-// make theCore pointer available - make sure to check for NULL. If not null, theCore is locked, so unlock when done
-// You MUST "unlock" for every lockCore
-Classic99System *lockCore() { if (theCore == NULL) return NULL; theCore->lock(); return theCore; }
 
 #endif

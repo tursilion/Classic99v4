@@ -1,8 +1,9 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#include "peripheral.h"
 #include <stdio.h>
+#include "peripheral.h"
+#include "automutex.h"
 
 // singleton dummy object for addresses with nothing mapped
 Classic99Peripheral dummyPeripheral;
@@ -11,7 +12,8 @@ BREAKPOINT dummyBreakpoint;
 
 // called from the main code to request a breakpoint be added
 void Classic99Peripheral::addBreakpoint(BREAKPOINT &inBreak) {
-    lock();
+    autoMutex lock(periphLock);
+
     // find an empty slot for the breakpoint
     for (int idx=0; idx<MAX_BREAKPOINTS; ++idx) {
         if (breaks[idx].typeMask == 0) {
@@ -20,12 +22,12 @@ void Classic99Peripheral::addBreakpoint(BREAKPOINT &inBreak) {
             break;
         }
     }
-    unlock();
 }
 
 // called from the main code to request a breakpoint be removed
 void Classic99Peripheral::removeBreakpoint(BREAKPOINT &inBreak) {
-    lock();
+    autoMutex lock(periphLock);
+
     // look for a match and remove it - must keep array non-sparse
     for (int idx=0; idx<MAX_BREAKPOINTS; ++idx) {
         if (breaks[idx] == inBreak) {
@@ -38,7 +40,6 @@ void Classic99Peripheral::removeBreakpoint(BREAKPOINT &inBreak) {
             break;
         }
     }
-    unlock();
 }
 
 // called from the peripheral memory access to check whether breakpoints are hit
@@ -71,11 +72,9 @@ BREAKPOINT Classic99Peripheral::getBreakpoint(int idx) {
 
 // setting the index generates the output name
 void Classic99Peripheral::setIndex(int in) {
-    lock();
+    autoMutex lock(periphLock);
 
     index = in;
     _snprintf(formattedName, sizeof(formattedName), "%s_%d", myName, index);
-
-    unlock();
 }
 

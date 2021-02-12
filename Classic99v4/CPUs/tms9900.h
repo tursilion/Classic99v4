@@ -53,9 +53,6 @@ public:
 
 
 protected:
-    // no special locking
-    //virtual void lock()
-    //virtual void unlock()
 
 private:
 
