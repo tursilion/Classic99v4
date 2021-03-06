@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "peripheral.h"
 #include "automutex.h"
+#include "debuglog.h"
 
 // singleton dummy object for addresses with nothing mapped
 Classic99Peripheral dummyPeripheral;
@@ -71,10 +72,19 @@ BREAKPOINT Classic99Peripheral::getBreakpoint(int idx) {
 }
 
 // setting the index generates the output name
-void Classic99Peripheral::setIndex(int in) {
+void Classic99Peripheral::setIndex(const char *name, int in) {
     autoMutex lock(periphLock);
 
-    index = in;
-    _snprintf(formattedName, sizeof(formattedName), "%s_%d", myName, index);
+    if (NULL != name) {
+        _snprintf(formattedName, sizeof(formattedName), "%s_%d", name, in);
+    } else {
+        char *p = strchr(formattedName, '_');
+        if (NULL == p) {
+            debug_write("Name format invalid");
+        } else {
+            *(++p) = '\0';
+            _snprintf(p, sizeof(formattedName)-(p-formattedName), "%d", in);
+        }
+    }
 }
 

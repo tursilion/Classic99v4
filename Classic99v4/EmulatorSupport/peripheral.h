@@ -88,9 +88,8 @@ public:
         periphLock = al_create_mutex_recursive();
         trackIsActive = false;
         page = 0;
-        myName = "Dummy";
-        index = 0;
-        formattedName[0] = '\0';
+        lastTimestamp = 0;
+        setIndex("Dummy", 0);
     }
     virtual ~Classic99Peripheral() {
         // release the lock object
@@ -117,7 +116,7 @@ public:
     virtual bool loadFileData(unsigned char *buffer, int address, int length) { (void)buffer; (void)address; (void)length; return false; }  // passed from core, copy data if you need it cause it's destroyed after this call, return false if something is wrong with it
 
     // interface
-    virtual bool init() { return true; }                                    // claim resources from the core system
+    virtual bool init(int) { return true; }                                 // claim resources from the core system, int is index from the host system
     virtual bool operate(unsigned long long timestamp) { return true; }     // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
     virtual bool cleanup() { return true; }                                 // release everything claimed in init, save NV data, etc
 
@@ -142,26 +141,31 @@ public:
     void clearActive() { trackIsActive = false; }
 
     // index and name creation
-    void setIndex(int in);
+    // pass NULL name to ONLY change the index
+    void setIndex(const char *name, int in);
 
     // name retrieval 
     const char *getName() { return formattedName; }
 
+    // interface to the rest of the system (for those peripherals that need to, mostly CPUs)
+    int readWord(int address);
+    int safeReadWord(int address);
+    int readByte(int address);
+    int safeReadByte(int address);
+
 protected:
-    const char *myName;             // a name to report back to the user
-    ALLEGRO_MUTEX *periphLock;      // our object lock
+    ALLEGRO_MUTEX *periphLock;          // our object lock
+    unsigned long long lastTimestamp;   // last time we ran to
+    int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints
 
 private:
-    int index;                      // our implementation index
-    char formattedName[128];        // the two combined
+    char formattedName[128];            // the two combined
 
-    BREAKPOINT breaks[MAX_BREAKPOINTS];     // list of device breakpoints
-    int page;                               // a semi-opaque value used by implementations for memory paging in breakpoints
+    BREAKPOINT breaks[MAX_BREAKPOINTS]; // list of device breakpoints
     
-    volatile bool trackIsActive;            // flag for the memory update - used by setActive/isActive/clearActive
+    volatile bool trackIsActive;        // flag for the memory update - used by setActive/isActive/clearActive
 
-
-    friend class Classic99System;   // allowed access to our lock methods
+    friend class Classic99System;       // allowed access to our lock methods
 };
 
 extern Classic99Peripheral dummyPeripheral;
