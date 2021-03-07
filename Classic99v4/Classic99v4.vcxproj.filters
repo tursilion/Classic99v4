@@ -148,6 +148,9 @@
     <ClCompile Include="EmulatorSupport\tv.cpp">
       <Filter>Emulator Support</Filter>
     </ClCompile>
+    <ClCompile Include="CPUs\tms9900build.cpp">
+      <Filter>CPUs</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="License.txt" />

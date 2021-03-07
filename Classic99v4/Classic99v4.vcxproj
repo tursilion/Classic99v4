@@ -176,6 +176,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CPUs\tms9900.cpp" />
+    <ClCompile Include="CPUs\tms9900build.cpp" />
     <ClCompile Include="EmulatorSupport\Classic99v4.cpp" />
     <ClCompile Include="EmulatorSupport\debuglog.cpp" />
     <ClCompile Include="EmulatorSupport\peripheral.cpp" />

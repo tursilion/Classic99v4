@@ -11,6 +11,9 @@
 typedef uint8_t Byte;
 typedef uint16_t Word;
 
+// this enables the older buildcpu approach instead of the pre-defined table
+//#define BUILD_CPU
+
 // we set skip_interrupt to 2 because it's decremented after every instruction - including
 // the one that sets it!
 #define SET_SKIP_INTERRUPT skip_interrupt=2
@@ -71,7 +74,7 @@ typedef uint16_t Word;
 
 // Like the FAQ says, be nice to people!
 class TMS9900;
-typedef void (TMS9900::*CPU990Fctn)(void);			// now function pointers are just "CPU9900Fctn" type
+typedef void (TMS9900::*CPU9900Fctn)(void);			// now function pointers are just "CPU9900Fctn" type
 #define CALL_MEMBER_FN(object, ptr) ((object)->*(ptr))
 
 // Let's see what a CPU needs
@@ -256,6 +259,7 @@ public:
 	// not an opcode - illegal opcode handler
 	void op_bad();
 
+#ifdef BUILD_CPU
 	////////////////////////////////////////////////////////////////////////
 	// Fill the CPU Opcode Address table
 	////////////////////////////////////////////////////////////////////////
@@ -270,6 +274,7 @@ public:
 	void opcode1(int in);
 	void opcode2(int in);
 	void opcode3(int in);
+#endif
 
 protected:
 	// CPU variables
@@ -280,16 +285,20 @@ protected:
 	Word in,D,S,Td,Ts,B;							// Opcode interpretation
 	int nCycleCount;			                    // Cycles used for this operation
 
-	CPU990Fctn opcode[65536];						// CPU Opcode address table
+#ifdef BUILD_CPU
+	CPU9900Fctn opcode[65536];						// CPU Opcode address table
+#endif
 
 	int idling;										// set when an IDLE occurs
 	Word nReturnAddress;							// return address for step over
     int skip_interrupt;                             // interrupts are disabled for this many instructions
 
 private:
+#ifdef BUILD_CPU
     // Status register lookup tables
     Word WStatusLookup[64*1024];                     // word statuses
     Word BStatusLookup[256];                         // byte statuses
+#endif
 
     const int32_t SAVE_STATE_VERSION = 1;
 };

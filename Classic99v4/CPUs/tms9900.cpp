@@ -28,6 +28,12 @@
 #include "..\EmulatorSupport\System.h"
 #include "tms9900.h"
 
+#ifndef BUILD_CPU
+extern CPU9900Fctn opcode[65536];						// CPU Opcode address table
+extern Word WStatusLookup[64*1024];                     // word statuses
+extern Word BStatusLookup[256];                         // byte statuses
+#endif
+
 // TODO: how do we get the debug settings into here?
 // - probably a global debug system we can query...
 extern bool BreakOnIllegal;     // true if we should trigger a breakpoint on bad opcode
@@ -46,7 +52,9 @@ TMS9900::~TMS9900() {
 // claim resources from the core system, prepare the CPU
 bool TMS9900::init(int idx) {
     setIndex("TMS9900", idx);
+#ifdef BUILD_CPU
     buildcpu();
+#endif
     reset();
 
     return true;
@@ -2334,6 +2342,7 @@ void TMS9900::op_bad()
     if (BreakOnIllegal) theCore->triggerBreakpoint();
 }
 
+#ifdef BUILD_CPU
 ////////////////////////////////////////////////////////////////////////
 // Fill the CPU Opcode Address table
 ////////////////////////////////////////////////////////////////////////
@@ -2576,3 +2585,5 @@ void TMS9900::opcode3(int in) {
         default: opcode[in]=&TMS9900::op_bad;
     }
 }
+
+#endif
