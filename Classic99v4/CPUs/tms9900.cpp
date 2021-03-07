@@ -25,22 +25,31 @@
 #include <stdio.h>
 #include "..\EmulatorSupport\peripheral.h"
 #include "..\EmulatorSupport\debuglog.h"
+#include "..\EmulatorSupport\System.h"
 #include "tms9900.h"
 
 // TODO: how do we get the debug settings into here?
+// - probably a global debug system we can query...
 extern bool BreakOnIllegal;     // true if we should trigger a breakpoint on bad opcode
 
 // protect the disassembly backtrace
-ALLEGRO_MUTEX csDisasm;
+ALLEGRO_MUTEX *csDisasm;
 
 // System interface
+
+TMS9900::TMS9900(Classic99System *core) : Classic99Peripheral(core) {
+}
+
+TMS9900::~TMS9900() {
+}
 
 // claim resources from the core system, prepare the CPU
 bool TMS9900::init(int idx) {
     setIndex("TMS9900", idx);
     buildcpu();
-    enableDebug = true;
     reset();
+
+    return true;
 }
 
 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
@@ -51,23 +60,79 @@ bool TMS9900::operate(unsigned long long timestamp) {
         return true;
     }
 
+    // are we stopped? If so, there is nothing we can do internally to release
+    if (theCore->getHoldStatus(-1)) {
+        lastTimestamp = timestamp;
+        return true;
+    }
+
+    // we might still be idling, but that would be released by an interrupt
+    if (!theCore->interruptPending()) {
+        if (GetIdle()) {
+            lastTimestamp = timestamp;
+            return true;
+        }
+    }
+
     // ticks are in 1/3,000,000 units, and we want 1/1,000,000 units
     // I think the loss is okay but we should try not to accumulate it
     // during a single loop.
     int neededTicks = (timestamp - lastTimestamp)*3;
 
     // run as many cycles as have elapsed
-    while (neededTicks > 0) {
+    for (; neededTicks > 0; neededTicks -= GetCycleCount()) {
+        // emulator housekeeping
         checkHacks();
-        checkPCBreakpoint();
-        // TODO: don't use nopFrame, just exit the loop when we're halted,
-        // cause some other device needs to release us
-        // TODO: so we need a mechanism for a device to find the halt line
-        // Maybe that /IS/ a port?
-        neededTicks -= ExecuteOpcode(nopFrame);
+        checkCPUBreakpoints();
+        
+        // prepare to count cycles this instruction
+        ResetCycleCount();
+
+        // check for interrupts. I think technically this
+        // goes after each instruction, but except for the
+        // very first one, what's the difference?
+        // (Thus the countdown on skip_interrupt)
+        if (skip_interrupt > 0) {
+            --skip_interrupt;
+        } else {
+            if (theCore->interruptPending()) {
+                if (theCore->getAndClearNMI()) {
+                    TriggerInterrupt(-1);
+                    // now continue so the cycles are tracked
+                    continue;
+                } else {
+                    // must be a level interrupt. Although the 99/4A only has one
+                    // level, we'll be a good 9900 and check them all...
+                    int minLevel = GetST()&0x000f;  // get the level mask, ints must be equal or lower
+                    for (int idx = 0; idx < minLevel; ++idx) {
+                        if (theCore->getAndClearIntReq(idx)) {
+                            // all ints are wired to level 1 on the TI, so the vector is 4
+                            // the convention to LIMI 2 actually enables levels 1 and 2, but
+                            // only level 1 is wired. This is frequently confusing so documented now.
+                            // TODO: this implies that on the 99/4A, a VDP interrupt can not
+                            // interrupt another VDP interrupt, as the mask is automatically
+                            // set to zero from the level 1 interrupt. The datasheet confirms
+                            // that this is the intent, meaning LIMI 0 does NOT need to be
+                            // the first instruction to be safe. But the hard-coded ROM has
+                            // that, so how can we test this on real hardware? We just need
+                            // a routine that dumps the status register...
+                            TriggerInterrupt(idx);
+                            continue;
+                        }
+                    }
+                    // there may be an interrupt available, but it's not permitted, so continue
+                    // down and execute instructions
+                }
+            }
+        }
+
+        // now actually execute the instruction
+        in = ROMWORD(PC);       // "in" is also used by the opcodes!!
+        ADDPC(2);
+        CALL_MEMBER_FN(this, opcode[in])();
     }
 
-    // now divide our slack down - this is where we may lose a few cycles
+    // now divide our slack down - this is where we may lose a few cycles (no more than 2 though)
     neededTicks /= 3;   // back to microseconds
     lastTimestamp = timestamp + neededTicks;    // which is going to be negative
 
@@ -91,13 +156,15 @@ void TMS9900::getDebugSize(int &x, int &y) {
 // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
 void TMS9900::getDebugWindow(char *buffer) {
     // the buffer is guaranteed to be 32x30 with extra space for line endings
+    // For all the stuff that's "missing", it's okay for the /debug system/ to composite
+    // it, but there's no reason for the CPU to know about other chips...
 
     // prints the register information
     // spacing: <5 label><1 space><4 value><4 spaces><5 label><1 space><4 value>
     int WP = GetWP();
     for (int idx=0; idx<8; idx++) {
-	    int val=safeReadWord(WP+idx*2);
-	    int val2=safeReadWord(WP+(idx+8)*2);
+	    int val=ROMWORD(WP+idx*2, ACCESS_FREE);
+	    int val2=ROMWORD(WP+(idx+8)*2, ACCESS_FREE);
         if (idx == 0) {
     	    buffer += sprintf(buffer, " R%2d  %04X   R%2d  %04X\r\n", idx, val, idx+8, val2);
         } else {
@@ -106,13 +173,6 @@ void TMS9900::getDebugWindow(char *buffer) {
     }
 
     buffer += sprintf(buffer, "\r\n");
-
-    // TODO: can we get the cartridge bank here, rather than have a separate debug screen?
-    // TODO: can we get the DSR page here as well?
-    // TODO: how about the GROM page, last read and last base?
-    //buffer += sprintf(buffer, " Bank %08X\r\n", ((xb&0xffff)<<16)|(xbBank&0xffff)); break;
-    //buffer += sprintf(buffer, " DSR  %04X\r\n", nCurrentDSR&0xffff); break;
-    //buffer += sprintf(buffer, " GROM %04X (%04X.%1.1X)\r\n", GROMBase[0].GRMADD, GROMBase[0].LastRead, GROMBase[0].LastBase); break;
 
     buffer += sprintf(buffer, "  PC  %04X\r\n", GetPC());
     buffer += sprintf(buffer, "  WP  %04X\r\n", GetWP());
@@ -131,10 +191,12 @@ void TMS9900::getDebugWindow(char *buffer) {
         (val&BIT_OP)?"OP":"  ", 
         (val&BIT_XOP)?"XOP":" "
     );
-    buffer += sprintf(buffer, " MASK: %X\r\n", val&INTMASK);
+    buffer += sprintf(buffer, " MASK: %X\r\n", val&ST_INTMASK);
 
 #ifdef _DEBUG
     // TODO: move this to the code that calls getDebugWindow, so the overflow test is centralized
+    // Instead of a buffer size check, we should put some poison values after the buffer and just
+    // check if they are overwritten. 4 bytes is just one int.
     int x,y;
     getDebugSize(x,y);
     if (buffer > buffer+(x+2)*y) {
@@ -144,21 +206,59 @@ void TMS9900::getDebugWindow(char *buffer) {
 }
 
 // number of bytes needed to save state
+// You can grow a buffer, but you can never shrink it.
+// Try to make save states as compatible as possible when you do.
 int TMS9900::saveStateSize() {
-    // TODO
-    return 0;
+    return 6*4;
 }
 
 // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
 bool TMS9900::saveState(unsigned char *buffer) {
-    // TODO
-    return false;
+    // Write out the data we need to save, with a version so we know if it changed.
+    // just going to write everything as binary 32-bit ints
+    // since it matters here, we'll be specific
+    *(int32_t*)buffer = SAVE_STATE_VERSION;
+    buffer+=4;
+    *(int32_t*)buffer = PC;
+    buffer+=4;
+    *(int32_t*)buffer = WP;
+    buffer+=4;
+    *(int32_t*)buffer = ST;
+    buffer+=4;
+    *(int32_t*)buffer = idling;
+    buffer+=4;
+    *(int32_t*)buffer = skip_interrupt;
+    buffer+=4;
+
+    return true;
 }
 
-// restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
+// restore state data from the provided buffer - guaranteed to be AT LEAST the size returned by saveStateSize
 bool TMS9900::restoreState(unsigned char *buffer) {
-    // TODO
-    return false;
+    // This function needs to know all previous versions and do its best to import them
+    // Hopefully it won't need to change much.
+
+    int32_t version = *(int32_t*)buffer;
+    if (version >= 1) {
+        // collect the version 1 data
+        // we already got the version, so skip that
+        buffer+=4;
+        PC = *(int32_t*)buffer;
+        buffer+=4;
+        WP = *(int32_t*)buffer;
+        buffer+=4;
+        ST = *(int32_t*)buffer;
+        buffer+=4;
+        idling = *(int32_t*)buffer;
+        buffer+=4;
+        skip_interrupt = *(int32_t*)buffer;
+        buffer+=4;
+    }
+    if (version >= 2) {
+        debug_write("Warning: restoring CPU state from newer version %d (we expect %d)", version, SAVE_STATE_VERSION);
+    }
+
+    return true;
 }
 
 // Note: Post-increment is a trickier case that it looks at first glance.
@@ -184,22 +284,219 @@ bool TMS9900::restoreState(unsigned char *buffer) {
 // FormatVI (src only) (has no destination)
 // FormatIX (src only) (has no destination)
 
-// force the PC to always be 15-bit, can't store a 16-bit PC
-#define ADDPC(x) { PC+=(x); PC&=0xfffe; }
+/////////////////////////////////////////////////////////////////////
+// Inlines because for the most part, the opcodes are the same
+/////////////////////////////////////////////////////////////////////
+// theOp - operation to perform
+// Assumes xD is the word data var, and x2 is the byte data var, 
+// x3 is the byte result, and D is the address
+// use is like: xD=ROMWORD(adr); BYTE_OPERATION(x3=x2-x1); WRWORD(D,xD);
+// This is used when the RMW cycle /actually does/ a Modify ;)
+#define BYTE_OPERATION(theOp) \
+    if (D&1) {                      \
+        x2 = (xD&0xff); /*LSB*/     \
+        theOp;                      \
+        x3 &= 0xff;                 \
+        xD = (xD&0xff00) | x3;      \
+    } else {                        \
+        x2 = (xD>>8);  /*MSB*/      \
+        theOp;                      \
+        x3 &= 0xff;                 \
+        xD = (xD&0xff) | (x3<<8);   \
+    }
 
-/////////////////////////////////////////////////////////////////////
-// Inlines for getting source and destination addresses
-/////////////////////////////////////////////////////////////////////
-#define FormatI { Td=(in&0x0c00)>>10; Ts=(in&0x0030)>>4; D=(in&0x03c0)>>6; S=(in&0x000f); B=(in&0x1000)>>12; fixS(); }
-#define FormatII { D=(in&0x00ff); }
-#define FormatIII { Td=0; Ts=(in&0x0030)>>4; D=(in&0x03c0)>>6; S=(in&0x000f); B=0; fixS(); }
-#define FormatIV { D=(in&0x03c0)>>6; Ts=(in&0x0030)>>4; S=(in&0x000f); B=(D<9); fixS(); }           // No destination (CRU ops)
-#define FormatV { D=(in&0x00f0)>>4; S=(in&0x000f); S=WP+(S<<1); }
-#define FormatVI { Ts=(in&0x0030)>>4; S=in&0x000f; B=0; fixS(); }                                   // No destination (single argument instructions)
-#define FormatVII {}                                                                                // no argument
-#define FormatVIII_0 { D=(in&0x000f); D=WP+(D<<1); }
-#define FormatVIII_1 { D=(in&0x000f); D=WP+(D<<1); S=ROMWORD(PC); ADDPC(2); }
-#define FormatIX  { D=(in&0x03c0)>>6; Ts=(in&0x0030)>>4; S=(in&0x000f); B=0; fixS(); }              // No destination here (dest calc'd after call) (DIV, MUL, XOP)
+// FormatI is most of the basic Add/subtract/move/compare operations
+// x1 contains the source value, x2 the destination, x3 the result
+// (except operations with no ALU, like move).
+// theOp should calculate x3 from x1 and x2.
+// These all take 14 cycles
+#define FormatI(theOp)          \
+    Word x1, x2, x3;            \
+    AddCycleCount(14);          \
+                                \
+    Td=(in&0x0c00)>>10;         \
+    Ts=(in&0x0030)>>4;          \
+    D=(in&0x03c0)>>6;           \
+    S=(in&0x000f);              \
+    B=(in&0x1000)>>12;          \
+    fixS();                     \
+                                \
+    x1 = ROMWORD(S);            \
+    fixD();                     \
+    x2 = ROMWORD(D);            \
+    theOp;
+
+
+// This is FormatI for byte operations
+// theOp should return x3 from x1 and x2
+// xD is used internally as the destination word
+#define FormatIb(theOp)         \
+    Byte x1, x2, x3;            \
+    Word xD;                    \
+    AddCycleCount(14);          \
+                                \
+    Td=(in&0x0c00)>>10;         \
+    Ts=(in&0x0030)>>4;          \
+    D=(in&0x03c0)>>6;           \
+    S=(in&0x000f);              \
+    B=(in&0x1000)>>12;          \
+    fixS();                     \
+                                \
+    x1 = RCPUBYTE(S);           \
+    fixD();                     \
+    xD = ROMWORD(D);            \
+    BYTE_OPERATION(theOp);
+
+// The base FormatII covers CRU bit operations, but here
+// we just calculate the CRU address in 'add'
+#define FormatII                \
+    Word add;                   \
+                                \
+    D=(in&0x00ff);              \
+    AddCycleCount(12);          \
+                                \
+    add=(ROMWORD(WP+24)>>1);    \
+    if (D&0x80) {               \
+        add-=128-(D&0x7f);      \
+    } else {                    \
+        add+=D;                 \
+    }
+
+// FormatII also covers jump instructions, here we
+// perform the entire jump - cond is the condition to test
+#define FormatIIj(cond)         \
+    D=(in&0x00ff);              \
+                                \
+    if (cond) {                 \
+        if (X_flag) {           \
+            SetPC(X_flag);      \
+        }                       \
+        if (D&0x80) {           \
+            D=128-(D&0x7f);     \
+            ADDPC(-(D+D));      \
+        } else {                \
+            ADDPC(D+D);         \
+        }                       \
+        AddCycleCount(10);      \
+    } else {                    \
+        AddCycleCount(8);       \
+    }
+
+// FormatIII covers word-only boolean operations
+// theOp should set x3 from x1 and x2, as above
+#define FormatIII(theOp)        \
+    Word x1,x2,x3;              \
+                                \
+    Td=0;                       \
+    Ts=(in&0x0030)>>4;          \
+    D=(in&0x03c0)>>6;           \
+    S=(in&0x000f);              \
+    B=0;                        \
+    fixS();                     \
+                                \
+    AddCycleCount(14);          \
+                                \
+    x1 = ROMWORD(S);            \
+    fixD();                     \
+    x2 = ROMWORD(D);            \
+    theOp;
+
+// FormatIV is just LDCR and STCR, and they have nothing
+// in common beyond this bit packing...
+#define FormatIV                \
+    D=(in&0x03c0)>>6;           \
+    Ts=(in&0x0030)>>4;          \
+    S=(in&0x000f);              \
+    B=(D<9);                    \
+    fixS();
+
+// FormatV is shift instructions
+// Source value is returned in x1,
+// shift count in D, the rest is up to you
+#define FormatV                 \
+    Word x1;                    \
+                                \
+    D=(in&0x00f0)>>4;           \
+    S=(in&0x000f);              \
+    S=WP+(S<<1);                \
+                                \
+    if (D==0) {                 \
+        D=ROMWORD(WP) & 0xf;    \
+        if (D==0) D=16;         \
+        AddCycleCount(8);       \
+    }                           \
+    AddCycleCount(12+2*D);      \
+    x1=ROMWORD(S);
+
+// The base FormatVI is math functions, SETO, CLR, etc
+// There's no D, S is used for read and write
+// theOp should set x2 based on x1
+#define FormatVI(theOp)         \
+    Ts=(in&0x0030)>>4;          \
+    S=in&0x000f;                \
+    B=0;                        \
+    fixS();                     \
+                                \
+    Word x1,x3;                 \
+    AddCycleCount(10);          \
+    x1 = ROMWORD(S);            \
+    theOp;                      \
+    WRWORD(S, x3);
+
+// FormatVIraw is used for branch instructions, and ABS
+// It returns the source value in x1
+#define FormatVIraw             \
+    Ts=(in&0x0030)>>4;          \
+    S=in&0x000f;                \
+    B=0;                        \
+    fixS();                     \
+                                \
+    Word x1;                    \
+    x1 = ROMWORD(S);            \
+
+// FormatVII has no arguments and not much in common
+#define FormatVII { }
+
+// FormatVIII_0 is used to store internal registers
+// pass the CPU register to store
+#define FormatVIII_0(reg)       \
+    D=(in&0x000f);              \
+    D=WP+(D<<1);                \
+                                \
+    AddCycleCount(8);           \
+    WRWORD(D, reg);
+
+// FormatVIII_1 is used for immediate operand operations
+// theOp should set x3 from x1 and x2
+#define FormatVIII_1(theOp)     \
+    Word x1,x2,x3;              \
+                                \
+    D=(in&0x000f);              \
+    D=WP+(D<<1);                \
+    S=ROMWORD(PC);              \
+    ADDPC(2);                   \
+                                \
+    AddCycleCount(14);          \
+    x1 = ROMWORD(D);            \
+    x2 = S;                     \
+    theOp;                      \
+    WRWORD(D, x3);
+
+// FormatVIII_1raw is used for non-logic ops, like LI
+#define FormatVIII_1raw         \
+    D=(in&0x000f);              \
+    D=WP+(D<<1);                \
+    S=ROMWORD(PC);              \
+    ADDPC(2);
+
+// FormatIXraw is used for DIV, MPY and XOP
+#define FormatIXraw             \
+    D=(in&0x03c0)>>6;           \
+    Ts=(in&0x0030)>>4;          \
+    S=(in&0x000f);              \
+    B=0;                        \
+    fixS();
+
 
 //////////////////////////////////////////////////////////////////////////
 // Get addresses for the destination and source arguments
@@ -292,71 +589,74 @@ void TMS9900::reset() {
     // It matches the LOAD interrupt, so maybe yes! Test above theory on hardware.
     
     StopIdle();
-    halted = 0;         // clear all possible halt sources
     nReturnAddress=0;
 
-    TriggerInterrupt(0x0000,0);             // reset vector is 22 cycles
+    TriggerInterrupt(0);                    // reset vector is 22 cycles
     AddCycleCount(4);                       // reset is slightly more work than a normal interrupt
 
     X_flag=0;                               // not currently executing an X instruction
     ST=(ST&0xfff0);                         // disable interrupts
 
-    spi_reset();                            // reset the F18A flash interface
+// TODO: saving this so I remember it's needed for the F18A version
+//    spi_reset();                            // reset the F18A flash interface
 }
 
 /////////////////////////////////////////////////////////////////////
 // Wrapper functions for memory access
 /////////////////////////////////////////////////////////////////////
 Byte TMS9900::RCPUBYTE(Word src) {
-    Word ReadVal=romword(src);
+    // TMS9900 always reads a full word, and in the case where
+    // the multiplexer on the TI is invoked, it's always LSB first.
+    // So, there is a little bit of system knowledge here because
+    // the rest of Classic99 is built as an 8-bit machine. Hopefully
+    // there are no cases where it will matter.
+
+    // always read both bytes
+    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, ACCESS_READ);         // odd byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, ACCESS_READ);    // even byte
+
     if (src&1) {
-        return ReadVal&0xff;
+        return lsb;
     } else {
-        return ReadVal>>8;
+        return msb;
     }
 }
 
 void TMS9900::WCPUBYTE(Word dest, Byte c) {
-    Word ReadVal=romword(dest, ACCESS_RMW); // read-before-write needed, of course!
+    // TMS9900 always writes a full word, and always reads before the write -
+    // we have no choice here. We do the same 8-bit fakery as noted above.
+
+    // always read both bytes
+    int adr = dest & 0xfffe;
+    Byte lsb = theCore->readMemoryByte(adr+1, nCycleCount, ACCESS_RMW);   // odd byte
+    Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);     // even byte
+
+    // always write both bytes
     if (dest&1) {
-        wrword(dest, (Word)((ReadVal&0xff00) | c));
+        theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, c);
+        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, msb);
     } else {
-        wrword(dest, (Word)((ReadVal&0x00ff) | (c<<8)));
+        theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, lsb);
+        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, c);
     }
 }
 
-Word TMS9900::ROMWORD(Word src, READACCESSTYPE rmw=ACCESS_READ) {
-    // nothing special here yet
-    return romword(src, rmw);
+int TMS9900::ROMWORD(Word src, MEMACCESSTYPE rmw) {
+    // most common basic access
+    // as above, read lsb first in a bit of 99/4A specific knowledge
+    // the real TMS9900 is 16-bit only, but Classic99's architecture is 8 bit
+    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);         // odd byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, rmw);    // even byte
+    return (msb<<8)|lsb;
 }
 
 void TMS9900::WRWORD(Word dest, Word val) {
-    wrword(dest, val);
-}
+    // Don't read-before-write in here - do that explicitly when you need it!
+    dest &= 0xfffe;     // make even, we don't need the original value
 
-Word TMS9900::GetSafeWord(int x, int bank) {
-    x&=0xfffe;
-    return (GetSafeByte(x, bank)<<8)|GetSafeByte(x+1, bank);
-}
-
-// Read a byte withOUT triggering the hardware - for monitoring
-Byte TMS9900::GetSafeByte(int x, int bank) {
-    return GetSafeCpuByte(x, bank);
-}
-
-/////////////////////////////////////////////////////////////////////////
-// Check parity in the passed byte and set the OP status bit
-/////////////////////////////////////////////////////////////////////////
-void TMS9900::parity(Byte x)
-{
-    int z;                                                          // temp vars
-
-    for (z=0; x; x&=(x-1)) z++;                                     // black magic?
-    
-    if (z&1)                                                        // set bit if an odd number
-        set_OP; 
-    else 
-        reset_OP;
+    // now write the new data, in 99/4A order
+    theCore->writeMemoryByte(dest+1, nCycleCount, ACCESS_WRITE, val&0xff);
+    theCore->writeMemoryByte(dest, nCycleCount, ACCESS_WRITE, (val>>8)&0xff);
 }
 
 // Helpers for what used to be global variables
@@ -369,39 +669,25 @@ void TMS9900::StopIdle() {
 int  TMS9900::GetIdle() {
     return idling;
 }
-// TODO: right now only speech can halt the CPU, but there are multiple
-// possible sources. Instead of a global start/stop, each possible system
-// should be able to register a halt and turn it on and off, then let
-// the CPU decide if it's halted from ALL the flags (could use a bitflag
-// for faster testing)
-void TMS9900::StartHalt(int source) {
-    halted |= (1<<source);
-}
-void TMS9900::StopHalt(int source) {
-    halted &= ~(1<<source);
-}
-int  TMS9900::GetHalt() {
-    return halted;
-}
+
 void TMS9900::SetReturnAddress(Word x) {
     nReturnAddress = x;
 }
-int TMS9900::GetReturnAddress() {
+Word TMS9900::GetReturnAddress() {
     return nReturnAddress;
 }
 void TMS9900::ResetCycleCount() {
-    InterlockedExchange((LONG*)&nCycleCount, 0);
+    nCycleCount = 0;
 }
 void TMS9900::AddCycleCount(int val) {
-    InterlockedExchangeAdd((LONG*)&nCycleCount, val);
+    nCycleCount += val;
 }
 int TMS9900::GetCycleCount() {
     return nCycleCount;
 }
-void TMS9900::SetCycleCount(int x) {
-    InterlockedExchange((LONG*)&nCycleCount, x);
-}
-void TMS9900::TriggerInterrupt(Word vector, Byte level) {
+
+// interrupt handling
+void TMS9900::TriggerInterrupt(int level) {
     // Base cycles: 22
     // 5 memory accesses:
     //  Read WP
@@ -410,7 +696,14 @@ void TMS9900::TriggerInterrupt(Word vector, Byte level) {
     //  Write ST->R15
     //  Read PC
 
+    // -1 is the LOAD vector
+    // Datasheet confirms the mask is set to 0 for LOAD
+    Word vector = (level*4);
+
     // debug helper if logging
+    // TODO: the debug disassembly log needs to be integrated into the debug system
+    // we can just make the function call and let it decide whether to log or discard it
+#if 0
     EnterCriticalSection(&csDisasm);
         if (NULL != fpDisasm) {
             if ((disasmLogType == 0) || (pCurrentCPU->GetPC() > 0x2000)) {
@@ -421,25 +714,26 @@ void TMS9900::TriggerInterrupt(Word vector, Byte level) {
             }
         }
     LeaveCriticalSection(&csDisasm);
+#endif
 
     // no more idling!
     StopIdle();
     
-    // I don't think this is legal on the F18A
-    Word NewWP = ROMWORD(vector);
+    // set up the new context
+    int NewWP = ROMWORD(vector);
 
     WRWORD(NewWP+26,WP);                // WP in new R13 
     WRWORD(NewWP+28,PC);                // PC in new R14 
     WRWORD(NewWP+30,ST);                // ST in new R15 
 
     // lower the interrupt level
-    if (level == 0) {
+    if (level <= 0) {
         ST=(ST&0xfff0);
     } else {
         ST=(ST&0xfff0) | (level-1);
     }
 
-    Word NewPC = ROMWORD(vector+2);
+    int NewPC = ROMWORD(vector+2);
 
     /* now load the correct workspace, and perform a branch and link to the address */
     SetWP(NewWP);
@@ -452,6 +746,8 @@ void TMS9900::TriggerInterrupt(Word vector, Byte level) {
 Word TMS9900::GetPC() {
     return PC;
 }
+
+// TODO: may need to decide if this is too hacky...
 void TMS9900::SetPC(Word x) {           // should rarely be externally used (Classic99 uses it for disk emulation)
     if (x&0x0001) {
         debug_write("Warning: setting odd PC address from >%04X", PC);
@@ -460,6 +756,7 @@ void TMS9900::SetPC(Word x) {           // should rarely be externally used (Cla
     // the PC is 15 bits wide - confirmed via BigFoot game which relies on this
     PC=x&0xfffe;
 }
+
 Word TMS9900::GetST() {
     return ST;
 }
@@ -474,25 +771,6 @@ void TMS9900::SetWP(Word x) {
     // we can test using BLWP and see what gets stored
     WP=x&0xfffe;
 }
-Word TMS9900::GetX() {
-    return X_flag;
-}
-void TMS9900::SetX(Word x) {
-    X_flag=x;
-}
-
-Word TMS9900::ExecuteOpcode(bool nopFrame) {
-    if (nopFrame) {
-        in = 0x10FF;                // JMP $ - NOP, but because we don't ADDPC below it doesn't move ;)
-    } else {
-        in=ROMWORD(PC);
-        ADDPC(2);
-    }
-
-    CALL_MEMBER_FN(this, opcode[in])();
-
-    return in;
-}
 
 ////////////////////////////////////////////////////////////////////
 // Classic99 - 9900 CPU opcodes
@@ -504,38 +782,10 @@ Word TMS9900::ExecuteOpcode(bool nopFrame) {
 // dsp - relative displacement
 ////////////////////////////////////////////////////////////////////
 
-/////////////////////////////////////////////////////////////////////
-// DO NOT USE wcpubyte or rcpubyte in here! You'll break the RMW
-// emulation and the cycle counting! You'll also break the F18A. ;)
-// The 9900 can only do word access.
-/////////////////////////////////////////////////////////////////////
-#define wcpubyte #error Do not use in this file
-#define rcpubyte #error Do not use in this file
-#define romword  #error Do not use in this file
-#define wrword   #error Do not use in this file
-
-// a little macro to handle byte manipulation inline
-// just so I don't get one-off bugs ;)
-// theOp - operation to perform
-// Assumes xD is the word data var, and x2 is the byte data var, 
-// x3 is the byte result, and D is the address
-// use is like: xD=ROMWORD(adr); BYTE_OPERATION(x3=x2-x1); WRWORD(D,xD);
-#define BYTE_OPERATION(theOp) \
-    if (D&1) {                      \
-        x2 = (xD&0xff); /*LSB*/     \
-        theOp;                      \
-        xD = (xD&0xff00) | x3;      \
-    } else {                        \
-        x2 = (xD>>8);  /*MSB*/      \
-        theOp;                      \
-        xD = (xD&0xff) | (x3<<8);   \
-    }
-
 void TMS9900::op_a()
 {
     // Add words: A src, dst
 
-    // TODO: all timing needs revision, however, I'm going to start by documenting the cycles
     // In case I care in the future, every machine step is 2 cycles -- so a four cycle memory
     // access (which is indeed normal) is 2 cycles on the bus, and 2 cycles of thinking
 
@@ -545,22 +795,11 @@ void TMS9900::op_a()
     //  Read source
     //  Read dest
     //  Write dest
+    FormatI(x3=x2+x1);	// Read Source, Read Dest
+    WRWORD(D,x3);       // Write Dest
 
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=ROMWORD(S);  // read source
-
-    fixD();
-    x2=ROMWORD(D);  // read dest
-    x3=x2+x1; 
-    WRWORD(D,x3);   // write dest
-                                                                                        // most of these are the same for every opcode.
-    reset_EQ_LGT_AGT_C_OV;                                                              // We come out with either EQ or LGT, never both
-    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
-
+    reset_EQ_LGT_AGT_C_OV;
+    ST |= WStatusLookup[x3&0xffff]&mask_LGT_AGT_EQ;
     if (x3<x2) set_C;                                                                   // if it wrapped around, set carry
     if (((x1&0x8000)==(x2&0x8000))&&((x3&0x8000)!=(x2&0x8000))) set_OV;                 // if it overflowed or underflowed (signed math), set overflow
 }
@@ -575,22 +814,9 @@ void TMS9900::op_ab()
     //  Read source
     //  Read dest
     //  Write dest
+    FormatIb(x3=x2+x1);	// Read Source, Read Dest
+    WRWORD(D,xD);       // write dest
 
-    Byte x1,x2,x3;
-    Word xD;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=RCPUBYTE(S);     // read source 
-
-    fixD();
-    xD=ROMWORD(D);      // read destination
-
-    BYTE_OPERATION(x3=x2+x1);   // xD->x2, result->xD, uses D
-    
-    WRWORD(D,xD);       // write destination
-    
     reset_EQ_LGT_AGT_C_OV_OP;
     ST|=BStatusLookup[x3]&mask_LGT_AGT_EQ_OP;
 
@@ -614,18 +840,16 @@ void TMS9900::op_abs()
     //  Read instruction (already done)
     //  Read source
     //  Write source
+    Word x2;
 
-    Word x1,x2;
-
-    AddCycleCount(12);
-
-    FormatVI;
-    x1=ROMWORD(S);      // read source
+    FormatVIraw;
 
     if (x1&0x8000) {
         x2=(~x1)+1;     // if negative, make positive
         WRWORD(S,x2);   // write source
-        AddCycleCount(2);
+        AddCycleCount(14);
+    } else {
+        AddCycleCount(12);
     }
 
     reset_EQ_LGT_AGT_C_OV;
@@ -642,16 +866,7 @@ void TMS9900::op_ai()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Word x1,x3;
-    
-    AddCycleCount(14);
-
-    FormatVIII_1;   // read source
-    x1=ROMWORD(D);  // read dest
-
-    x3=x1+S;
-    WRWORD(D,x3);   // write dest
+    FormatVIII_1(x3=x1+x2);
 
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
@@ -669,16 +884,7 @@ void TMS9900::op_dec()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-    
-    Word x1;
-    
-    AddCycleCount(10);
-
-    FormatVI;
-    x1=ROMWORD(S);  // read source
-
-    x1--;
-    WRWORD(S,x1);   // write source
+    FormatVI(x3=x1-1);
 
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
@@ -696,16 +902,7 @@ void TMS9900::op_dect()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    Word x1;
-    
-    AddCycleCount(10);
-
-    FormatVI;
-    x1=ROMWORD(S);  // read source
-
-    x1-=2;
-    WRWORD(S,x1);   // write source
+    FormatVI(x3=x1-2);
     
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
@@ -768,12 +965,12 @@ void TMS9900::op_div()
     // TODO: We should be able to prove on real hardware that the early out works like this (greater than, and not 0) with a few choice test cases
 
     Word x1,x2; 
-    unsigned __int32 x3;
+    uint32_t x3;
     
     // minimum possible when division does not occur
     AddCycleCount(16);
 
-    FormatIX;
+    FormatIXraw;
     x2=ROMWORD(S);  // read source MSW
 
     D=WP+(D<<1);
@@ -789,19 +986,20 @@ void TMS9900::op_div()
     { 
         x3=(x3<<16)|ROMWORD(D+2);   // read source LSW
 #if 0
-        x1=(Word)(x3/x2);
+        x1=(x3/x2)&0xffff;
         WRWORD(D,x1);
-        x1=(Word)(x3%x2);
+        x1=(x3%x2)&0xffff;
         WRWORD(D+2,x1);
 #else
         // lets try it the iterative way, should be able to afford it
         // tested with 10,000,000 random combinations, should be accurate :)
-        unsigned __int32 mask = (0xFFFF8000);   // 1 extra bit, as noted above
-        unsigned __int32 divisor = (x2<<15);    // slide up into place
-        int cnt = 16;                           // need to fill 16 bits
-        x1 = 0;                                 // initialize quotient, remainder will end up in x3 LSW
+        uint32_t mask = (0xFFFF8000);   // 1 extra bit, as noted above
+        uint32_t divisor = (x2<<15);    // slide up into place
+        int cnt = 16;                   // need to fill 16 bits
+        x1 = 0;                         // initialize quotient, remainder will end up in x3 LSW
         while (x2 <= x3) {
             x1<<=1;
+            x1 &= 0xffff;
             if ((x3&mask) >= divisor) {
                 x1|=1;
                 x3-=divisor;
@@ -839,17 +1037,8 @@ void TMS9900::op_inc()
     //  Read instruction (already done)
     //  Read source
     //  Write source
+    FormatVI(x3=x1+1);
 
-    Word x1;
-    
-    AddCycleCount(10);
-
-    FormatVI;
-    x1=ROMWORD(S);      // read source
-    
-    x1++;
-    WRWORD(S,x1);       // write source
-    
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV_C;
 }
@@ -863,16 +1052,7 @@ void TMS9900::op_inct()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    Word x1;
-    
-    AddCycleCount(10);
-
-    FormatVI;
-    x1=ROMWORD(S);      // read source
-    
-    x1+=2;
-    WRWORD(S,x1);       // write source
+    FormatVI(x3=x1+2);
     
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
@@ -894,40 +1074,36 @@ void TMS9900::op_mpy()
     //  Write dest MSW
     //  Write dest LSW
 
-    Word x1; 
-    unsigned __int32 x3;
+    Word x1;
+    uint32_t x3;
     
     AddCycleCount(52);
 
-    FormatIX;
+    FormatIXraw;
     x1=ROMWORD(S);      // read source
     
     D=WP+(D<<1);
     x3=ROMWORD(D);      // read dest
     x3=x3*x1;
-    WRWORD(D,(Word)(x3>>16));       // write dest MSW
-    WRWORD(D+2,(Word)(x3&0xffff));  // write dest LSW
+    WRWORD(D,(x3>>16)&0xffff);  // write dest MSW
+    WRWORD(D+2,(x3&0xffff));    // write dest LSW
 }
 
 void TMS9900::op_neg()
 { 
     // NEGate: NEG src
 
+    // TODO: can we measure this? it doesn't
+    // seem to make sense that INC/DEC would be 10
+    // cycles but this one is 12...
+
     // Base cycles: 12
     // 3 memory accesses:
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    Word x1;
-    
-    AddCycleCount(12);
-
-    FormatVI;
-    x1=ROMWORD(S);  // read source
-
-    x1=(~x1)+1;
-    WRWORD(S,x1);   // write source
+    FormatVI(x3=(~x1)+1);
+    AddCycleCount(2);       // this one is a little slower
 
     reset_EQ_LGT_AGT_C_OV;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV_C;
@@ -943,21 +1119,11 @@ void TMS9900::op_s()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Word x1,x2,x3;
-    
-    AddCycleCount(14);
-
-    FormatI;
-    x1=ROMWORD(S);  // read source
-
-    fixD();
-    x2=ROMWORD(D);  // read dest
-    x3=x2-x1;
-    WRWORD(D,x3);   // write dest
+    FormatI(x3=x2-x1);	// Read Source, Read Dest
+    WRWORD(D,x3);       // Write Dest
 
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
+    ST |= WStatusLookup[x3&0xffff]&mask_LGT_AGT_EQ;
 
     // any number minus 0 sets carry.. my theory is that converting 0 to the two's complement
     // is causing the carry flag to be set.
@@ -975,21 +1141,8 @@ void TMS9900::op_sb()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Byte x1,x2,x3;
-    Word xD;
-    
-    AddCycleCount(14);
-
-    FormatI;
-    x1=RCPUBYTE(S);     // read source
-
-    fixD();
-    xD = ROMWORD(D);    // read dest
-
-    BYTE_OPERATION(x3=x2-x1);   // xD->x2, result->xD, uses D
-
-    WRWORD(D, xD);      // write dest
+    FormatIb(x3=x2-x1);	// Read Source, Read Dest
+    WRWORD(D,xD);       // write dest
 
     reset_EQ_LGT_AGT_C_OV_OP;
     ST|=BStatusLookup[x3]&mask_LGT_AGT_EQ_OP;
@@ -1012,8 +1165,8 @@ void TMS9900::op_b()
 
     AddCycleCount(8);
 
-    FormatVI;
-    ROMWORD(S);     // read source (unused)
+    FormatVIraw;
+    (void)x1;
     SetPC(S);
 }
 
@@ -1032,8 +1185,8 @@ void TMS9900::op_bl()
 
     AddCycleCount(12);
 
-    FormatVI;
-    ROMWORD(S);         // read source (unused)
+    FormatVIraw;        // read source (unused)
+    (void)x1;
     if (0 == GetReturnAddress()) {
         SetReturnAddress(PC);
     }
@@ -1063,17 +1216,17 @@ void TMS9900::op_blwp()
     // Note that there is no "read source" (BLWP R0 /does/ branch with >8300, it doesn't fetch R0)
     // TODO: We need to time out this instruction and verify that analysis.
 
-    Word x1;
+    Word x2;
     
     AddCycleCount(26);
 
-    FormatVI;
+    FormatVIraw;            // read source (WP)
     if (0 == GetReturnAddress()) {
         SetReturnAddress(PC);
     }
-    x1=WP;
-    SetWP(ROMWORD(S));      // read WP
-    WRWORD(WP+26,x1);       // write WP->R13
+    x2=WP;
+    SetWP(x1);
+    WRWORD(WP+26,x2);       // write WP->R13
     WRWORD(WP+28,PC);       // write PC->R14
     WRWORD(WP+30,ST);       // write ST->R15
     SetPC(ROMWORD(S+2));    // read PC
@@ -1101,23 +1254,7 @@ void TMS9900::op_jeq()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (ST_EQ) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(ST_EQ);
 }
 
 void TMS9900::op_jgt()
@@ -1133,23 +1270,7 @@ void TMS9900::op_jgt()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (ST_AGT) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(ST_AGT);
 }
 
 void TMS9900::op_jhe()
@@ -1165,23 +1286,7 @@ void TMS9900::op_jhe()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if ((ST_LGT)||(ST_EQ)) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj((ST_LGT)||(ST_EQ));
 }
 
 void TMS9900::op_jh()
@@ -1197,23 +1302,7 @@ void TMS9900::op_jh()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if ((ST_LGT)&&(!ST_EQ)) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj((ST_LGT)&&(!ST_EQ));
 }
 
 void TMS9900::op_jl()
@@ -1229,23 +1318,7 @@ void TMS9900::op_jl()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if ((!ST_LGT)&&(!ST_EQ)) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj((!ST_LGT)&&(!ST_EQ));
 }
 
 void TMS9900::op_jle()
@@ -1261,23 +1334,7 @@ void TMS9900::op_jle()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if ((!ST_LGT)||(ST_EQ)) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj((!ST_LGT)||(ST_EQ));
 }
 
 void TMS9900::op_jlt()
@@ -1293,23 +1350,7 @@ void TMS9900::op_jlt()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if ((!ST_AGT)&&(!ST_EQ)) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj((!ST_AGT)&&(!ST_EQ));
 }
 
 void TMS9900::op_jmp()
@@ -1320,18 +1361,7 @@ void TMS9900::op_jmp()
     // Base cycles: 10
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(10);
-
-    FormatII;
-    if (X_flag) {
-        SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-    }
-    if (D&0x80) {
-        D=128-(D&0x7f);
-        ADDPC(-(D+D));
-    } else {
-        ADDPC(D+D);
-    }
+    FormatIIj(true);
 }
 
 void TMS9900::op_jnc()
@@ -1347,23 +1377,7 @@ void TMS9900::op_jnc()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (!ST_C) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(!ST_C);
 }
 
 void TMS9900::op_jne()
@@ -1379,23 +1393,7 @@ void TMS9900::op_jne()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (!ST_EQ) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(!ST_EQ);
 }
 
 void TMS9900::op_jno()
@@ -1411,23 +1409,7 @@ void TMS9900::op_jno()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (!ST_OV) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(!ST_OV);
 }
 
 void TMS9900::op_jop()
@@ -1443,23 +1425,7 @@ void TMS9900::op_jop()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (ST_OP) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(ST_OP);
 }
 
 void TMS9900::op_joc()
@@ -1475,23 +1441,7 @@ void TMS9900::op_joc()
     // Base cycles: 8
     // 1 memory access:
     //  Read instruction (already done)
-    AddCycleCount(8);   // base count for jump not taken
-
-    FormatII;
-    if (ST_C) 
-    {
-        if (X_flag) {
-            SetPC(X_flag);  // Update offset - it's relative to the X, not the opcode
-        }
-
-        if (D&0x80) {
-            D=128-(D&0x7f);
-            ADDPC(-(D+D));
-        } else {
-            ADDPC(D+D);
-        }
-        AddCycleCount(10-8);
-    }
+    FormatIIj(ST_C);
 }
 
 void TMS9900::op_rtwp()
@@ -1513,9 +1463,6 @@ void TMS9900::op_rtwp()
     ST=ROMWORD(WP+30);          // ST<-R15
     SetPC(ROMWORD(WP+28));      // PC<-R14 (order matter?)
     SetWP(ROMWORD(WP+26));      // WP<-R13 -- needs to be last!
-
-    // TODO: does this need to skip interrupt? Datasheet doesn't say so
-    //SET_SKIP_INTERRUPT;
 }
 
 void TMS9900::op_x()
@@ -1530,7 +1477,7 @@ void TMS9900::op_x()
 
     if (X_flag!=0) 
     {
-        warn("Recursive X instruction!!!!!");
+        debug_write("Recursive X instruction!!!!!");
         // While it will probably work (recursive X), I don't like the idea ;)
         // Barry Boone says that it does work, although if you recursively
         // call X in a register (ie: X R4 that contains X R4), you will lock
@@ -1542,8 +1489,8 @@ void TMS9900::op_x()
     AddCycleCount(8-4); // For X, add this time to the execution time of the instruction found at the source address, minus 4 clock cycles and 1 memory access. 
                         // we already accounted for the memory access (the instruction is going to be already in S)
 
-    FormatVI;
-    in=ROMWORD(S);      // read source
+    FormatVIraw;        // read source
+    in=x1;              // opcode needs to be in 'in'
 
     X_flag=PC;          // set flag and save true post-X address for the JMPs (AFTER X's oprands but BEFORE the instruction's oprands, if any)
 
@@ -1576,7 +1523,7 @@ void TMS9900::op_xop()
 
     AddCycleCount(36);
 
-    FormatIX;
+    FormatIXraw;
     D&=0xf;
 
     ROMWORD(S);         // read source (unused)
@@ -1602,24 +1549,16 @@ void TMS9900::op_c()
     //  Read instruction (already done)
     //  Read source
     //  Read dest
-
-    Word x3,x4;     // unsigned 16 bit
-
-    AddCycleCount(14);
-
-    FormatI;
-    x3=ROMWORD(S);  // read source
-
-    fixD();
-    x4=ROMWORD(D);  // read dest
+    FormatI(x3=0);	// Read Source, Read Dest
+    (void)x3;
 
     reset_LGT_AGT_EQ;
-    if (x3>x4) set_LGT;
-    if (x3==x4) set_EQ;
-    if ((x3&0x8000)==(x4&0x8000)) {
-        if (x3>x4) set_AGT;
+    if (x1>x2) set_LGT;
+    if (x1==x2) set_EQ;
+    if ((x1&0x8000)==(x2&0x8000)) {
+        if (x1>x2) set_AGT;
     } else {
-        if (x4&0x8000) set_AGT;
+        if (x2&0x8000) set_AGT;
     }
 }
 
@@ -1632,24 +1571,16 @@ void TMS9900::op_cb()
     //  Read instruction (already done)
     //  Read source
     //  Read dest
+    FormatIb(x3=0);	// Read Source, Read Dest
+    (void)x3;
 
-    Byte x3,x4;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x3=RCPUBYTE(S);     // read source
-
-    fixD();
-    x4=RCPUBYTE(D);     // read dest
-  
     reset_LGT_AGT_EQ_OP;
-    if (x3>x4) set_LGT;
-    if (x3==x4) set_EQ;
-    if ((x3&0x80)==(x4&0x80)) {
-        if (x3>x4) set_AGT;
+    if (x1>x2) set_LGT;
+    if (x1==x2) set_EQ;
+    if ((x1&0x80)==(x2&0x80)) {
+        if (x1>x2) set_AGT;
     } else {
-        if (x4&0x80) set_AGT;
+        if (x2&0x80) set_AGT;
     }
     ST|=BStatusLookup[x3]&BIT_OP;
 }
@@ -1668,7 +1599,7 @@ void TMS9900::op_ci()
 
     AddCycleCount(14);
 
-    FormatVIII_1;       // read source
+    FormatVIII_1raw;    // read source
     x3=ROMWORD(D);      // read dest
   
     reset_LGT_AGT_EQ;
@@ -1692,19 +1623,8 @@ void TMS9900::op_coc()
     //  Read instruction (already done)
     //  Read source
     //  Read dest
+    FormatIII(x3=x1&x2);
 
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatIII;
-    x1=ROMWORD(S);  // read source
-
-    fixD();
-    x2=ROMWORD(D);  // read dest
-    
-    x3=x1&x2;
-  
     if (x3==x1) set_EQ; else reset_EQ;
 }
 
@@ -1719,19 +1639,8 @@ void TMS9900::op_czc()
     //  Read instruction (already done)
     //  Read source
     //  Read dest
+    FormatIII(x3=x1&x2);
 
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatIII;
-    x1=ROMWORD(S);  // read source
-
-    fixD();
-    x2=ROMWORD(D);  // read dest
-    
-    x3=x1&x2;
-  
     if (x3==0) set_EQ; else reset_EQ;
 }
 
@@ -1750,8 +1659,7 @@ void TMS9900::op_ldcr()
     //  Read source (byte access if count = 1-8)
     //  Read R12
 
-    Word x1,x3,cruBase; 
-    int x2;
+    Word x1,x3,cruBase;
     
     AddCycleCount(20);  // base count
 
@@ -1764,9 +1672,9 @@ void TMS9900::op_ldcr()
     // CRU base address - R12 bits 3-14 (0=MSb)
     // 0001 1111 1111 1110
     cruBase=(ROMWORD(WP+24)>>1)&0xfff;      // read R12
-    for (x2=0; x2<D; x2++)
+    for (int x2=0; x2<D; x2++)
     { 
-        wcru(cruBase+x2, (x1&x3) ? 1 : 0);
+        theCore->writeIOByte(cruBase+x2, nCycleCount, ACCESS_WRITE, (x1&x3) ? 1 : 0);
         x3=x3<<1;
     }
 
@@ -1794,19 +1702,8 @@ void TMS9900::op_sbo()
     // 2 memory accesses:
     //  Read instruction (already done)
     //  Read R12
-
-    Word add;
-
-    AddCycleCount(12);
-
     FormatII;
-    add=(ROMWORD(WP+24)>>1)&0xfff;      // read R12
-    if (D&0x80) {
-        add-=128-(D&0x7f);
-    } else {
-        add+=D;
-    }
-    wcru(add,1);
+    theCore->writeIOByte(add, nCycleCount, ACCESS_WRITE, 1);
 }
 
 void TMS9900::op_sbz()
@@ -1818,19 +1715,8 @@ void TMS9900::op_sbz()
     // 2 memory accesses:
     //  Read instruction (already done)
     //  Read R12
-
-    Word add;
-
-    AddCycleCount(12);
-
     FormatII;
-    add=(ROMWORD(WP+24)>>1)&0xfff;      // read R12
-    if (D&0x80) {
-        add-=128-(D&0x7f);
-    } else {
-        add+=D;
-    }
-    wcru(add,0);
+    theCore->writeIOByte(add, nCycleCount, ACCESS_WRITE, 0);
 }
 
 void TMS9900::op_stcr()
@@ -1846,7 +1732,6 @@ void TMS9900::op_stcr()
     //  Write source (byte access if count = 1-8)
 
     Word x1,x3,x4, cruBase; 
-    int x2;
 
     AddCycleCount(42);  // base value
 
@@ -1855,9 +1740,9 @@ void TMS9900::op_stcr()
     x1=0; x3=1;
   
     cruBase=(ROMWORD(WP+24)>>1)&0xfff;  // read R12
-    for (x2=0; x2<D; x2++)
+    for (int x2=0; x2<D; x2++)
     { 
-        x4=rcru(cruBase+x2);
+        x4 = theCore->readIOByte(cruBase+x2, nCycleCount, ACCESS_READ);
         if (x4) 
         {
             x1=x1|x3;
@@ -1907,20 +1792,8 @@ void TMS9900::op_tb()
     // 2 memory accesses:
     //  Read instruction (already done)
     //  Read R12
-
-    Word add;
-
-    AddCycleCount(12);
-
     FormatII;
-    add=(ROMWORD(WP+24)>>1)&0xfff;  // read R12
-    if (D&0x80) {
-        add-=128-(D&0x7f);
-    } else {
-        add+=D;
-    }
-
-    if (rcru(add)) set_EQ; else reset_EQ;
+    if (theCore->readIOByte(add, nCycleCount, ACCESS_READ)) set_EQ; else reset_EQ;
 }
 
 // These instructions are valid 9900 instructions but are invalid on the TI-99, as they generate
@@ -1935,7 +1808,7 @@ void TMS9900::op_ckof()
     AddCycleCount(12);
 
     FormatVII;
-    warn("ClocK OFf instruction encountered!");                 // not supported on 99/4A
+    debug_write("ClocK OFf instruction encountered!");                 // not supported on 99/4A
     // This will set A0-A2 to 110 and pulse CRUCLK (so not emulated)
 }
 
@@ -1948,7 +1821,7 @@ void TMS9900::op_ckon()
     AddCycleCount(12);
 
     FormatVII;
-    warn("ClocK ON instruction encountered!");                  // not supported on 99/4A
+    debug_write("ClocK ON instruction encountered!");                  // not supported on 99/4A
     // This will set A0-A2 to 101 and pulse CRUCLK (so not emulated)
 }
 
@@ -1960,15 +1833,12 @@ void TMS9900::op_idle()
     AddCycleCount(12);
 
     FormatVII;
-    warn("IDLE instruction encountered!");                      // not supported on 99/4A
+    debug_write("IDLE instruction encountered!");                      // not supported on 99/4A
     // This sets A0-A2 to 010, and pulses CRUCLK until an interrupt is received
     // Although it's not supposed to be used on the TI, at least one game
     // (Slymoids) uses it - perhaps to sync with the VDP? So we'll emulate it someday
 
-    // TODO: we can't do this today. Everything is based on CPU cycles, which means
-    // when the CPU stops, so does the VDP, 9901, etc, so no interrupt ever comes in
-    // to wake up the system. This will be okay when the VDP is the timing source.
-//  SetIdle();
+    StartIdle();
 }
 
 void TMS9900::op_rset()
@@ -1980,7 +1850,7 @@ void TMS9900::op_rset()
     AddCycleCount(12);
 
     FormatVII;
-    warn("ReSET instruction encountered!");                     // not supported on 99/4A
+    debug_write("ReSET instruction encountered!");                     // not supported on 99/4A
     // This will set A0-A2 to 011 and pulse CRUCLK (so not emulated)
     // However, it does have an effect, it zeros the interrupt mask
     ST&=0xfff0;
@@ -1995,7 +1865,7 @@ void TMS9900::op_lrex()
     AddCycleCount(12);
 
     FormatVII;
-    warn("Load or REstart eXecution instruction encountered!"); // not supported on 99/4A
+    debug_write("Load or REstart eXecution instruction encountered!"); // not supported on 99/4A
     // This will set A0-A2 to 111 and pulse CRUCLK (so not emulated)
 }
 
@@ -2013,7 +1883,7 @@ void TMS9900::op_li()
 
     AddCycleCount(12);
 
-    FormatVIII_1;       // read immediate
+    FormatVIII_1raw;    // read immediate
     WRWORD(D,S);        // write register
     
     reset_LGT_AGT_EQ;
@@ -2032,7 +1902,7 @@ void TMS9900::op_limi()
 
     AddCycleCount(16);
 
-    FormatVIII_1;               // read immediate
+    FormatVIII_1raw;            // read immediate
     ST=(ST&0xfff0)|(S&0xf);
 }
 
@@ -2048,7 +1918,7 @@ void TMS9900::op_lwpi()
 
     AddCycleCount(10);
 
-    FormatVIII_1;       // read immediate
+    FormatVIII_1raw;       // read immediate
     SetWP(S);
 }
 
@@ -2062,17 +1932,9 @@ void TMS9900::op_mov()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Word x1;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=ROMWORD(S);              // read source
-    
-    fixD();
-    ROMWORD(D, ACCESS_RMW);     // read dest (wasted)
-    WRWORD(D,x1);               // write dest
+    FormatI(x3=x1);	// Read Source, Read Dest
+    (void)x2;
+    WRWORD(D,x3);   // Write Dest
   
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
@@ -2088,17 +1950,11 @@ void TMS9900::op_movb()
     //  Read source
     //  Read dest
     //  Write dest
+    FormatIb(x3=x1);	// Read Source, Read Dest
+    (void)x3;
+    (void)x2;
+    WRWORD(D,xD);       // write dest
 
-    Byte x1;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=RCPUBYTE(S);     // read source
-    
-    fixD();
-    WCPUBYTE(D,x1);     // read dest, write dest
-    
     reset_LGT_AGT_EQ_OP;
     ST|=BStatusLookup[x1]&mask_LGT_AGT_EQ_OP;
 }
@@ -2112,11 +1968,7 @@ void TMS9900::op_stst()
     // 2 memory accesses:
     //  Read instruction (already done)
     //  Write dest
-
-    AddCycleCount(8);
-
-    FormatVIII_0;
-    WRWORD(D,ST);   // write dest
+    FormatVIII_0(ST);
 }
 
 void TMS9900::op_stwp()
@@ -2128,11 +1980,7 @@ void TMS9900::op_stwp()
     // 2 memory accesses:
     //  Read instruction (already done)
     //  Write dest
-
-    AddCycleCount(8);
-
-    FormatVIII_0;
-    WRWORD(D,WP);   // write dest
+    FormatVIII_0(WP);
 }
 
 void TMS9900::op_swpb()
@@ -2145,16 +1993,7 @@ void TMS9900::op_swpb()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    Word x1,x2;
-
-    AddCycleCount(10);
-
-    FormatVI;
-    x1=ROMWORD(S);      // read source
-
-    x2=((x1&0xff)<<8)|(x1>>8);
-    WRWORD(S,x2);       // write source
+    FormatVI(x3=((x1&0xff)<<8)|(x1>>8));
 }
 
 void TMS9900::op_andi()
@@ -2167,17 +2006,8 @@ void TMS9900::op_andi()
     //  Read immediate
     //  Read dest
     //  Write dest
-
-    Word x1,x2;
-
-    AddCycleCount(14);
-
-    FormatVIII_1;       // read immediate
-
-    x1=ROMWORD(D);      // read dest
-    x2=x1&S;
-    WRWORD(D,x2);       // write dest
-    
+    FormatVIII_1(x3=x1&x2);
+  
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x2]&mask_LGT_AGT_EQ;
 }
@@ -2192,17 +2022,8 @@ void TMS9900::op_ori()
     //  Read immediate
     //  Read dest
     //  Write dest
+    FormatVIII_1(x3=x1|x2);
 
-    Word x1,x2;
-
-    AddCycleCount(14);
-
-    FormatVIII_1;   // read immediate
-
-    x1=ROMWORD(D);  // read dest
-    x2=x1|S;
-    WRWORD(D,x2);   // write dest
-  
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x2]&mask_LGT_AGT_EQ;
 }
@@ -2217,18 +2038,7 @@ void TMS9900::op_xor()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatIII;
-    x1=ROMWORD(S);  // read source
-
-    fixD();
-    x2=ROMWORD(D);  // read dest
-  
-    x3=x1^x2;
+    FormatIII(x3=x1^x2);
     WRWORD(D,x3);   // write dest
   
     reset_LGT_AGT_EQ;
@@ -2244,16 +2054,7 @@ void TMS9900::op_inv()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    Word x1;
-
-    AddCycleCount(10);
-
-    FormatVI;
-
-    x1=ROMWORD(S);  // read source
-    x1=~x1;
-    WRWORD(S,x1);   // write source
+    FormatVI(x3=~x1);
 
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
@@ -2269,12 +2070,7 @@ void TMS9900::op_clr()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    AddCycleCount(10);
-
-    FormatVI;
-    ROMWORD(S, ACCESS_RMW);     // read source (wasted)
-    WRWORD(S,0);                // write source
+    FormatVI(x3=0);
 }
 
 void TMS9900::op_seto()
@@ -2287,12 +2083,7 @@ void TMS9900::op_seto()
     //  Read instruction (already done)
     //  Read source
     //  Write source
-
-    AddCycleCount(10);
-
-    FormatVI;
-    ROMWORD(S, ACCESS_RMW);     // read source (wasted)
-    WRWORD(S,0xffff);           // write source
+    FormatVI(x3=0xffff);
 }
 
 void TMS9900::op_soc()
@@ -2307,19 +2098,9 @@ void TMS9900::op_soc()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=ROMWORD(S);      // read source
-
-    fixD();
-    x2=ROMWORD(D);      // read dest
-    x3=x1|x2;
+    FormatI(x3=x1|x2)	// Read Source, Read Dest
     WRWORD(D,x3);       // write dest
-  
+
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 }
@@ -2334,20 +2115,7 @@ void TMS9900::op_socb()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Byte x1,x2,x3;
-    Word xD;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=RCPUBYTE(S);     // read source
-
-    fixD();
-    xD=ROMWORD(D);      // read dest
-
-    BYTE_OPERATION(x3=x1|x2);   // xD->x2, result->xD, uses D
-
+    FormatIb(x3=x1|x2);	// Read Source, Read Dest
     WRWORD(D,xD);       // write dest
 
     reset_LGT_AGT_EQ_OP;
@@ -2365,18 +2133,8 @@ void TMS9900::op_szc()
     //  Read source
     //  Read dest
     //  Write dest
-    
-    Word x1,x2,x3;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=ROMWORD(S);      // read source
-
-    fixD();
-    x2=ROMWORD(D);      // read dest
-    x3=(~x1)&x2;
-    WRWORD(D,x3);       // write dest
+    FormatI(x3=(~x1)&x2)	// Read Source, Read Dest
+    WRWORD(D,x3);           // write dest
   
     reset_LGT_AGT_EQ;
     ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
@@ -2392,20 +2150,7 @@ void TMS9900::op_szcb()
     //  Read source
     //  Read dest
     //  Write dest
-
-    Byte x1,x2,x3;
-    Word xD;
-
-    AddCycleCount(14);
-
-    FormatI;
-    x1=RCPUBYTE(S);     // read source
-
-    fixD();
-    xD=ROMWORD(D);      // read dest
-
-    BYTE_OPERATION(x3=(~x1)&x2);   // xD->x2, result->xD, uses D
-
+    FormatIb(x3=(~x1)&x2);	// Read Source, Read Dest
     WRWORD(D,xD);       // write dest
 
     reset_LGT_AGT_EQ_OP;
@@ -2433,20 +2178,10 @@ void TMS9900::op_sra()
     //  Read R0
     //  Read source
     //  Write source
-
-    Word x1,x3,x4; 
-    int x2;
-    
-    AddCycleCount(12);  // base value
+    Word x2,x3,x4; 
 
     FormatV;
-    if (D==0)
-    { 
-        D=ROMWORD(WP) & 0xf;    // read R0
-        if (D==0) D=16;
-        AddCycleCount(8);
-    }
-    x1=ROMWORD(S);              // read source
+
     x4=x1&0x8000;
     x3=0;
   
@@ -2462,8 +2197,6 @@ void TMS9900::op_sra()
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
 
     if (x3) set_C;
-
-    AddCycleCount(2*D);
 }
 
 void TMS9900::op_srl()
@@ -2485,21 +2218,11 @@ void TMS9900::op_srl()
     //  Read R0
     //  Read source
     //  Write source
-
-    Word x1,x3; 
-    int x2;
-    AddCycleCount(12);      // base value
+    Word x2,x3;
 
     FormatV;
-    if (D==0)
-    { 
-        D=ROMWORD(WP)&0xf;  // read R0
-        if (D==0) D=16;
-        AddCycleCount(8);
-    }
-    x1=ROMWORD(S);          // read source
+
     x3=0;
-  
     for (x2=0; x2<D; x2++)
     { 
         x3=x1&1;
@@ -2511,8 +2234,6 @@ void TMS9900::op_srl()
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
 
     if (x3) set_C;
-
-    AddCycleCount(2*D);
 }
 
 void TMS9900::op_sla()
@@ -2533,19 +2254,10 @@ void TMS9900::op_sla()
     //  Read R0
     //  Read source
     //  Write source
-
-    Word x1,x3,x4; 
-    int x2;
-    AddCycleCount(12);      // base value
+    Word x2,x3,x4;
 
     FormatV;
-    if (D==0)
-    { 
-        D=ROMWORD(WP)&0xf;  // read R0
-        if (D==0) D=16;
-        AddCycleCount(8);
-    }
-    x1=ROMWORD(S);          // read source
+
     x4=x1&0x8000;
     reset_EQ_LGT_AGT_C_OV;
 
@@ -2561,8 +2273,6 @@ void TMS9900::op_sla()
     ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
 
     if (x3) set_C;
-
-    AddCycleCount(2*D);
 }
 
 void TMS9900::op_src()
@@ -2586,19 +2296,10 @@ void TMS9900::op_src()
     //  Read R0
     //  Read source
     //  Write source
-
-    Word x1,x4;
-    int x2;
-    AddCycleCount(12);      // base value
+    Word x2,x4;
 
     FormatV;
-    if (D==0)
-    { 
-        D=ROMWORD(WP)&0xf;  // read R0
-        if (D==0) D=16;
-        AddCycleCount(8);
-    }
-    x1=ROMWORD(S);          // read source
+
     for (x2=0; x2<D; x2++)
     { 
         x4=x1&0x1;
@@ -2629,366 +2330,46 @@ void TMS9900::op_bad()
 
     FormatVII;
     sprintf(buf, "Illegal opcode (%04X)", in);
-    warn(buf);                  // Don't know this Opcode
-    SwitchToThread();           // these have a habit of taking over the emulator in crash situations :)
-    if (BreakOnIllegal) TriggerBreakPoint();
-}
-
-////////////////////////////////////////////////////////////////////////
-// functions that are different on the F18A
-// (there will be more than just this!)
-void TMS9900::op_idleF18() {
-    // GPU goes to sleep
-    // In this broken implementation, we switch context back to the host CPU
-    // TODO: do this properly.
-    FormatVII;
-    debug_write("GPU Encountered IDLE, switching back to CPU");
-    StartIdle();
-    if (!bInterleaveGPU) {
-        pCurrentCPU = pCPU;
-    }
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_callF18() {
-    Word x2;
-
-    // 0C80 call    00001 100 1x Ts SSSS
-    // CALL <gas> = (R15) <= PC , R15 <= R15 - 2 , PC <= gas
-
-    FormatVI;
-    x2=ROMWORD(WP+30);      // get R15
-    if (0 == GetReturnAddress()) {
-        SetReturnAddress(PC);
-    }
-    WRWORD(x2,PC);
-
-    x2-=2;
-    WRWORD(WP+30, x2);      // update R15
-
-    SetPC(S);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_retF18(){
-    Word x1;
-
-    // 0C00 ret     00001 100 0x xx xxxx
-    // RET        = R15 <= R15 + 2 , PC <= (R15)    
-    FormatVII;
-
-    x1=ROMWORD(WP+30);      // get R15
-    x1+=2;
-    WRWORD(WP+30, x1);      // update R15
-    SetPC(ROMWORD(x1));     // get PC   TODO: is the F18A GPU PC also 15 bits, or 16?
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_pushF18(){
-    Word x1,x2;
-
-    // Push the word on the stack
-    // 0D00 push    00001 101 0x Ts SSSS
-    // PUSH <gas> = (R15) <= (gas) , R15 <= R15 - 2
-
-    FormatVI;
-    x1=ROMWORD(S);
-    x2=ROMWORD(WP+30);      // get R15
-    WRWORD(x2, x1);
-
-    x2-=2;
-    WRWORD(WP+30, x2);      // update R15
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_popF18(){
-    Word x1,x2;
-
-    // POP the word from the stack
-    // the stack pointer post-decrements (per Matthew)
-    // so here we pre-increment!
-
-    // 0F00 pop     00001 111 0x Td DDDD
-    // POP  <gad> = R15 <= R15 + 2 , (gad) <= (R15)
-
-    FormatVI;               // S is really D in this one...
-    x2=ROMWORD(WP+30);      // get R15
-    x2+=2;
-    WRWORD(WP+30, x2);      // update R15
-
-    x1=ROMWORD(x2);
-    WRWORD(S, x1);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_slcF18(){
-    // TODO: this one seems misdefined? It only has a source address, and no count??
-    // Wasn't it removed from the final??
-
-    Word x1,x2;
-
-    // 0E00 slc     00001 110 0x Ts SSSS
-
-    FormatVI;
-    x1=ROMWORD(S);
-
-    // circular left shift (TODO: once? does it rotate through carry??)
-    x2=x1&0x8000;
-    x1<<=1;
-    if (x2) x1|=0x0001;
-    WRWORD(S, x1);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_pixF18(){
-    // PIX is a funny instruction. It has a huge candy-machine interface that works with
-    // Bitmap mode, with the new bitmap overlay, and it can perform logic operations. It's
-    // almost a mini-blitter.
-
-    Word x1,x2,ad;
-
-    FormatIX;
-    D=WP+(D<<1);
-
-    // SRC = XXXXXXXX YYYYYYYY
-    // Command bits in destination:
-    // Format: MAxxRWCE xxOOxxPP
-    // M  - 1 = calculate the effective address for GM2 instead of the new bitmap layer (todo: so do nothing else??)         
-    //      0 = use the remainder of the bits for the new bitmap layer pixels
-    // A  - 1 = retrieve the pixel's effective address instead of setting a pixel   (todo: so do nothing else??)       
-    //      0 = read or set a pixel according to the other bits
-    // R  - 1 = read current pixel into PP, only after possibly writing PP         
-    //      0 = do not read current pixel into PP
-    // W  - 1 = do not write PP         
-    //      0 = write PP to current pixel
-    // C  - 1 = compare OO with PP according to E, and write PP only if true         
-    //      0 = always write
-    // E  - 1 = only write PP if current pixel is equal to OO         
-    //      0 = only write PP if current pixel is not equal to OO
-    // OO   pixel to compare to existing pixel
-    // PP   new pixel to write, and previous pixel when reading
-    //
-    // The destination parameter is the PIX instruction as indicated above.  
-    // If you use the M or A operations, the destination register will contain the address 
-    // after the instruction has executed.  If you use the R operation, the read pixel will 
-    // be in PP (over writes the LSbits).  You can read and write at the same time, in which 
-    // case the PP bits are written first and then replaced with the original pixel bits
-    //
-    
-    x1=ROMWORD(S);
-    x2=ROMWORD(D);
-
-    if (x2 & 0x8000) {
-        // calculate BM2 address:
-        // 00PYYYYY00000YYY +
-        //     0000XXXXX000
-        // ------------------
-        // 00PY YYYY XXXX XYYY
-        //
-        // Note: Bitmap GM2 address /includes/ the offset from VR4 (pattern table), so to use
-        // it for both pattern and color tables, put the pattern table at >0000
-        ad = ((VDPREG[4]&0x04) ? 0x2000 : 0) |          // P
-             ((x1&0x00F8) << 5) |                       // YYYYY
-             ((x1&0xF800) >> 8) |                       // XXXXX
-             ((x1&0x0007));                             // YYY
-    } else {
-        // calculate overlay address -- I don't have the math for this.
-        // TODO: Is it chunky or planar? I assume chunky, 2 bits per pixel, linear.
-        // TODO: I don't have the reference in front of me to know what registers do what (size, start address, etc)
-        // so.. do this later.
-        ad = 0;     // todo: put actual math in place
-    }
-
-    // only parse the other bits if M and A are zero
-    if ((x2 & 0xc000) == 0) {
-        // everything in here thus assumes overlay mode and the pixel is at AD.
-
-        unsigned char pix = RCPUBYTE(ad);   // get the byte
-        unsigned char orig = pix;           // save it
-        // TODO: if we are 2 bits per pixel, there is still masking to do??
-        pix &= 0x03;        // TODO: this is wrong, get the correct pixel into the LSb's
-        bool bComp = (pix == ((x2&0x0030)>>4));     // compare the pixels
-        unsigned char newpix = x2&0x0003;           // new pixel
-        bool bWrite = (x2&0x0400)!=0;               // whether to write
-
-        // TODO: are C and E dependent on W being set? I am assuming yes.
-        if ((bWrite)&&(x2&0x0200)) {                // C - compare active (only important if we are writing anyway?)
-            if (x2&0x0100) {
-                // E is set, comparison must be true
-                if (!bComp) bWrite=false;
-            } else {
-                // E is clear, comparison must be false
-                if (bComp) bWrite=false;
-            }
-        }
-
-        if (bWrite) {
-            // TODO: properly merge the pixel (newpix) back in to orig
-            WCPUBYTE(ad, (orig&0xfc) | newpix);
-        }
-        if (x2 & 0x0800) {
-            // read is set, so save the original read pixel color in PP
-            x2=(x2&0xFFFC) | pix;
-            WRWORD(D, x2);          // write it back
-        }
-    } else {
-        // user only wants the address
-        WRWORD(D, ad);
-    }
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_csonF18(){
-    // chip select to the EEPROM
-    FormatVII;
-    
-    spi_flash_enable(true);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_csoffF18(){
-    // chip select to the EEPROM off (TODO)
-    FormatVII;
-    
-    spi_flash_enable(false);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_spioutF18(){
-    // based on LDCR
-    // The count is ignored, this is always an 8-bit byte operation
-    Byte x1;
-
-    // force the bit count to be 8, no matter what it really was
-    // This is needed so the FormatIV instruction correctly interprets
-    // this as a byte operation in all cases.
-    in = (in&(~0x03c0)) | (8<<6);
-
-    FormatIV;
-    x1=RCPUBYTE(S);
-
-    // Always 8 bits
-    spi_write_data(x1, 8);
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_spiinF18(){
-    // based on STCR
-    // The count is ignored, this is always an 8-bit byte operation
-    Byte x1;
-
-    // force the bit count to be 8, no matter what it really was
-    // This is needed so the FormatIV instruction correctly interprets
-    // this as a byte operation in all cases.
-    in = (in&(~0x03c0)) | (8<<6);
-
-    FormatIV;
-    
-    // Always 8 bits
-    x1 = spi_read_data(8);
-    WCPUBYTE(S,(Byte)(x1&0xff));  
-
-    // TODO: does it affect any status flags??
-    //reset_EQ_LGT_AGT_C_OV;
-    //ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV;
-
-    //AddCycleCount(??);
-}
-
-void TMS9900::op_rtwpF18(){
-    // Almost the same. Used by interrupt code only. Does not touch R13 as there is no WP.
-    // ReTurn with Workspace Pointer: RTWP
-    // TODO: what interrupt code? what am I doing here?
-
-    FormatVII;
-    ST=ROMWORD(WP+30);
-    SetPC(ROMWORD(WP+28));
-
-    //AddCycleCount(??);        // TODO: 
+    debug_write(buf);       // Don't know this Opcode
+    if (BreakOnIllegal) theCore->triggerBreakpoint();
 }
 
 ////////////////////////////////////////////////////////////////////////
 // Fill the CPU Opcode Address table
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::buildcpu()
-{
-    Word in,x,z;
-    unsigned int i;
-
-    for (i=0; i<65536; i++)
+void TMS9900::buildcpu() {
+    // TODO: turn this into a code generator that outputs a const struct with
+    // the definitions all loaded so that we can compile it with the pointer
+    // lookups in ROM on systems that have less RAM. Yeah, it makes a big file,
+    // but makes for less RAM usage. ;)
+    //
+    // Do the same thing for the status register lookup tables.
+    for (int in=0; in<65536; ++in)
     { 
-        in=(Word)i;
-
-        x=(in&0xf000)>>12;
-        switch(x)
-        { 
-        case 0: opcode0(in);        break;
-        case 1: opcode1(in);        break;
-        case 2: opcode2(in);        break;
-        case 3: opcode3(in);        break;
-        case 4: opcode[in]=&TMS9900::op_szc;    break;
-        case 5: opcode[in]=&TMS9900::op_szcb; break;
-        case 6: opcode[in]=&TMS9900::op_s;  break;
-        case 7: opcode[in]=&TMS9900::op_sb; break;
-        case 8: opcode[in]=&TMS9900::op_c;  break;
-        case 9: opcode[in]=&TMS9900::op_cb; break;
-        case 10:opcode[in]=&TMS9900::op_a;  break;
-        case 11:opcode[in]=&TMS9900::op_ab; break;
-        case 12:opcode[in]=&TMS9900::op_mov;    break;
-        case 13:opcode[in]=&TMS9900::op_movb; break;
-        case 14:opcode[in]=&TMS9900::op_soc;    break;
-        case 15:opcode[in]=&TMS9900::op_socb; break;
-        default: opcode[in]=&TMS9900::op_bad;
+        int x=(in&0xf000)>>12;
+        switch(x) { 
+            case 0: opcode0(in);                    break;
+            case 1: opcode1(in);                    break;
+            case 2: opcode2(in);                    break;
+            case 3: opcode3(in);                    break;
+            case 4: opcode[in]=&TMS9900::op_szc;    break;
+            case 5: opcode[in]=&TMS9900::op_szcb;   break;
+            case 6: opcode[in]=&TMS9900::op_s;      break;
+            case 7: opcode[in]=&TMS9900::op_sb;     break;
+            case 8: opcode[in]=&TMS9900::op_c;      break;
+            case 9: opcode[in]=&TMS9900::op_cb;     break;
+            case 10:opcode[in]=&TMS9900::op_a;      break;
+            case 11:opcode[in]=&TMS9900::op_ab;     break;
+            case 12:opcode[in]=&TMS9900::op_mov;    break;
+            case 13:opcode[in]=&TMS9900::op_movb;   break;
+            case 14:opcode[in]=&TMS9900::op_soc;    break;
+            case 15:opcode[in]=&TMS9900::op_socb;   break;
+            default: opcode[in]=&TMS9900::op_bad;
         }
     } 
 
     // build the Word status lookup table
-    for (i=0; i<65536; i++) {
+    for (int i=0; i<65536; i++) {
         WStatusLookup[i]=0;
         // LGT
         if (i>0) WStatusLookup[i]|=BIT_LGT;
@@ -3002,7 +2383,7 @@ void TMS9900::buildcpu()
         if (i==0x8000) WStatusLookup[i]|=BIT_OV;
     }
     // And byte
-    for (i=0; i<256; i++) {
+    for (int i=0; i<256; i++) {
         Byte x=(Byte)(i&0xff);
         BStatusLookup[i]=0;
         // LGT
@@ -3016,222 +2397,182 @@ void TMS9900::buildcpu()
         // OV
         if (i==0x80) BStatusLookup[i]|=BIT_OV;
         // OP
-        for (z=0; x; x&=(x-1)) z++;                     // black magic?
+        int z;
+        for (z=0; x; x&=(x-1)) z++;                     // black magic!
         if (z&1) BStatusLookup[i]|=BIT_OP;              // set bit if an odd number
     }
-
-    nCycleCount = 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // CPU Opcode 0 helper function
 ///////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode0(Word in)
-{
-    Word x;
+void TMS9900::opcode0(int in) {
+    int x=(in&0x0f00)>>8;
 
-    x=(in&0x0f00)>>8;
-
-    switch(x)
-    { 
-    case 2: opcode02(in);       break;
-    case 3: opcode03(in);       break;
-    case 4: opcode04(in);       break;
-    case 5: opcode05(in);       break;
-    case 6: opcode06(in);       break;
-    case 7: opcode07(in);       break;
-    case 8: opcode[in]=&TMS9900::op_sra;    break;
-    case 9: opcode[in]=&TMS9900::op_srl;    break;
-    case 10:opcode[in]=&TMS9900::op_sla;    break;
-    case 11:opcode[in]=&TMS9900::op_src;    break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 2: opcode02(in);                   break;
+        case 3: opcode03(in);                   break;
+        case 4: opcode04(in);                   break;
+        case 5: opcode05(in);                   break;
+        case 6: opcode06(in);                   break;
+        case 7: opcode07(in);                   break;
+        case 8: opcode[in]=&TMS9900::op_sra;    break;
+        case 9: opcode[in]=&TMS9900::op_srl;    break;
+        case 10:opcode[in]=&TMS9900::op_sla;    break;
+        case 11:opcode[in]=&TMS9900::op_src;    break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////
 // CPU Opcode 02 helper function
 ////////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode02(Word in)
-{ 
-    Word x;
+void TMS9900::opcode02(int in) { 
+    int x=(in&0x00e0)>>4;
 
-    x=(in&0x00e0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_li; break;
-    case 2: opcode[in]=&TMS9900::op_ai; break;
-    case 4: opcode[in]=&TMS9900::op_andi; break;
-    case 6: opcode[in]=&TMS9900::op_ori;    break;
-    case 8: opcode[in]=&TMS9900::op_ci; break;
-    case 10:opcode[in]=&TMS9900::op_stwp; break;
-    case 12:opcode[in]=&TMS9900::op_stst; break;
-    case 14:opcode[in]=&TMS9900::op_lwpi; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_li;     break;
+        case 2: opcode[in]=&TMS9900::op_ai;     break;
+        case 4: opcode[in]=&TMS9900::op_andi;   break;
+        case 6: opcode[in]=&TMS9900::op_ori;    break;
+        case 8: opcode[in]=&TMS9900::op_ci;     break;
+        case 10:opcode[in]=&TMS9900::op_stwp;   break;
+        case 12:opcode[in]=&TMS9900::op_stst;   break;
+        case 14:opcode[in]=&TMS9900::op_lwpi;   break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////
 // CPU Opcode 03 helper function
 ////////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode03(Word in)
-{ 
-    Word x;
+void TMS9900::opcode03(int in) { 
+    int x=(in&0x00e0)>>4;
 
-    x=(in&0x00e0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_limi; break;
-    case 4: opcode[in]=&TMS9900::op_idle; break;
-    case 6: opcode[in]=&TMS9900::op_rset; break;
-    case 8: opcode[in]=&TMS9900::op_rtwp; break;
-    case 10:opcode[in]=&TMS9900::op_ckon; break;
-    case 12:opcode[in]=&TMS9900::op_ckof; break;
-    case 14:opcode[in]=&TMS9900::op_lrex; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_limi; break;
+        case 4: opcode[in]=&TMS9900::op_idle; break;
+        case 6: opcode[in]=&TMS9900::op_rset; break;
+        case 8: opcode[in]=&TMS9900::op_rtwp; break;
+        case 10:opcode[in]=&TMS9900::op_ckon; break;
+        case 12:opcode[in]=&TMS9900::op_ckof; break;
+        case 14:opcode[in]=&TMS9900::op_lrex; break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // CPU Opcode 04 helper function
 ///////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode04(Word in)
-{ 
-    Word x;
+void TMS9900::opcode04(int in) { 
+    int x=(in&0x00c0)>>4;
 
-    x=(in&0x00c0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_blwp; break;
-    case 4: opcode[in]=&TMS9900::op_b;  break;
-    case 8: opcode[in]=&TMS9900::op_x;  break;
-    case 12:opcode[in]=&TMS9900::op_clr;    break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_blwp;   break;
+        case 4: opcode[in]=&TMS9900::op_b;      break;
+        case 8: opcode[in]=&TMS9900::op_x;      break;
+        case 12:opcode[in]=&TMS9900::op_clr;    break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 //////////////////////////////////////////////////////////////////////////
 // CPU Opcode 05 helper function
 //////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode05(Word in)
+void TMS9900::opcode05(int in)
 { 
-    Word x;
+    int x=(in&0x00c0)>>4;
 
-    x=(in&0x00c0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_neg;    break;
-    case 4: opcode[in]=&TMS9900::op_inv;    break;
-    case 8: opcode[in]=&TMS9900::op_inc;    break;
-    case 12:opcode[in]=&TMS9900::op_inct; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_neg;    break;
+        case 4: opcode[in]=&TMS9900::op_inv;    break;
+        case 8: opcode[in]=&TMS9900::op_inc;    break;
+        case 12:opcode[in]=&TMS9900::op_inct;   break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
 // CPU Opcode 06 helper function
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode06(Word in)
-{ 
-    Word x;
+void TMS9900::opcode06(int in) { 
+    int x=(in&0x00c0)>>4;
 
-    x=(in&0x00c0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_dec;    break;
-    case 4: opcode[in]=&TMS9900::op_dect; break;
-    case 8: opcode[in]=&TMS9900::op_bl; break;
-    case 12:opcode[in]=&TMS9900::op_swpb; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_dec;    break;
+        case 4: opcode[in]=&TMS9900::op_dect;   break;
+        case 8: opcode[in]=&TMS9900::op_bl;     break;
+        case 12:opcode[in]=&TMS9900::op_swpb;   break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
 // CPU Opcode 07 helper function
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode07(Word in)
-{ 
-    Word x;
+void TMS9900::opcode07(int in) { 
+    int x=(in&0x00c0)>>4;
 
-    x=(in&0x00c0)>>4;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_seto; break;
-    case 4: opcode[in]=&TMS9900::op_abs;    break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_seto; break;
+        case 4: opcode[in]=&TMS9900::op_abs;  break;
+        default: opcode[in]=&TMS9900::op_bad;
     }   
 }
 
 ////////////////////////////////////////////////////////////////////////
 // CPU Opcode 1 helper function
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode1(Word in)
-{ 
-    Word x;
+void TMS9900::opcode1(int in) { 
+    int x=(in&0x0f00)>>8;
 
-    x=(in&0x0f00)>>8;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_jmp;    break;
-    case 1: opcode[in]=&TMS9900::op_jlt;    break;
-    case 2: opcode[in]=&TMS9900::op_jle;    break;
-    case 3: opcode[in]=&TMS9900::op_jeq;    break;
-    case 4: opcode[in]=&TMS9900::op_jhe;    break;
-    case 5: opcode[in]=&TMS9900::op_jgt;    break;
-    case 6: opcode[in]=&TMS9900::op_jne;    break;
-    case 7: opcode[in]=&TMS9900::op_jnc;    break;
-    case 8: opcode[in]=&TMS9900::op_joc;    break;
-    case 9: opcode[in]=&TMS9900::op_jno;    break;
-    case 10:opcode[in]=&TMS9900::op_jl; break;
-    case 11:opcode[in]=&TMS9900::op_jh; break;
-    case 12:opcode[in]=&TMS9900::op_jop;    break;
-    case 13:opcode[in]=&TMS9900::op_sbo;    break;
-    case 14:opcode[in]=&TMS9900::op_sbz;    break;
-    case 15:opcode[in]=&TMS9900::op_tb; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_jmp;    break;
+        case 1: opcode[in]=&TMS9900::op_jlt;    break;
+        case 2: opcode[in]=&TMS9900::op_jle;    break;
+        case 3: opcode[in]=&TMS9900::op_jeq;    break;
+        case 4: opcode[in]=&TMS9900::op_jhe;    break;
+        case 5: opcode[in]=&TMS9900::op_jgt;    break;
+        case 6: opcode[in]=&TMS9900::op_jne;    break;
+        case 7: opcode[in]=&TMS9900::op_jnc;    break;
+        case 8: opcode[in]=&TMS9900::op_joc;    break;
+        case 9: opcode[in]=&TMS9900::op_jno;    break;
+        case 10:opcode[in]=&TMS9900::op_jl;     break;
+        case 11:opcode[in]=&TMS9900::op_jh;     break;
+        case 12:opcode[in]=&TMS9900::op_jop;    break;
+        case 13:opcode[in]=&TMS9900::op_sbo;    break;
+        case 14:opcode[in]=&TMS9900::op_sbz;    break;
+        case 15:opcode[in]=&TMS9900::op_tb;     break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
 // CPU Opcode 2 helper function
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode2(Word in)
-{ 
-    Word x;
+void TMS9900::opcode2(int in) { 
+    int x=(in&0x0c00)>>8;
 
-    x=(in&0x0c00)>>8;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_coc; break;
-    case 4: opcode[in]=&TMS9900::op_czc; break;
-    case 8: opcode[in]=&TMS9900::op_xor; break;
-    case 12:opcode[in]=&TMS9900::op_xop; break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_coc; break;
+        case 4: opcode[in]=&TMS9900::op_czc; break;
+        case 8: opcode[in]=&TMS9900::op_xor; break;
+        case 12:opcode[in]=&TMS9900::op_xop; break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
 // CPU Opcode 3 helper function
 ////////////////////////////////////////////////////////////////////////
-void TMS9900::opcode3(Word in)
-{ 
-    Word x;
+void TMS9900::opcode3(int in) { 
+    int x=(in&0x0c00)>>8;
 
-    x=(in&0x0c00)>>8;
-
-    switch(x)
-    { 
-    case 0: opcode[in]=&TMS9900::op_ldcr; break;
-    case 4: opcode[in]=&TMS9900::op_stcr; break;
-    case 8: opcode[in]=&TMS9900::op_mpy;    break;
-    case 12:opcode[in]=&TMS9900::op_div;    break;
-    default: opcode[in]=&TMS9900::op_bad;
+    switch(x) { 
+        case 0: opcode[in]=&TMS9900::op_ldcr; break;
+        case 4: opcode[in]=&TMS9900::op_stcr; break;
+        case 8: opcode[in]=&TMS9900::op_mpy;  break;
+        case 12:opcode[in]=&TMS9900::op_div;  break;
+        default: opcode[in]=&TMS9900::op_bad;
     }
 }

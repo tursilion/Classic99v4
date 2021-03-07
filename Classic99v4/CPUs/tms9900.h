@@ -1,12 +1,32 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
+// This class emulates a 3MHZ TMS9900, interconnected to an 8-bit bus
+// for use with Classic99
+
 #ifndef TMS9900_H
 #define TMS9900_H
+
+// ditching the 16 bit version to improve optimization
+typedef uint8_t Byte;
+typedef uint16_t Word;
 
 // we set skip_interrupt to 2 because it's decremented after every instruction - including
 // the one that sets it!
 #define SET_SKIP_INTERRUPT skip_interrupt=2
+// force the PC to always be 15-bit, can't store a 16-bit PC
+#define ADDPC(x) { PC+=(x); PC&=0xfffe; }
+
+/////////////////////////////////////////////////////////////////////
+// Status register defines
+/////////////////////////////////////////////////////////////////////
+#define BIT_LGT 0x8000
+#define BIT_AGT 0x4000
+#define BIT_EQ  0x2000
+#define BIT_C   0x1000
+#define BIT_OV  0x0800
+#define BIT_OP  0x0400
+#define BIT_XOP 0x0200
 
 #define ST_LGT (ST & BIT_LGT)                       // Logical Greater Than
 #define ST_AGT (ST & BIT_AGT)                       // Arithmetic Greater Than
@@ -57,7 +77,7 @@ typedef void (TMS9900::*CPU990Fctn)(void);			// now function pointers are just "
 // Let's see what a CPU needs
 class TMS9900 : public Classic99Peripheral {
 public:
-    TMS9900();
+    TMS9900(Classic99System *core);
     virtual ~TMS9900();
 
     // ========== Classic99Peripheral interface ============
@@ -100,23 +120,22 @@ public:
     // addresses are from the system point of view
     //virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);    // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
 
+    // check for Classic99 specific stuff
+    void checkHacks();
+    void checkCPUBreakpoints();
+
     // ========== TMS9900 functions ============
     virtual void reset();
 
 	/////////////////////////////////////////////////////////////////////
 	// Wrapper functions for memory access
 	/////////////////////////////////////////////////////////////////////
-	virtual Byte RCPUBYTE(int src);
-	virtual void WCPUBYTE(int dest, int c);
-	virtual int ROMint(int src, READACCESSTYPE rmw);
-	virtual void WRint(int dest, int val);
+	virtual Byte RCPUBYTE(Word src);
+	virtual void WCPUBYTE(Word dest, Byte c);
+	virtual int ROMWORD(Word src, MEMACCESSTYPE rmw=ACCESS_READ);
+	virtual void WRWORD(Word dest, Word val);
 
-	virtual int GetSafeint(int x, int bank);
-	virtual Byte GetSafeByte(int x, int bank);
-
-	virtual	void TriggerInterrupt(int vector, int level);
-
-	void post_inc(int nWhich);
+	virtual	void TriggerInterrupt(int level);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Get addresses for the destination and source arguments
@@ -129,33 +148,21 @@ public:
 	void fixS();
 	void fixD();
 
-	/////////////////////////////////////////////////////////////////////////
-	// Check parity in the passed byte and set the OP status bit
-	/////////////////////////////////////////////////////////////////////////
-	void parity(int x);
-
 	// Helpers for what used to be global variables
 	void StartIdle();
 	void StopIdle();
 	int  GetIdle();
-	void StartHalt(int source);
-	void StopHalt(int source);
-	int  GetHalt();
-	void SetReturnAddress(int x);
-	int GetReturnAddress();
+	void SetReturnAddress(Word x);
+	Word GetReturnAddress();
 	void ResetCycleCount();
 	void AddCycleCount(int val);
 	int  GetCycleCount();
-	void SetCycleCount(int x);
-	int GetPC();
-	void SetPC(int x);
-	int GetST();
-	void SetST(int x);
-	int GetWP();
-	void SetWP(int x);
-	int GetX();
-	void SetX(int x);
-	int ExecuteOpcode(bool nopFrame);
+	Word GetPC();
+	void SetPC(Word x);
+	Word GetST();
+	void SetST(Word x);
+	Word GetWP();
+	void SetWP(Word x);
 
 	////////////////////////////////////////////////////////////////////
 	// Classic99 - 9900 CPU opcodes
@@ -266,25 +273,25 @@ public:
 
 protected:
 	// CPU variables
-	int PC;											// Program Counter
-	int WP;											// Workspace Pointer
-	int X_flag;										// Set during an 'X' instruction, 0 if not active, else address of PC after the X (ignoring arguments if any)
-	int ST;											// Status register
-	int in,D,S,Td,Ts,B;								// Opcode interpretation
-	int nCycleCount;								// Used in CPU throttle
-	int nPostInc[2];								// Register number to increment, ORd with 0x80 for 2, or 0x40 for 1
+	Word PC;									    // Program Counter
+	Word WP;										// Workspace Pointer
+	Word X_flag;									// Set during an 'X' instruction, 0 if not active, else address of PC after the X (ignoring arguments if any)
+	Word ST;										// Status register
+	Word in,D,S,Td,Ts,B;							// Opcode interpretation
+	int nCycleCount;			                    // Cycles used for this operation
 
 	CPU990Fctn opcode[65536];						// CPU Opcode address table
 
 	int idling;										// set when an IDLE occurs
-	int halted;										// set when the CPU is halted by external hardware (in this emulation, we spin NOPs)
-	int nReturnAddress;								// return address for step over
+	Word nReturnAddress;							// return address for step over
+    int skip_interrupt;                             // interrupts are disabled for this many instructions
 
 private:
-    // Status register lookup table (hey, what's another 64k these days??) -- shared
-    int WStatusLookup[64*1024];
-    int BStatusLookup[256];
+    // Status register lookup tables
+    Word WStatusLookup[64*1024];                     // word statuses
+    Word BStatusLookup[256];                         // byte statuses
 
+    const int32_t SAVE_STATE_VERSION = 1;
 };
 
 

@@ -7,8 +7,8 @@
 #include "debuglog.h"
 
 // singleton dummy object for addresses with nothing mapped
-Classic99Peripheral dummyPeripheral;
-// singletone dummy breakpoint object with nothing set
+Classic99Peripheral dummyPeripheral(NULL);
+// singleton dummy breakpoint object with nothing set
 BREAKPOINT dummyBreakpoint;
 
 // called from the main code to request a breakpoint be added
@@ -58,8 +58,7 @@ void Classic99Peripheral::testBreakpoint(bool isRead, int addr, bool isIO, int d
             if (breaks[idx].page != page) continue;
             if ((data&breaks[idx].dataMask) != (breaks[idx].data&breaks[idx].dataMask)) continue;
 
-            // TODO: ask the core to trigger a breakpoint
-            //getCore()->triggerBreakpoint();
+            theCore->triggerBreakpoint();
             break;
     }
 }

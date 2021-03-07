@@ -4,7 +4,7 @@
 #include "System.h"
 
 // there is one global system object, eventually. This points to it.
-Classic99System *theCore = NULL;
+Classic99System *theActiveCore = NULL;
 
 // base class implementation
 Classic99System::Classic99System() {
@@ -56,43 +56,43 @@ bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int 
 // read from a memory address
 // address - system address being accessed
 // allowSideEffects - when false, this is a debugger access, do not trigger side effects
-int Classic99System::readMemoryByte(int address, bool allowSideEffects) {
+uint8_t Classic99System::readMemoryByte(int address, int &cycles, MEMACCESSTYPE rmw) {
     if (address >= memorySize) {
         address &= memorySize;
     }
-    return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, false, allowSideEffects);
+    return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, false, cycles, rmw);
 }
 
 // write to a memory address
 // address - system address being accessed
 // allowSideEffects - when false, this is a debugger access, do not trigger side effects
 // data - the byte of data being written
-void Classic99System::writeMemoryByte(int address, bool allowSideEffects, int data) {
+void Classic99System::writeMemoryByte(int address, int &cycles, MEMACCESSTYPE rmw, int data) {
     if (address >= memorySize) {
         address &= memorySize;
     }
-    memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, false, allowSideEffects, data);
+    memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, false, cycles, rmw);
 }
 
 // read from an IO address
 // address - system address being accessed
 // allowSideEffects - when false, this is a debugger access, do not trigger side effects
-int Classic99System::readIOByte(int address, bool allowSideEffects) {
+uint8_t Classic99System::readIOByte(int address, int &cycles, MEMACCESSTYPE rmw) {
     if (address >= ioSize) {
         address &= ioSize;
     }
-    return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, true, allowSideEffects);
+    return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, cycles, true, rmw);
 }
 
 // write to an IO address
 // address - system address being accessed
 // allowSideEffects - when false, this is a debugger access, do not trigger side effects
 // data - the byte of data being written
-void Classic99System::writeIOByte(int address, bool allowSideEffects, int data) {
+void Classic99System::writeIOByte(int address, int &cycles, MEMACCESSTYPE rmw, int data) {
     if (address >= ioSize) {
         address &= ioSize;
     }
-    ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, true, allowSideEffects, data);
+    ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, true, cycles, rmw, data);
 }
 
 // process any active debug systems, poll peripherals, etc...

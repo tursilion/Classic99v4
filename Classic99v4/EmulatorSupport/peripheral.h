@@ -5,6 +5,9 @@
 #define EMULATOR_SUPPORT_PERIPHERAL_H
 
 #include <allegro5/allegro.h>
+#include <allegro5/threads.h>
+#include <atomic>
+#include "System.h"
 
 // Port emulation today is rather high level, and probably won't contain control bits
 // but when we someday need them, then we'll figure it out...
@@ -80,9 +83,12 @@ const int MAX_BREAKPOINTS = 32;
 // a peripheral instance, as well as providing a debug interface for it
 
 // this one is NOT pure virtual so the base class can be used as a dummy object
+// Be careful! "theCore" is allowed to be NULL in the dummy object!
 class Classic99Peripheral {
 public:
-    Classic99Peripheral() {
+    Classic99Peripheral(Classic99System *core) 
+        : theCore(core) 
+    {
         // create the lock object - we can't be certain that
         // we don't need a recursive mutex since others can use it
         periphLock = al_create_mutex_recursive();
@@ -92,13 +98,16 @@ public:
         setIndex("Dummy", 0);
     }
     virtual ~Classic99Peripheral() {
+        // have the derived class clean up
+        cleanup();
         // release the lock object
         al_destroy_mutex(periphLock);
     };
+    Classic99Peripheral() = delete;
 
     // dummy read and write - IO flag is unused on most, but just in case they need to know
-    virtual int read(int addr, bool isIO, bool allowSideEffects) { (void)addr; (void)allowSideEffects; return 0; }
-    virtual void write(int addr, bool isIO, bool allowSideEffects, int data) { (void)addr; (void)allowSideEffects; (void)data; }
+    virtual int read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
+    virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, int data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
 
     // interface code
     virtual int hasAvailablePorts() { return 0; }    // number of pluggable ports (for serial, parallel, etc)
@@ -147,14 +156,9 @@ public:
     // name retrieval 
     const char *getName() { return formattedName; }
 
-    // interface to the rest of the system (for those peripherals that need to, mostly CPUs)
-    int readWord(int address);
-    int safeReadWord(int address);
-    int readByte(int address);
-    int safeReadByte(int address);
-
 protected:
     ALLEGRO_MUTEX *periphLock;          // our object lock
+    Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
     unsigned long long lastTimestamp;   // last time we ran to
     int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints
 
@@ -169,6 +173,5 @@ private:
 };
 
 extern Classic99Peripheral dummyPeripheral;
-
 
 #endif
