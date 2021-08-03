@@ -18,7 +18,7 @@ typedef uint16_t Word;
 // the one that sets it!
 #define SET_SKIP_INTERRUPT skip_interrupt=2
 // force the PC to always be 15-bit, can't store a 16-bit PC
-#define ADDPC(x) { PC+=(x); PC&=0xfffe; }
+#define ADDPC(x) { SetPC(PC+(x)); }
 
 /////////////////////////////////////////////////////////////////////
 // Status register defines
@@ -87,8 +87,8 @@ public:
 
     // dummy read and write - IO flag is unused on most, but just in case they need to know
     // You can't read or write the CPU
-    //virtual int read(int addr, bool isIO, bool allowSideEffects) { (void)addr; (void)allowSideEffects; return 0; }
-    //virtual void write(int addr, bool isIO, bool allowSideEffects, int data) { (void)addr; (void)allowSideEffects; (void)data; }
+    //virtual uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
+    //virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
 
     // interface code
     // CPU doesn't have any dedicated I/O devices attached
@@ -107,21 +107,25 @@ public:
     //virtual bool loadFileData(unsigned char *buffer, int address, int length) { (void)buffer; (void)address; (void)length; return false; }  // passed from core, copy data if you need it cause it's destroyed after this call, return false if something is wrong with it
 
     // interface
-    virtual bool init(int idx);                             // claim resources from the core system
-    virtual bool operate(unsigned long long timestamp);     // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
-    virtual bool cleanup();                                 // release everything claimed in init, save NV data, etc
+    virtual bool init(int idx) override;                             // claim resources from the core system
+    virtual bool operate(double timestamp) override;				 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
+    virtual bool cleanup() override;                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
-    virtual void getDebugSize(int &x, int &y);             // dimensions of a text mode output screen - either being 0 means none
-    virtual void getDebugWindow(char *buffer);             // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+    virtual void getDebugSize(int &x, int &y) override;             // dimensions of a text mode output screen - either being 0 means none
+    virtual void getDebugWindow(char *buffer) override;             // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+	//virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
-    virtual int saveStateSize();                           // number of bytes needed to save state
-    virtual bool saveState(unsigned char *buffer);         // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
-    virtual bool restoreState(unsigned char *buffer);      // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
+    virtual int saveStateSize() override;                           // number of bytes needed to save state
+    virtual bool saveState(unsigned char *buffer) override;         // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
+    virtual bool restoreState(unsigned char *buffer) override;      // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
 
     // addresses are from the system point of view
-    //virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);    // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
+    // While the CPU does not get any memory or IO breakpoints,
+    // it does breakpoint on PC, ST and WP settings. Or should. ;)
+    // So does that mean implementing this interface?
+    //virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);              // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
 
     // check for Classic99 specific stuff
     void checkHacks();
@@ -160,6 +164,7 @@ public:
 	void ResetCycleCount();
 	void AddCycleCount(int val);
 	int  GetCycleCount();
+	// it's now important to always use these, not directly access the variables
 	Word GetPC();
 	void SetPC(Word x);
 	Word GetST();

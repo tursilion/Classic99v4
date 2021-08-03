@@ -70,6 +70,12 @@
     <ClInclude Include="EmulatorSupport\autobitmap.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
+    <ClInclude Include="VDPs\TMS9918.h">
+      <Filter>VDPs</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\interestingData.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -150,6 +156,9 @@
     </ClCompile>
     <ClCompile Include="CPUs\tms9900build.cpp">
       <Filter>CPUs</Filter>
+    </ClCompile>
+    <ClCompile Include="EmulatorSupport\interestingData.cpp">
+      <Filter>Emulator Support</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

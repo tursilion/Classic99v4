@@ -22,10 +22,13 @@
 // code if it is moved to another project.
 /////////////////////////////////////////////////////////////////////
 
+// TODO implement the Classic99 debug opcodes 0x0110 through 0x0113
+
 #include <stdio.h>
 #include "..\EmulatorSupport\peripheral.h"
 #include "..\EmulatorSupport\debuglog.h"
 #include "..\EmulatorSupport\System.h"
+#include "..\EmulatorSupport\interestingData.h"
 #include "tms9900.h"
 
 #ifndef BUILD_CPU
@@ -33,10 +36,6 @@ extern CPU9900Fctn opcode[65536];						// CPU Opcode address table
 extern Word WStatusLookup[64*1024];                     // word statuses
 extern Word BStatusLookup[256];                         // byte statuses
 #endif
-
-// TODO: how do we get the debug settings into here?
-// - probably a global debug system we can query...
-extern bool BreakOnIllegal;     // true if we should trigger a breakpoint on bad opcode
 
 // protect the disassembly backtrace
 ALLEGRO_MUTEX *csDisasm;
@@ -61,7 +60,11 @@ bool TMS9900::init(int idx) {
 }
 
 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
-bool TMS9900::operate(unsigned long long timestamp) {
+bool TMS9900::operate(double timestamp) {
+    // This system runs on CPU ticks, which are 3MHz, but timestamp ticks at 1MHz,
+    // so we multiply by 3 here.
+    timestamp *= 3.0;
+
     // handle first call or timestamp wraparound
     if ((lastTimestamp == 0) || (timestamp < lastTimestamp)) {
         lastTimestamp = timestamp;
@@ -82,10 +85,9 @@ bool TMS9900::operate(unsigned long long timestamp) {
         }
     }
 
-    // ticks are in 1/3,000,000 units, and we want 1/1,000,000 units
-    // I think the loss is okay but we should try not to accumulate it
-    // during a single loop.
-    int neededTicks = (timestamp - lastTimestamp)*3;
+    // work on the run itself
+    int neededTicks = (timestamp - lastTimestamp);
+    int executedTicks = neededTicks;
 
     // run as many cycles as have elapsed
     for (; neededTicks > 0; neededTicks -= GetCycleCount()) {
@@ -140,9 +142,10 @@ bool TMS9900::operate(unsigned long long timestamp) {
         CALL_MEMBER_FN(this, opcode[in])();
     }
 
-    // now divide our slack down - this is where we may lose a few cycles (no more than 2 though)
-    neededTicks /= 3;   // back to microseconds
-    lastTimestamp = timestamp + neededTicks;    // which is going to be negative
+    // now update our lastTimestamp. Note that executedTicks was our target in CPU ticks,
+    // and neededTicks might be negative if we ran slightly over (else it's 0, but more
+    // likely it's negative).
+    lastTimestamp += executedTicks-neededTicks; // add the probably negative neededTicks
 
     // ran successfully
     return true;
@@ -251,11 +254,11 @@ bool TMS9900::restoreState(unsigned char *buffer) {
         // collect the version 1 data
         // we already got the version, so skip that
         buffer+=4;
-        PC = *(int32_t*)buffer;
+        SetPC(*(int32_t*)buffer);
         buffer+=4;
-        WP = *(int32_t*)buffer;
+        SetWP(*(int32_t*)buffer);
         buffer+=4;
-        ST = *(int32_t*)buffer;
+        SetST(*(int32_t*)buffer);
         buffer+=4;
         idling = *(int32_t*)buffer;
         buffer+=4;
@@ -603,7 +606,7 @@ void TMS9900::reset() {
     AddCycleCount(4);                       // reset is slightly more work than a normal interrupt
 
     X_flag=0;                               // not currently executing an X instruction
-    ST=(ST&0xfff0);                         // disable interrupts
+    SetST(ST&0xfff0);                       // disable interrupts
 
 // TODO: saving this so I remember it's needed for the F18A version
 //    spi_reset();                            // reset the F18A flash interface
@@ -635,7 +638,7 @@ void TMS9900::WCPUBYTE(Word dest, Byte c) {
     // we have no choice here. We do the same 8-bit fakery as noted above.
 
     // always read both bytes
-    int adr = dest & 0xfffe;
+    int adr = dest & 0xfffe;    // make even, but remember the original value
     Byte lsb = theCore->readMemoryByte(adr+1, nCycleCount, ACCESS_RMW);   // odd byte
     Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);     // even byte
 
@@ -643,9 +646,15 @@ void TMS9900::WCPUBYTE(Word dest, Byte c) {
     if (dest&1) {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, c);
         theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, msb);
+
+        if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, msb*256+c);
+        else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, msb*256+c);
     } else {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, lsb);
         theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, c);
+
+        if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, c*256+lsb);
+        else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, c*256+lsb);
     }
 }
 
@@ -665,6 +674,9 @@ void TMS9900::WRWORD(Word dest, Word val) {
     // now write the new data, in 99/4A order
     theCore->writeMemoryByte(dest+1, nCycleCount, ACCESS_WRITE, val&0xff);
     theCore->writeMemoryByte(dest, nCycleCount, ACCESS_WRITE, (val>>8)&0xff);
+
+    if (dest == 0x8356) setInterestingData(DATA_TMS9900_8356, val);
+    else if (dest == 0x8370) setInterestingData(DATA_TMS9900_8370, val);
 }
 
 // Helpers for what used to be global variables
@@ -736,9 +748,9 @@ void TMS9900::TriggerInterrupt(int level) {
 
     // lower the interrupt level
     if (level <= 0) {
-        ST=(ST&0xfff0);
+        SetST(ST&0xfff0);
     } else {
-        ST=(ST&0xfff0) | (level-1);
+        SetST((ST&0xfff0) | (level-1));
     }
 
     int NewPC = ROMWORD(vector+2);
@@ -755,14 +767,17 @@ Word TMS9900::GetPC() {
     return PC;
 }
 
-// TODO: may need to decide if this is too hacky...
-void TMS9900::SetPC(Word x) {           // should rarely be externally used (Classic99 uses it for disk emulation)
+// should rarely be externally used (Classic99 uses it for disk emulation)
+void TMS9900::SetPC(Word x) {
     if (x&0x0001) {
         debug_write("Warning: setting odd PC address from >%04X", PC);
     }
 
     // the PC is 15 bits wide - confirmed via BigFoot game which relies on this
     PC=x&0xfffe;
+
+    // TODO: the F18A GPU derivative should not set this!
+    setInterestingData(DATA_TMS9900_PC, PC);
 }
 
 Word TMS9900::GetST() {
@@ -770,6 +785,10 @@ Word TMS9900::GetST() {
 }
 void TMS9900::SetST(Word x) {
     ST=x;
+
+    // we assume that TMS9900 systems are single-cpu
+    // TODO: the F18A GPU derivative should not set this!
+    setInterestingData(DATA_TMS9900_INTERRUPTS_ENABLED, (x & 0x0f) ? DATA_TRUE : DATA_FALSE);
 }
 Word TMS9900::GetWP() {
     return WP;
@@ -778,6 +797,9 @@ void TMS9900::SetWP(Word x) {
     // TODO: confirm on hardware - is the WP also 15-bit?
     // we can test using BLWP and see what gets stored
     WP=x&0xfffe;
+
+    // TODO: the F18A GPU derivative should not set this!
+    setInterestingData(DATA_TMS9900_WP, WP);
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -1468,7 +1490,7 @@ void TMS9900::op_rtwp()
 
     FormatVII;
 
-    ST=ROMWORD(WP+30);          // ST<-R15
+    SetST(ROMWORD(WP+30));      // ST<-R15
     SetPC(ROMWORD(WP+28));      // PC<-R14 (order matter?)
     SetWP(ROMWORD(WP+26));      // WP<-R13 -- needs to be last!
 }
@@ -1769,7 +1791,7 @@ void TMS9900::op_stcr()
     }
 
     if (D<8) {
-//      AddCycleCount(42-42);
+//      AddCycleCount(42-42);         // 0 more cycles, so just commented out so the compiler doesn't worry about it
     } else if (D < 9) {
         AddCycleCount(44-42);
     } else if (D < 16) {
@@ -1911,7 +1933,7 @@ void TMS9900::op_limi()
     AddCycleCount(16);
 
     FormatVIII_1raw;            // read immediate
-    ST=(ST&0xfff0)|(S&0xf);
+    SetST((ST & 0xfff0) | (S & 0x0f));
 }
 
 void TMS9900::op_lwpi()
@@ -2339,7 +2361,7 @@ void TMS9900::op_bad()
     FormatVII;
     sprintf(buf, "Illegal opcode (%04X)", in);
     debug_write(buf);       // Don't know this Opcode
-    if (BreakOnIllegal) theCore->triggerBreakpoint();
+    if (getInterestingData(DATA_BREAK_ON_ILLEGAL) == DATA_TRUE) theCore->triggerBreakpoint();
 }
 
 #ifdef BUILD_CPU
@@ -2347,12 +2369,6 @@ void TMS9900::op_bad()
 // Fill the CPU Opcode Address table
 ////////////////////////////////////////////////////////////////////////
 void TMS9900::buildcpu() {
-    // TODO: turn this into a code generator that outputs a const struct with
-    // the definitions all loaded so that we can compile it with the pointer
-    // lookups in ROM on systems that have less RAM. Yeah, it makes a big file,
-    // but makes for less RAM usage. ;)
-    //
-    // Do the same thing for the status register lookup tables.
     for (int in=0; in<65536; ++in)
     { 
         int x=(in&0xf000)>>12;

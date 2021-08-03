@@ -9,6 +9,9 @@
 #include <atomic>
 #include "System.h"
 
+// TODO: we can add a "debug_write" wrapper function to this class, and this
+// would allow the debug system to turn debug on or off per peripheral.
+
 // Port emulation today is rather high level, and probably won't contain control bits
 // but when we someday need them, then we'll figure it out...
 enum PORTTYPE {
@@ -106,8 +109,8 @@ public:
     Classic99Peripheral() = delete;
 
     // dummy read and write - IO flag is unused on most, but just in case they need to know
-    virtual int read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
-    virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, int data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
+    virtual uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
+    virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
 
     // interface code
     virtual int hasAvailablePorts() { return 0; }    // number of pluggable ports (for serial, parallel, etc)
@@ -126,12 +129,13 @@ public:
 
     // interface
     virtual bool init(int) { return true; }                                 // claim resources from the core system, int is index from the host system
-    virtual bool operate(unsigned long long timestamp) { return true; }     // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
+    virtual bool operate(double timestamp) { return true; }                 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
     virtual bool cleanup() { return true; }                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
     virtual void getDebugSize(int &x, int &y) { x=0; y=0; }       // dimensions of a text mode output screen - either being 0 means none
     virtual void getDebugWindow(char *buffer) { (void)buffer; }   // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+    virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
     virtual int saveStateSize() { return 0; }       // number of bytes needed to save state
@@ -159,7 +163,7 @@ public:
 protected:
     ALLEGRO_MUTEX *periphLock;          // our object lock
     Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
-    unsigned long long lastTimestamp;   // last time we ran to
+    double lastTimestamp;               // last time we ran to
     int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints
 
 private:

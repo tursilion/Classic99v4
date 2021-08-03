@@ -7,6 +7,10 @@
 #include "automutex.h"
 #include "autobitmap.h"
 
+// TODO: Filters go here now
+//#include "..\2xSaI\2xSaI.h"
+//#include "..\FilterDLL\sms_ntsc.h"
+
 static const int wndFlags =  ALLEGRO_WINDOWED        // or ALLEGRO_FULLSCREEN_WINDOW | ALLEGRO_FRAMELESS
                           |  ALLEGRO_RESIZABLE
 #ifdef ALLEGRO_LINUX
