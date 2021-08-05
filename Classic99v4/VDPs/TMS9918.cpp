@@ -11,6 +11,7 @@
 #include "..\EmulatorSupport\debuglog.h"
 #include "..\EmulatorSupport\System.h"
 #include "..\EmulatorSupport\interestingData.h"
+#include "..\EmulatorSupport\tv.h"
 
 // 16-bit 0rrrrrgggggbbbbb values
 //int TIPALETTE[16]={ 
@@ -93,6 +94,26 @@ const int F18APaletteReset[64] = {
 	0x0A50,  // 13 >AA5500 (170 85 0) brown
 	0x0000,  // 14 >000000 ( 0 0 0) black
 	0x0FFF   // 15 >FFFFFF (255 255 255) white
+};
+
+// watch length, these need to fit doubled up in the debug window
+static const char *COLORNAMES[16] = {
+	"Transparent",
+	"Black",
+	"Med Green",
+	"Lt Green",
+	"Dk Blue",
+	"Lt Blue",
+	"Dk Red",
+	"Cyan",
+	"Med Red",
+	"Lt Red",
+	"Dk Yellow",
+	"Lt Yellow",
+	"Dk Green",
+	"Magenta",
+	"Gray",
+	"White"
 };
 
 const char *digpat[10][5] = {
@@ -602,6 +623,16 @@ void TMS9918::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
 bool TMS9918::init(int index) {
     setIndex("TMS9918", index);
 
+	if (nullptr == theCore->getTV()) {
+		debug_write("No TV - improper system initialization.");
+		return false;
+	}
+
+	// we could get much, much faster performance if we allocated textures for
+	// the character set and sprites, and blit them all at once, but that would
+	// not allow for a scanline-based display... so we'll just pixel them...
+	pDisplay = theCore->getTV()->requestLayer(TMS_WIDTH, TMS_HEIGHT);
+
     vdpReset(true);     // todo: need to allow warm reset
 
     return true;
@@ -665,32 +696,119 @@ bool TMS9918::operate(double timestamp) {
 
 // release everything claimed in init, save NV data, etc
 bool TMS9918::cleanup() {
-
+	pDisplay = nullptr;
+	return true;
 }
 
 // dimensions of a text mode output screen - either being 0 means none
 void TMS9918::getDebugSize(int &x, int &y) {
-
+	x=44; y=11;
 }
 
 // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
 void TMS9918::getDebugWindow(char *buffer) {
+	int tmp1,tmp2;
 
+	buffer += sprintf(buffer, "VDP0   %02X   ", VDPREG[0]);
+	if (VDPREG[0] & 0xfc) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[0] & 0x02) buffer += sprintf(buffer, "BMP "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[0] & 0x01) buffer += sprintf(buffer, "EXT "); else buffer += sprintf(buffer, "    ");
+	buffer += sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP1   %02X   ", VDPREG[1]);
+	if (VDPREG[1] & 0x80) buffer += sprintf(buffer, "16k "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[1] & 0x40) buffer += sprintf(buffer, "EN "); else buffer += sprintf(buffer, "   ");
+	if (VDPREG[1] & 0x20) buffer += sprintf(buffer, "EI "); else buffer += sprintf(buffer, "   ");
+	if (VDPREG[1] & 0x10) buffer += sprintf(buffer, "TXT "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[1] & 0x08) buffer += sprintf(buffer, "MUL "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[1] & 0x04) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[1] & 0x02) buffer += sprintf(buffer, "DBL "); else buffer += sprintf(buffer, "    ");
+	if (VDPREG[1] & 0x01) buffer += sprintf(buffer, "MAG "); else buffer += sprintf(buffer, "    ");
+	buffer += sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP2   %02X   SIT %04X", VDPREG[2], (VDPREG[2]&0x0f)*0x400);
+	if (VDPREG[2]&0xf0) buffer+=sprintf(buffer, "???");
+	buffer+= sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP3   %02X   CT   %04X Mask %04X ", VDPREG[3], CT, CTsize);
+	if (VDPREG[0]&0x02) {
+		// bitmap - check if the mask has holes in it
+		tmp1 = 16;
+		tmp2 = CTsize;
+		while ((tmp1--) && ((tmp2&0x8000)==0) { tmp2<<=1; }
+		if (tmp1 > 0) {
+			while (tmp1--) {
+				tmp2<<=1;
+				if ((tmp2&0x8000)==0) {
+					buffer+=sprintf(buffer, "???");
+					break;
+				}
+			}
+		}
+	}
+	buffer+= sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP4   %02X   PDT  %02X Mask %04X", VDPREG[4], PDT, PDTsize);
+	if (VDPREG[0]&0x02) {
+		// bitmap - check if the mask has holes in it
+		tmp1 = 16;
+		tmp2 = PDTsize;
+		while ((tmp1--) && ((tmp2&0x8000)==0) { tmp2<<=1; }
+		if (tmp1 > 0) {
+			while (tmp1--) {
+				tmp2<<=1;
+				if ((tmp2&0x8000)==0) {
+					buffer+=sprintf(buffer, "???");
+					break;
+				}
+			}
+		}
+	} else {
+		// non-bitmap, just check unused bits
+		if (VDPREG[4]&0xf8) buffer+=sprintf(buffer, "???");
+	}
+	buffer+= sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP5   %02X   SAL %04X", VDPREG[5], SAL);
+	if (VDPREG[5]&0x80) buffer+=sprintf(buffer, "???");
+	buffer+= sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP6   %02X   SDT %04X", VDPREG[6], SDT);
+	if (VDPREG[6]&0xf8) buffer+=sprintf(buffer, "???");
+	buffer+= sprintf(buffer, "\r\n");
+
+	buffer += sprintf(buffer, "VDP7   %02X   ", VDPREG[7]);
+	if (VDPREG[0]&0x10) {
+		// text mode, foreground matters
+		buffer += sprintf(buffer, "%s on ", COLORNAMES[(VDPREG[7]*0xf0)>>4]);
+	} else if (VDPREG[7]&0xf0) {
+		buffer += sprintf(buffer, "??? on ");	// not that this is terribly critical, but technically wrong
+	}
+	buffer += sprintf(buffer, "%s\r\n\r\n", COLORNAMES[VDPREG[7]&0x0f]);
+
+	buffer += sprintf(buffer, "VDPST: %02X   ", VDPS);
+	if (VDPS & 0x80) buffer += sprintf(buffer, "VBL "); else buffer += sprintf(buffer, "    ");
+	if (VDPS & 0x40) buffer += sprintf(buffer, "5SP "); else buffer += sprintf(buffer, "    ");
+	if (VDPS & 0x20) buffer += sprintf(buffer, "COL "); else buffer += sprintf(buffer, "    ");
+	buffer += sprintf(buffer, "5thSP: %02X\r\n\r\n", VDPS&0x1f);
+
+	buffer += sprintf(buffer, "VDPAD: %04X\r\n", VDPADD);
 }
 
 // number of bytes needed to save state
+// TODO: VDP save state could be tricky, let's make it work first
 int TMS9918::saveStateSize() {
-
+	return 0;
 }
 
 // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
 bool TMS9918::saveState(unsigned char *buffer) {
-
+	return false;
 }
 
 // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
 bool TMS9918::restoreState(unsigned char *buffer) {
-
+	return false;
 }
 
 // check VDP breakpoints

@@ -5,6 +5,7 @@
 #define EMULATOR_SUPPORT_SYSTEM_H
 
 #include "peripheral.h"
+#include "tv.h
 #include "debuglog.h"
 
 // TODO: probably need a smart pointered list of possible systems,
@@ -70,6 +71,9 @@ public:
     void writeMemoryByte(int address, int &cycles, MEMACCESSTYPE rmw, int data);
     uint8_t readIOByte(int address, int &cycles, MEMACCESSTYPE rmw);
     void writeIOByte(int address, int &cycles, MEMACCESSTYPE rmw, int data);
+
+    // access to the I/O
+    Classic99TV *getTV() { return theTV; }
 
     // debug interface - mainly for breakpoints, part of the main loop
     void processDebug();
@@ -139,6 +143,14 @@ private:
     PeripheralMap *ioSpaceWrite;
     int memorySize;     // power of 2 mask
     int ioSize;         // power of 2 mask
+
+    // we have a single set of I/O devices that the peripherals can talk to
+    // These MUST be initialized in the derived class constructors, and MUST point to something,
+    // even a dummy if needed.
+    Classic99TV *theTV;
+    // sound
+    // inputs
+    // etc...
 
     // true means active, no matter the hardware level
     std::atomic<uint32_t> hold;         // Per-device bitmask - Hold, halt, freeze, etc - a line that requests the CPU or similar to stop

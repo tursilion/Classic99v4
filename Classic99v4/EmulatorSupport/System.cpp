@@ -7,7 +7,9 @@
 Classic99System *theActiveCore = NULL;
 
 // base class implementation
-Classic99System::Classic99System() {
+Classic99System::Classic99System() 
+    : theTV(nullptr)
+{
     coreLock = al_create_mutex_recursive();
 
     // derived class MUST allocate these objects!

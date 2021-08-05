@@ -15,10 +15,18 @@
 #include "../EmulatorSupport/System.h"
 #include "../EmulatorSupport/peripheral.h"
 
+// The video display is 27 + 192 + 24 lines (243 lines, with 19 lines of blanking for a total of 262 lines)
+// Width is 13 + 256 + 15 = 284 pixels (plus 58 pixels of blanking for a total of 342 pixels)
+// Text mode is 19 + 240 + 25 = 284 pixels still.
+// F18A has a double-clock mode for 80 columns, so that would be 568 pixels
+#define TMS_WIDTH 284
+#define TMS_HEIGHT 243
+
 class TMS9918 : public Classic99Peripheral {
 public:
     TMS9918(Classic99System *core) 
-        : Classic99Peripheral(core) 
+        : Classic99Peripheral(core)
+        , pDisplay(nullptr)
     {
     }
     virtual ~TMS9918() 
@@ -174,7 +182,7 @@ protected:
     bool bDisableBlank, bDisableSprite, bDisableBackground;	// other layers :)
     bool bDisableColorLayer, bDisablePatternLayer;          // bitmap only layers
 
-
+    std::shared_ptr<autoBitmap> pDisplay;       // allocated display - always 284x243 for 9918, so we only need one layer
 };
 
 #endif

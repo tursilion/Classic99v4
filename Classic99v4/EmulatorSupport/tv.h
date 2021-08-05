@@ -12,10 +12,6 @@
 #include <vector>
 #include "autobitmap.h"
 
-// The video display is 27 + 192 + 24 lines (243 lines, with 19 lines of blanking for a total of 262 lines)
-// Width is 13 + 256 + 15 = 284 pixels (plus 58 pixels of blanking for a total of 342 pixels)
-// Text mode is 19 + 240 + 25 = 284 pixels still.
-// F18A has a double-clock mode for 80 columns, so that would be 568 pixels
 // ... but I think I will build it so that each layer can have its own resolution and be scaled
 // to whatever the window is, rather than compositing a single bitmap. Then I simply don't care
 // and Allegro can manage the buffers.
