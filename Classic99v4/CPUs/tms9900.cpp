@@ -91,10 +91,6 @@ bool TMS9900::operate(double timestamp) {
 
     // run as many cycles as have elapsed
     for (; neededTicks > 0; neededTicks -= GetCycleCount()) {
-        // emulator housekeeping
-        checkHacks();
-        checkCPUBreakpoints();
-        
         // prepare to count cycles this instruction
         ResetCycleCount();
 

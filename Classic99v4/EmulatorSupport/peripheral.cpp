@@ -56,10 +56,14 @@ void Classic99Peripheral::testBreakpoint(bool isRead, int addr, bool isIO, int d
             if ((!isIO)&&((breaks[idx].typeMask&BREAKPOINT::BREAKPOINT_MASK_IO)!=0)) continue;      // check for not IO
             // we've narrowed it down a lot at this point, check the less likely things...
             if (breaks[idx].page != page) continue;
-            // TODO: add ignore console breakpoints
+
+            // TODO: add ignore console breakpoints (meaning ALL breakpoints need to check the primary CPU address,
+            // which is in InterestingData, and we need a range check on the system core to determine ROM addresses...
+            // maybe this can also be in InterestingData, along with the ignore rom hits flag.)
+
             // So we have confirmed whether it's read or write, IO or not, all that is left
             // is to compare the data (and a mere access breakpoint will have a zero mask)
-            if ((data&breaks[idx].dataMask) != (breaks[idx].data&breaks[idx].dataMask)) continue;
+            if ((breaks[idx].dataMask != 0) && ((data&breaks[idx].dataMask) != (breaks[idx].data&breaks[idx].dataMask))) continue;
 
             theCore->triggerBreakpoint();
             break;

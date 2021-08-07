@@ -127,10 +127,6 @@ public:
     // So does that mean implementing this interface?
     //virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);              // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
 
-    // check for Classic99 specific stuff
-    void checkHacks();
-    void checkCPUBreakpoints();
-
     // ========== TMS9900 functions ============
     virtual void reset();
 

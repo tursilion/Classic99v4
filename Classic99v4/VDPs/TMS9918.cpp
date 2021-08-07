@@ -7,23 +7,13 @@
 // TODO: VDP register write breakpoints?
 
 #include "TMS9918.h"
+#include <ctype.h>
 #include "..\EmulatorSupport\peripheral.h"
 #include "..\EmulatorSupport\debuglog.h"
 #include "..\EmulatorSupport\System.h"
 #include "..\EmulatorSupport\interestingData.h"
 #include "..\EmulatorSupport\tv.h"
 
-// 16-bit 0rrrrrgggggbbbbb values
-//int TIPALETTE[16]={ 
-//	0x0000, 0x0000, 0x1328, 0x2f6f, 0x295d, 0x3ddf, 0x6949, 0x23be,
-//	0x7d4a, 0x7def, 0x6b0a, 0x7330, 0x12c7, 0x6577, 0x6739, 0x7fff,
-//};
-// 32-bit 0RGB colors
-//unsigned int TIPALETTE[16] = {
-//	0x00000000,0x00000000,0x0020C840,0x0058D878,0x005050E8,0x007870F8,0x00D05048,
-//	0x0040E8F0,0x00F85050,0x00F87878,0x00D0C050,0x00E0C880,0x0020B038,0x00C858B8,
-//	0x00C8C8C8,0x00F8F8F8
-//};
 // 12-bit 0RGB colors (we shift up to 32 bit when we load it). 12 bit is the correct palette for the F18A.
 const int F18APaletteReset[64] = {
 	// standard 9918A colors
@@ -811,25 +801,18 @@ bool TMS9918::restoreState(unsigned char *buffer) {
 	return false;
 }
 
-// check VDP breakpoints
-void TMS9918::testBreakpoint(bool isRead, int addr, bool isIO, int data) {
-
-}
-
-//////////////////////////////////////////////////////
 // Increment VDP Address
-//////////////////////////////////////////////////////
 void TMS9918::increment_vdpadd() 
 {
 	VDPADD=(++VDPADD) & 0x3fff;
 }
 
-//////////////////////////////////////////////////////
 // Return the actual 16k address taking the 4k mode bit
 // into account.
-//////////////////////////////////////////////////////
 int TMS9918::GetRealVDP() {
 	int RealVDP;
+
+	// TODO: remove the non-9918 stuff from this function...
 
 	// The 9938 and 9958 don't honor this bit, they always assume 128k (which we don't emulate, but we can at least do 16k like the F18A)
 	// note that the 128k hack actually does support 128k now... as needed. So if bEnable128k is on, we take VDPREG[14]&0x07 for the next 3 bits.
@@ -875,9 +858,7 @@ int TMS9918::GetRealVDP() {
 	return RealVDP;
 }
 
-////////////////////////////////////////////////////////////////
 // Write to VDP Register
-////////////////////////////////////////////////////////////////
 void TMS9918::wVDPreg(uint8_t r, uint8_t v) { 
 	int t;
 
@@ -889,94 +870,62 @@ void TMS9918::wVDPreg(uint8_t r, uint8_t v) {
 	VDPREG[r]=v;
 
 	// check breakpoints against what was written to where
-	for (int idx=0; idx<nBreakPoints; idx++) {
-		switch (BreakPoints[idx].Type) {
-			case BREAK_EQUALS_VDPREG:
-				if ((r == BreakPoints[idx].A) && ((v&BreakPoints[idx].Mask) == BreakPoints[idx].Data)) {
-                    if ((!bIgnoreConsoleBreakpointHits) || (pCurrentCPU->GetPC() > 0x1fff)) {
-    					TriggerBreakPoint();
-                    }
-				}
-				break;
-		}
-	}
+	// registers are stored with an address starting at 0x8000 (0x8100, 0x8200, same as written)
+	testBreakpoint(false, 0x8000+(r<<8), false, v);		// we don't know if it's I/O, but doesn't matter internally
 
 	if (r==7)
-	{	/* color of screen, set color 0 (trans) to match */
-		/* todo: does this save time in drawing the screen? it's dumb */
+	{	/* color of screen, set TV background color to match */
 		t=v&0xf;
-		if (t) {
-			F18APalette[0]=F18APalette[t];
-		} else {
-			F18APalette[0]=0x000000;	// black
-		}
+		ALLEGRO_COLOR bg;
+		// pixel format RGBA
+		bg.r = (F18APalette[t]>>24)&0xff;
+		bg.g = (F18APalette[t]>>16)&0xff;
+		bg.b = (F18APalette[t]>>8)&0xff;
+		bg.a=255;
+		theCore->getTV()->setBgColor(bg);
 		redraw_needed=REDRAW_LINES;
 	}
 
 	if (!bEnable80Columns) {
+		// TODO: above test not needed in 9918 chip
+		// 
 		// warn if setting 4k mode - the console ROMs actually do this often! However,
 		// this bit is not honored on the 9938 and later, so is usually set to 0 there
 		if ((r == 1) && ((v&0x80) == 0)) {
 			// ignore if it's a console ROM access - it does this to size VRAM
-			if (pCurrentCPU->GetPC() > 0x2000) {
-				debug_write("WARNING: Setting VDP 4k mode at PC >%04X", pCurrentCPU->GetPC());
+			// todo: need to check using the console ROM map in InterestingData
+			if (getInterestingDataIndirect(INDIRECT_MAIN_CPU_PC) > 0x2000) {
+				debug_write("WARNING: Setting VDP 4k mode at PC >%04X", getInterestingDataIndirect(INDIRECT_MAIN_CPU_PC));
 			}
 		}
 	}
 
 	// for the F18A GPU, copy it to RAM
-	VDP[0x6000+r]=v;
+	// TODO: not needed in 9918
+//	VDP[0x6000+r]=v;
 }
 
-#if 0
-// TODO: this is only for tiles, and only for ECM0
-#define GETPALETTEVALUE(n) F18APalette[(bF18AActive?((VDPREG[0x18]&03)<<4)+(n) : (n))]
-#endif
-
-//////////////////////////////////////////////////////////
-// Helpers for the TV controls
-//////////////////////////////////////////////////////////
-void GetTVValues(double *hue, double *sat, double *cont, double *bright, double *sharp) {
-	*hue=tvSetup.hue;
-	*sat=tvSetup.saturation;
-	*cont=tvSetup.contrast;
-	*bright=tvSetup.brightness;
-	*sharp=tvSetup.sharpness;
-}
-
-void SetTVValues(double hue, double sat, double cont, double bright, double sharp) {
-	tvSetup.hue=hue;
-	tvSetup.saturation=sat;
-	tvSetup.contrast=cont;
-	tvSetup.brightness=bright;
-	tvSetup.sharpness=sharp;
-	if (sms_ntsc_init) {
-		if (!TryEnterCriticalSection(&VideoCS)) {
-			return;		// do it later
-		}
-		sms_ntsc_init(&tvFilter, &tvSetup);
-		LeaveCriticalSection(&VideoCS);
-	}
-}
-
-//////////////////////////////////////////////////////////
 // Get table addresses from Registers
 // We return reg0 since we do the bitmap filter here now
-//////////////////////////////////////////////////////////
-int gettables(int isLayer2)
+// TODO: no layer2 in 9918
+// TODO: layer2 should have its own TV layer in F18A, that makes compositing easier
+int TMS9918::gettables(int isLayer2)
 {
 	int reg0 = VDPREG[0];
-	if (nSystem == 0) {
-		// disable bitmap for 99/4
-		reg0&=~0x02;
-	}
-	if (!bEnable80Columns) {
+
+	// TODO: need to enable this for the raw 9918 and remove from the rest
+	// disable bitmap for 9918 (no A)
+	//reg0&=~0x02;
+
+	// TODO: remove test from 9918
+	//if (!bEnable80Columns) {
 		// disable 80 columns if not enabled
-		reg0&=~0x04;
-	}
+	//	reg0&=~0x04;
+	//}
 
 	/* Screen Image Table */
-	if ((bEnable80Columns) && (reg0 & 0x04)) {
+	// TODO: 80 column test
+	if (/*(bEnable80Columns) &&*/ (reg0 & 0x04)) {
 		// in 80-column text mode, the two LSB are some kind of mask that we here ignore - the rest of the register is larger
 		// The 9938 requires that those bits be set to 11, therefore, the F18A treats 11 and 00 both as 00, but treats
 		// 01 and 10 as their actual values. (Okay, that is a bit weird.) That said, the F18A still only honours the least
@@ -1037,183 +986,41 @@ int gettables(int isLayer2)
 }
 
 // rests the uninitalized memory tracking on demand
-void resetMemoryTracking() {
+void TMS9918::resetMemoryTracking() {
 	vdpprefetchuninited = true;
 	memset(VDPMemInited, 0, sizeof(VDPMemInited));
 }
 
 // called from tiemul
-void vdpReset(bool isCold) {
+void TMS9918::vdpReset(bool isCold) {
     // on cold reset, reload everything. 
-#if 0
     if (isCold) {
 	    // todo: move the other system-level init (what does the VDP do?) into here
-	    memcpy(F18APalette, F18APaletteReset, sizeof(F18APalette));
-	    // convert from 12-bit to 24-bit
+	    // convert from 12-bit to float and load F18APalette
+		// RGBA palette
 	    for (int idx=0; idx<64; idx++) {
-		    int r = (F18APalette[idx]&0xf00)>>8;
-		    int g = (F18APalette[idx]&0xf0)>>4;
-		    int b = (F18APalette[idx]&0xf);
-		    F18APalette[idx] = (r<<20)|(r<<16)|(g<<12)|(g<<8)|(b<<4)|b;	// double up each palette gun, suggestion by Sometimes99er
+		    int r = (F18APaletteReset[idx]&0xf00)>>8;
+		    int g = (F18APaletteReset[idx]&0xf0)>>4;
+		    int b = (F18APaletteReset[idx]&0xf);
+		    F18APalette[idx] = (r<<28)|(r<<24)|(g<<20)|(g<<16)|(b<<12)|(b<<8)|0xff;	// double up each palette gun, suggestion by Sometimes99er
 	    }
-    }
-    bF18AActive = false;
-#endif
 
-   	vdpaccess=0;		// No VDP address writes yet 
+		memset(VDPREG, 0, sizeof(VDPREG));
+        memset(VDP, 0, sizeof(VDP));
+    }
+    //bF18AActive = false;
+
+	vdpaccess=0;		// No VDP address writes yet 
 	vdpwroteaddress=0;
 	vdpscanline=0;
 	vdpprefetch=0;		// Not really accurate, but eh
 	resetMemoryTracking();
     redraw_needed = REDRAW_LINES;
-
-    if (!isCold) {
-        memset(VDPREG, 0, sizeof(VDPREG));
-        memset(VDP, 0, sizeof(VDP));
-    }
-}
-
-////////////////////////////////////////////////////////////
-// Startup and run VDP graphics interface
-////////////////////////////////////////////////////////////
-void VDPmain()
-{	
-	DWORD ret;
-	HDC myDC;
-
-	Init_2xSaI(888);
-
-	// load the Filter DLL
-	TVFiltersAvailable=0;
-	hFilterDLL=LoadLibrary("FilterDll.dll");
-	if (NULL == hFilterDLL) {
-		debug_write("Failed to load filter library.");
-	} else {
-		sms_ntsc_init=(void (*)(sms_ntsc_t*,sms_ntsc_setup_t const *))GetProcAddress(hFilterDLL, "sms_ntsc_init");
-		sms_ntsc_blit=(void (*)(sms_ntsc_t const *, unsigned int const *, long, int, int, void *, long))GetProcAddress(hFilterDLL, "sms_ntsc_blit");
-		sms_ntsc_scanlines=(void (*)(void *, int, int, int))GetProcAddress(hFilterDLL, "sms_ntsc_scanlines");
-		if ((NULL == sms_ntsc_blit) || (NULL == sms_ntsc_init) || (NULL == sms_ntsc_scanlines)) {
-			debug_write("Failed to find entry points in filter library.");
-			FreeLibrary(hFilterDLL);
-			sms_ntsc_blit=NULL;
-			sms_ntsc_init=NULL;
-			sms_ntsc_scanlines=NULL;
-			hFilterDLL=NULL;
-		} else {
-			// Some of these are set up by SetTVValues()
-//			tvSetup.hue=0;			// -1.0 to +1.0
-//			tvSetup.saturation=0;	// -1.0 to +1.0
-//			tvSetup.contrast=0;		// -1.0 to +1.0
-//			tvSetup.brightness=0;	// -1.0 to +1.0
-//			tvSetup.sharpness=0;	// -1.0 to +1.0
-			tvSetup.gamma=0;		// -1.0 to +1.0
-			tvSetup.resolution=0;	// -1.0 to +1.0
-			tvSetup.artifacts=0;	// -1.0 to +1.0
-			tvSetup.fringing=0;		// -1.0 to +1.0
-			tvSetup.bleed=0;		// -1.0 to +1.0
-			tvSetup.decoder_matrix=NULL;
-			tvSetup.palette_out=NULL;
-			sms_ntsc_init(&tvFilter, &tvSetup);
-			TVFiltersAvailable=1;
-		}
-	}
-
-	hHQ4DLL=LoadLibrary("HQ4xDll.dll");
-	if (NULL == hHQ4DLL) {
-		debug_write("Failed to load HQ4 library.");
-	} else {
-		hq4x_init=(void (*)(void))GetProcAddress(hHQ4DLL, "hq4x_init");
-		hq4x_process=(void (*)(unsigned char *pBufIn, unsigned char *pBufOut))GetProcAddress(hHQ4DLL, "hq4x_process");
-		if ((NULL == hq4x_init) || (NULL == hq4x_process)) {
-			debug_write("Failed to find entry points in HQ4x library.");
-			FreeLibrary(hHQ4DLL);
-			hq4x_init=NULL;
-			hq4x_process=NULL;
-			hHQ4DLL=NULL;
-		} else {
-			hq4x_init();
-		}
-	}
-
-	myInfo.bmiHeader.biSize=sizeof(myInfo.bmiHeader);
-	myInfo.bmiHeader.biWidth=256+16;
-	myInfo.bmiHeader.biHeight=192+16;
-	myInfo.bmiHeader.biPlanes=1;
-	myInfo.bmiHeader.biBitCount=32;
-	myInfo.bmiHeader.biCompression=BI_RGB;
-	myInfo.bmiHeader.biSizeImage=0;
-	myInfo.bmiHeader.biXPelsPerMeter=1;
-	myInfo.bmiHeader.biYPelsPerMeter=1;
-	myInfo.bmiHeader.biClrUsed=0;
-	myInfo.bmiHeader.biClrImportant=0;
-
-	memcpy(&myInfo2, &myInfo, sizeof(myInfo));
-	myInfo2.bmiHeader.biWidth=512+32;
-	myInfo2.bmiHeader.biHeight=384+29;
-
-	memcpy(&myInfoTV, &myInfo2, sizeof(myInfo2));
-	myInfoTV.bmiHeader.biWidth=TV_WIDTH;
-
-	memcpy(&myInfo32, &myInfo, sizeof(myInfo));
-	myInfo32.bmiHeader.biWidth*=4;
-	myInfo32.bmiHeader.biHeight*=4;
-	myInfo32.bmiHeader.biBitCount=32;
-
-	memcpy(&myInfo80Col, &myInfo, sizeof(myInfo));
-	myInfo80Col.bmiHeader.biWidth=512+16;
-
-	myDC=GetDC(myWnd);
-	tmpDC=CreateCompatibleDC(myDC);
-	ReleaseDC(myWnd, myDC);
-
-	SetupDirectDraw(0);
-
-	// now we create a waitable object and sit on it - the main thread
-	// will tell us when we should redraw the screen.
-	BlitEvent=CreateEvent(NULL, false, false, NULL);
-	if (NULL == BlitEvent)
-		debug_write("Blit Event Creation failed");
-
-	// layers all enabled at start
-	bDisableBlank=false;
-	bDisableSprite=false;
-	bDisableBackground=false;
-
-	debug_write("Starting video loop");
-	redraw_needed=REDRAW_LINES;
-
-	while (quitflag==0)
-	{
-		if ((ret=WaitForMultipleObjects(1, Video_hdl, false, 100)) != WAIT_TIMEOUT)
-		{
-			if (WAIT_FAILED==ret)
-				ret=GetLastError();
-
-			if (WAIT_OBJECT_0 == ret) {
-				doBlit();
-                continue;
-			}
-
-			// Don't ever spend all our time doing this!
-			Sleep(5);		// rounds up to quantum
-		}
-	}
-
-	if (NULL != hFilterDLL) {
-		sms_ntsc_blit=NULL;
-		sms_ntsc_init=NULL;
-		sms_ntsc_scanlines=NULL;
-		FreeLibrary(hFilterDLL);
-		hFilterDLL=NULL;
-	}
-	takedownDirectDraw();
-	DeleteDC(tmpDC);
-	CloseHandle(BlitEvent);
 }
 
 // used by the GetChar and capture functions
 // returns 32, 40 or 80, or -1 if invalid
-int getCharsPerLine() {
+int TMS9918::getCharsPerLine() {
 	int nCharsPerLine=32;	// default for graphics mode
 
 	int reg0 = gettables(0);
@@ -1258,7 +1065,9 @@ int getCharsPerLine() {
 // the pointer. If it's not a text mode or it's not printable, then
 // return -1. Due to screen borders, we have a larger area than
 // the TI actually displays.
-char VDPGetChar(int x, int y, int width, int height) {
+// TODO: how to get double click - does that go into the TV interface? How does it get back to the keyboard?
+char TMS9918::VDPGetChar(int x, int y, int width, int height) {
+	// TODO: the screen sizes changed - these numbers might now be incorrect
 	double nCharWidth=34.0;	// default for graphics mode (32 chars plus 2 chars of border)
 	int ch;
 	int nCharsPerLine=getCharsPerLine();
@@ -1321,138 +1130,173 @@ char VDPGetChar(int x, int y, int width, int height) {
 	return -1;
 }
 
-//////////////////////////////////////////////////////////
 // Perform drawing of a single line
 // Determines which screen mode to draw
-//////////////////////////////////////////////////////////
-void VDPdisplay(int scanline)
+void TMS9918::VDPdisplay(int scanline)
 {
 	int idx;
-	DWORD longcol;
-	DWORD *plong;
 	int nMax;
 
+	// if no display, can not draw
+	if (NULL == pDisplay) return;
+
 	int reg0 = gettables(0);
+	int gfxline = scanline - 27;	// skip top border (TODO: still correct?)
 
-	int gfxline = scanline - 27;	// skip top border
+	// the mode is a 32-bit format with alpha, but I guess it might vary
+	// Do not early RETURN after this lock!
+	int fmt = al_get_bitmap_format(pDisplay->bmp);
+	ALLEGRO_LOCKED_REGION *pImg = al_lock_bitmap(pDisplay->bmp, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_READWRITE);
+	if (NULL == pImg) {
+		debug_write("Could not lock bitmap!");
+		return;
+	}
+	pLine = NULL;	// make sure it's zeroed unless we need it
 
-	if (redraw_needed) {
-		// count down scanlines to redraw
-		--redraw_needed;
+	// count down scanlines to redraw
+	if (redraw_needed > REDRAW_LINES) redraw_needed = REDRAW_LINES;	// no need to draw more than one frame
+	if (redraw_needed > 0) {
+		while (redraw_needed--) {
+			// draw blanking area
+			if ((vdpscanline >= 0) && (vdpscanline < 192+27+24)) {
+				// extra hack - we only have 8 pixels of border on each side, unlike the real VDP
+				// TODO: I'm sure this is all wrong now...
+				int tmplin = (199-(vdpscanline - 19-8));		// 27-8 = 19, don't remember where 199 comes from though...
+				if ((tmplin >= 0) && (tmplin < 192+16)) {
+					// we don't need to worry about the actual color, we just set hot pink transparent (R+B)
+	#if 0
+					if ((reg0&0x04)&&(VDPREG[1]&0x10)&&(bEnable80Columns)) {
+						// 80 column text
+						nMax = (512+16)/4;
+					} else 
+	#endif
+					{
+						// all other modes
+						nMax = (256+16)/4;
+					}
 
-		// draw blanking area
-		if ((vdpscanline >= 0) && (vdpscanline < 192+27+24)) {
-			// extra hack - we only have 8 pixels of border on each side, unlike the real VDP
-			int tmplin = (199-(vdpscanline - 19-8));		// 27-8 = 19, don't remember where 199 comes from though...
-			if ((tmplin >= 0) && (tmplin < 192+16)) {
-				plong=(DWORD*)framedata;
-				longcol=GETPALETTEVALUE(VDPREG[7]&0xf);
-				if ((reg0&0x04)&&(VDPREG[1]&0x10)&&(bEnable80Columns)) {
-					// 80 column text
-					nMax = (512+16)/4;
-				} else {
-					// all other modes
-					nMax = (256+16)/4;
-				}
-				plong += (tmplin*nMax*4);
+					pLine = (uint32_t*)((unsigned char*)pImg->data + tmplin*pImg->pitch);
 
-				for (idx=0; idx<nMax; idx++) {
-					*(plong++)=longcol;
-					*(plong++)=longcol;
-					*(plong++)=longcol;
-					*(plong++)=longcol;
+					// blank out the entire line first (unrolled 4 times)
+					uint32_t *plong = pLine;
+					for (int idx=0; idx<nMax; ++idx) {
+						*(plong++) = 0xff00ff00;	// hot pink transparent
+						*(plong++) = 0xff00ff00;	// hot pink transparent
+						*(plong++) = 0xff00ff00;	// hot pink transparent
+						*(plong++) = 0xff00ff00;	// hot pink transparent
+					}
 				}
 			}
-		}
 
-		if (!bDisableBlank) {
-			if (!(VDPREG[1] & 0x40)) {	// Disable display
-				return;
+			// now that the blank is done, draw the display data
+			if (!bDisableBlank) {
+				if (!(VDPREG[1] & 0x40)) {	// Disable display
+					continue;
+				}
 			}
-		}
 
-		if ((!bDisableBackground) && (gfxline < 192) && (gfxline >= 0)) {
-            for (int isLayer2=0; isLayer2<2; ++isLayer2) {
-                reg0 = gettables(isLayer2);
+			if ((!bDisableBackground) && (gfxline < 192) && (gfxline >= 0)) {
+				for (int isLayer2=0; isLayer2<2; ++isLayer2) {
+					reg0 = gettables(isLayer2);
 
-                if ((VDPREG[1] & 0x18)==0x18)	// MODE BITS 2 and 1
-			    {
-				    VDPillegal(gfxline, isLayer2);
-			    } else if (VDPREG[1] & 0x10)			// MODE BIT 2
-			    {
-				    if (reg0 & 0x02) {			// BITMAP MODE BIT
-					    VDPtextII(gfxline, isLayer2);	// undocumented bitmap text mode
-				    } else if (reg0 & 0x04) {	// MODE BIT 4 (9938)
-					    VDPtext80(gfxline, isLayer2);	// 80-column text, similar to 9938/F18A
-				    } else {
-					    VDPtext(gfxline, isLayer2);		// regular 40-column text
-				    }
-			    } else if (VDPREG[1] & 0x08)				// MODE BIT 1
-			    {
-				    if (reg0 & 0x02) {				// BITMAP MODE BIT
-					    VDPmulticolorII(gfxline, isLayer2);	// undocumented bitmap multicolor mode
-				    } else {
-					    VDPmulticolor(gfxline, isLayer2);
-				    }
-			    } else if (reg0 & 0x02) {					// BITMAP MODE BIT
-				    VDPgraphicsII(gfxline, isLayer2);		// documented bitmap graphics mode
-			    } else {
-				    VDPgraphics(gfxline, isLayer2);
-			    }
+					if ((VDPREG[1] & 0x18)==0x18)	// MODE BITS 2 and 1
+					{
+						VDPillegal(gfxline, isLayer2);
+					} else if (VDPREG[1] & 0x10)			// MODE BIT 2
+					{
+						if (reg0 & 0x02) {			// BITMAP MODE BIT
+							VDPtextII(gfxline, isLayer2);	// undocumented bitmap text mode
+						} else if (reg0 & 0x04) {	// MODE BIT 4 (9938)
+							VDPtext80(gfxline, isLayer2);	// 80-column text, similar to 9938/F18A
+						} else {
+							VDPtext(gfxline, isLayer2);		// regular 40-column text
+						}
+					} else if (VDPREG[1] & 0x08)				// MODE BIT 1
+					{
+						if (reg0 & 0x02) {				// BITMAP MODE BIT
+							VDPmulticolorII(gfxline, isLayer2);	// undocumented bitmap multicolor mode
+						} else {
+							VDPmulticolor(gfxline, isLayer2);
+						}
+					} else if (reg0 & 0x02) {					// BITMAP MODE BIT
+						VDPgraphicsII(gfxline, isLayer2);		// documented bitmap graphics mode
+					} else {
+						VDPgraphics(gfxline, isLayer2);
+					}
 
-                // Tile layer 2, if applicable
-                // TODO: sprite priority is not taken into account
-			    if ((!bF18AActive) || ((VDPREG[49]&0x80)==0)) {
-                    break;
-                }
-            }
-		} else {
-            // This case is hit if nothing else is being drawn, otherwise the graphics modes call DrawSprites
-			// as long as mode bit 2 is not set, sprites are okay
-			if ((bF18AActive) || ((VDPREG[1] & 0x10) == 0)) {
-				DrawSprites(gfxline);
+	#if 0
+					// Tile layer 2, if applicable
+					// TODO: sprite priority is not taken into account
+					if ((!bF18AActive) || ((VDPREG[49]&0x80)==0)) {
+						break;
+					}
+	#else
+					// never draw layer 2
+					break;
+	#endif
+				}
+			} else {
+				// This case is hit if nothing else is being drawn (ie: disable background is set), otherwise the graphics modes call DrawSprites
+				// as long as mode bit 2 is not set, sprites are okay
+				if (/*(bF18AActive) ||*/ ((VDPREG[1] & 0x10) == 0)) {
+					DrawSprites(gfxline);
+				}
 			}
 		}
 	} else {
 		// we have to redraw the sprites even if the screen didn't change, so that collisions are updated
 		// as the CPU may have cleared the collision bit
 		// as long as mode bit 2 (text) is not set, and the display is enabled, sprites are okay
-		if ((bF18AActive) || ((VDPREG[1] & 0x10) == 0)) {
+		if (/*(bF18AActive) ||*/ ((VDPREG[1] & 0x10) == 0)) {
 			if ((bDisableBlank) || (VDPREG[1] & 0x40)) {
 				DrawSprites(gfxline);
 			}
 		}
 	}
-}
 
-// for the sake of overdrive, force out a single frame
-void vdpForceFrame() {
-	updateVDP(FULLFRAME);
-}
-
-//////////////////////////////////////////////////////
-// Draw a debug screen 
-//////////////////////////////////////////////////////
-void draw_debug()
-{
-	if (NULL != dbgWnd) {
-		SetEvent(hDebugWindowUpdateEvent);
+	// TODO: replace with actual bottom of display frame - varies on F18A
+	if (gfxline == 191) {
+		if (bShowFPS) {
+			static int cnt = 0;
+			static time_t lasttime = 0;
+			static char buf[32] = "";
+			++cnt;
+			if (time(NULL) != lasttime) {
+				sprintf(buf, "%d", cnt);
+				//debug_write("%d fps", cnt);
+				cnt = 0;
+				time(&lasttime);
+			}
+			// draw digits
+			for (int i2=0; i2<5; i2++) {
+				// TODO: probably wrong calculation now
+				unsigned int *pDat = (unsigned char*)pImg->data + (256+16)*(6-i2);
+				for (int idx = 0; idx<(signed)strlen(buf); idx++) {
+					int digit = buf[idx] - '0';
+					pDat = drawTextLine(pDat, digpat[digit][i2]);
+					*(pDat++)=0;
+				}
+			}
+		}
 	}
+
+	al_unlock_bitmap(pDisplay->bmp);
 }
 
-/////////////////////////////////////////////////////////
 // Draw graphics mode
 // Layer 2 for F18A second tile layer!
-/////////////////////////////////////////////////////////
-void VDPgraphics(int scanline, int isLayer2)
+void TMS9918::VDPgraphics(int scanline, int isLayer2)
 {
 	int t,o;				// temp variables
 	int i2;					// temp variables
 	int p_add;
-	int fgc, bgc, c;
+	uint32_t fgc, bgc, c;
 	unsigned char ch=0xff;
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*32;			// offset in SIT
 
@@ -1500,25 +1344,32 @@ void VDPgraphics(int scanline, int isLayer2)
                             //bgc=0;  // not needed, not going to use it
                         }
                         if (fgc != 0) {     // skip if fgc is also transparent
-				            if (t&80) pixel(i2,i1+i3,fgc);
-				            if (t&40) pixel(i2+1,i1+i3,fgc);
-				            if (t&20) pixel(i2+2,i1+i3,fgc);
-				            if (t&10) pixel(i2+3,i1+i3,fgc);
-				            if (t&8) pixel(i2+4,i1+i3,fgc);
-				            if (t&4) pixel(i2+5,i1+i3,fgc);
-				            if (t&2) pixel(i2+6,i1+i3,fgc);
-				            if (t&1) pixel(i2+7,i1+i3,fgc);
-                        }
+							fgc = F18APalette[fgc];
+
+				            if (t&80) *(plong++) = fgc; else ++plong;
+				            if (t&40) *(plong++) = fgc; else ++plong;
+				            if (t&20) *(plong++) = fgc; else ++plong;
+				            if (t&10) *(plong++) = fgc; else ++plong;
+				            if (t&8) *(plong++) = fgc; else ++plong;
+				            if (t&4) *(plong++) = fgc; else ++plong;
+				            if (t&2) *(plong++) = fgc; else ++plong;
+				            if (t&1) *(plong++) = fgc; else ++plong;
+                        } else {
+							plong+=8;
+						}
 			        }
                 } else {
-    			    pixel(i2,i1+i3,(t&0x80 ? fgc : bgc ));
-				    pixel(i2+1,i1+i3,(t&0x40 ? fgc : bgc ));
-				    pixel(i2+2,i1+i3,(t&0x20 ? fgc : bgc ));
-				    pixel(i2+3,i1+i3,(t&0x10 ? fgc : bgc ));
-				    pixel(i2+4,i1+i3,(t&0x08 ? fgc : bgc ));
-				    pixel(i2+5,i1+i3,(t&0x04 ? fgc : bgc ));
-				    pixel(i2+6,i1+i3,(t&0x02 ? fgc : bgc ));
-				    pixel(i2+7,i1+i3,(t&0x01 ? fgc : bgc ));
+					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+
+					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x20) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x10) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x8) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x4) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x2) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x1) *(plong++) = fgc; else *(plong++) = bgc;
                 }
 			}
 		}
@@ -1528,10 +1379,8 @@ void VDPgraphics(int scanline, int isLayer2)
 
 }
 
-/////////////////////////////////////////////////////////
 // Draw bitmap graphics mode
-/////////////////////////////////////////////////////////
-void VDPgraphicsII(int scanline, int isLayer2)
+void TMS9918::VDPgraphicsII(int scanline, int isLayer2)
 {
 	int t,o;				// temp variables
 	int i2;					// temp variables
@@ -1541,6 +1390,9 @@ void VDPgraphicsII(int scanline, int isLayer2)
 	unsigned char ch=0xff;
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
     if (isLayer2) {
         // I don't think you can do bitmap layer 2??
@@ -1589,14 +1441,17 @@ void VDPgraphicsII(int scanline, int isLayer2)
     				fgc>>=4;
                 }
 				{
-					pixel(i2,i1+i3,(t&0x80 ? fgc : bgc ));
-					pixel(i2+1,i1+i3,(t&0x40 ? fgc : bgc ));
-					pixel(i2+2,i1+i3,(t&0x20 ? fgc : bgc ));
-					pixel(i2+3,i1+i3,(t&0x10 ? fgc : bgc ));
-					pixel(i2+4,i1+i3,(t&0x08 ? fgc : bgc ));
-					pixel(i2+5,i1+i3,(t&0x04 ? fgc : bgc ));
-					pixel(i2+6,i1+i3,(t&0x02 ? fgc : bgc ));
-					pixel(i2+7,i1+i3,(t&0x01 ? fgc : bgc ));
+					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+
+					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x20) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x10) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x8) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x4) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x2) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x1) *(plong++) = fgc; else *(plong++) = bgc;
 				}
 			}
 		}
@@ -1606,10 +1461,8 @@ void VDPgraphicsII(int scanline, int isLayer2)
 
 }
 
-////////////////////////////////////////////////////////////////////////
 // Draw text mode 40x24
-////////////////////////////////////////////////////////////////////////
-void VDPtext(int scanline, int isLayer2)
+void TMS9918::VDPtext(int scanline, int isLayer2)
 { 
 	int t,o;
 	int i2;
@@ -1617,6 +1470,9 @@ void VDPtext(int scanline, int isLayer2)
 	unsigned char ch=0xff;
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*40;			// offset in SIT
 
@@ -1637,7 +1493,8 @@ void VDPtext(int scanline, int isLayer2)
 				ch=VDP[SIT+o];
 			}
 
-            if ((bF18AActive) && (VDPREG[50]&0x02)) {
+#if 0
+			if ((bF18AActive) && (VDPREG[50]&0x02)) {
                 // per-cell attributes, so update the colors
                 if (isLayer2) {
                     t = VDP[VDPREG[11]*64 + o];
@@ -1649,6 +1506,7 @@ void VDPtext(int scanline, int isLayer2)
 	            bgc=t&0xf;
 	            fgc=t>>4;
             }
+#endif
 
 			p_add=PDT+(ch<<3)+i3;
 			o++;
@@ -1660,40 +1518,47 @@ void VDPtext(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-				        if (t&0x80) pixel(i2,i1+i3,fgc);
-				        if (t&0x40) pixel(i2+1,i1+i3,fgc);
-				        if (t&0x20) pixel(i2+2,i1+i3,fgc);
-				        if (t&0x10) pixel(i2+3,i1+i3,fgc);
-				        if (t&0x8) pixel(i2+4,i1+i3,fgc);
-				        if (t&0x4) pixel(i2+5,i1+i3,fgc);
-                    }
+						fgc = F18APalette[fgc];
+
+				        if (t&80) *(plong++) = fgc; else ++plong;
+				        if (t&40) *(plong++) = fgc; else ++plong;
+				        if (t&20) *(plong++) = fgc; else ++plong;
+				        if (t&10) *(plong++) = fgc; else ++plong;
+				        if (t&8) *(plong++) = fgc; else ++plong;
+				        if (t&4) *(plong++) = fgc; else ++plong;
+                    } else {
+						plong+=6;
+					}
 			    }
             } else {
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-				    pixel(i2,i1+i3,  (t&0x80 ? fgc : bgc ));
-				    pixel(i2+1,i1+i3,(t&0x40 ? fgc : bgc ));
-				    pixel(i2+2,i1+i3,(t&0x20 ? fgc : bgc ));
-				    pixel(i2+3,i1+i3,(t&0x10 ? fgc : bgc ));
-				    pixel(i2+4,i1+i3,(t&0x08 ? fgc : bgc ));
-				    pixel(i2+5,i1+i3,(t&0x04 ? fgc : bgc ));
+					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+
+					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x20) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x10) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x8) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x4) *(plong++) = fgc; else *(plong++) = bgc;
 			    }
             }
 		}
 	}
 
+#if 0
     // no sprites in text mode, unless f18A unlocked
     if ((bF18AActive) && (!isLayer2)) {
         // todo: layer 2 has sprite dependency concerns
 	    DrawSprites(scanline);
     }
+#endif
 }
 
-////////////////////////////////////////////////////////////////////////
 // Draw bitmap text mode 40x24
-////////////////////////////////////////////////////////////////////////
-void VDPtextII(int scanline, int isLayer2)
+void TMS9918::VDPtextII(int scanline, int isLayer2)
 { 
 	int t,o;
 	int i2;
@@ -1703,7 +1568,10 @@ void VDPtextII(int scanline, int isLayer2)
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
 
-	o=(scanline/8)*40;							// offset in SIT
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
+
+	o=(scanline/8)*40;			// offset in SIT
 
 	t=VDPREG[7];
 	bgc=t&0xf;
@@ -1741,35 +1609,41 @@ void VDPtextII(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-				        if (t&0x80) pixel80(i2,i1+i3,fgc);
-				        if (t&0x40) pixel80(i2+1,i1+i3,fgc);
-				        if (t&0x20) pixel80(i2+2,i1+i3,fgc);
-				        if (t&0x10) pixel80(i2+3,i1+i3,fgc);
-				        if (t&0x8) pixel80(i2+4,i1+i3,fgc);
-				        if (t&0x4) pixel80(i2+5,i1+i3,fgc);
-                    }
+						fgc = F18APalette[fgc];
+
+				        if (t&80) *(plong++) = fgc; else ++plong;
+				        if (t&40) *(plong++) = fgc; else ++plong;
+				        if (t&20) *(plong++) = fgc; else ++plong;
+				        if (t&10) *(plong++) = fgc; else ++plong;
+				        if (t&8) *(plong++) = fgc; else ++plong;
+				        if (t&4) *(plong++) = fgc; else ++plong;
+                    } else {
+						plong+=6;
+					}
 			    }
             } else {
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-				    pixel(i2,i1+i3,(t&0x80 ?   fgc : bgc ));
-				    pixel(i2+1,i1+i3,(t&0x40 ? fgc : bgc ));
-				    pixel(i2+2,i1+i3,(t&0x20 ? fgc : bgc ));
-				    pixel(i2+3,i1+i3,(t&0x10 ? fgc : bgc ));
-				    pixel(i2+4,i1+i3,(t&0x08 ? fgc : bgc ));
-				    pixel(i2+5,i1+i3,(t&0x04 ? fgc : bgc ));
+					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+
+					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x20) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x10) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x8) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x4) *(plong++) = fgc; else *(plong++) = bgc;
 			    }
             }
 		}
 	}
 	// no sprites in text mode
+	// TODO: but F18A allows it - if F18A allows bitmap text mode...
 }
 
-////////////////////////////////////////////////////////////////////////
 // Draw text mode 80x24 (note: 80x26.5 mode not supported, blink not supported)
-////////////////////////////////////////////////////////////////////////
-void VDPtext80(int scanline, int isLayer2)
+void TMS9918::VDPtext80(int scanline, int isLayer2)
 { 
 	int t,o;
 	int i2;
@@ -1777,6 +1651,9 @@ void VDPtext80(int scanline, int isLayer2)
 	unsigned char ch=0xff;
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*80;				// offset in SIT
 
@@ -1797,6 +1674,7 @@ void VDPtext80(int scanline, int isLayer2)
 				ch=VDP[SIT+o];
 			}
 
+#if 0
             if ((bF18AActive) && (VDPREG[50]&0x02)) {
                 // per-cell attributes, so update the colors
                 if (isLayer2) {
@@ -1807,6 +1685,7 @@ void VDPtext80(int scanline, int isLayer2)
 	            bgc=t&0xf;
 	            fgc=t>>4;
             }
+#endif
 
 			p_add=PDT+(ch<<3)+i3;
 			o++;
@@ -1818,40 +1697,49 @@ void VDPtext80(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-				        if (t&0x80) pixel80(i2,i1+i3,fgc);
-				        if (t&0x40) pixel80(i2+1,i1+i3,fgc);
-				        if (t&0x20) pixel80(i2+2,i1+i3,fgc);
-				        if (t&0x10) pixel80(i2+3,i1+i3,fgc);
-				        if (t&0x8) pixel80(i2+4,i1+i3,fgc);
-				        if (t&0x4) pixel80(i2+5,i1+i3,fgc);
-                    }
+						fgc = F18APalette[fgc];
+
+				        if (t&80) *(plong++) = fgc; else ++plong;
+				        if (t&40) *(plong++) = fgc; else ++plong;
+				        if (t&20) *(plong++) = fgc; else ++plong;
+				        if (t&10) *(plong++) = fgc; else ++plong;
+				        if (t&8) *(plong++) = fgc; else ++plong;
+				        if (t&4) *(plong++) = fgc; else ++plong;
+                    } else {
+						plong+=6;
+					}
 			    }
             } else {
                 //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-				    pixel80(i2,i1+i3,(t&0x80   ? fgc : bgc ));
-				    pixel80(i2+1,i1+i3,(t&0x40 ? fgc : bgc ));
-				    pixel80(i2+2,i1+i3,(t&0x20 ? fgc : bgc ));
-				    pixel80(i2+3,i1+i3,(t&0x10 ? fgc : bgc ));
-				    pixel80(i2+4,i1+i3,(t&0x08 ? fgc : bgc ));
-				    pixel80(i2+5,i1+i3,(t&0x04 ? fgc : bgc ));
+					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+
+					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x20) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x10) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x8) *(plong++) = fgc; else *(plong++) = bgc;
+					if (t&0x4) *(plong++) = fgc; else *(plong++) = bgc;
 			    }
             }
 		}
 	}
+
+#if 0
     // no sprites in text mode, unless f18A unlocked
     // TODO: sprites don't render correctly in the wider 80 column mode...
+	// TODO: this might be a good reason to render sprites on their own TV layer...
     if ((bF18AActive) && (!isLayer2)) {
         // todo: layer 2 has sprite dependency concerns
 	    DrawSprites(scanline);
     }
+#endif
 }
 
-////////////////////////////////////////////////////////////////////////
 // Draw Illegal mode (similar to text mode)
-////////////////////////////////////////////////////////////////////////
-void VDPillegal(int scanline, int isLayer2)
+void TMS9918::VDPillegal(int scanline, int isLayer2)
 { 
 	int t;
 	int i2;
@@ -1859,6 +1747,9 @@ void VDPillegal(int scanline, int isLayer2)
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
 	(void)scanline;		// scanline is irrelevant
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	t=VDPREG[7];
 	bgc=t&0xf;
@@ -1872,40 +1763,50 @@ void VDPillegal(int scanline, int isLayer2)
             if ((isLayer2)&&((fgc==0)||(bgc==0))) {
                 // for layer 2, we have to drop transparent pixels,
                 // but I don't want to slow down the normal draw that much
+				// TODO: F18A probably doesn't support illegal mode... so would not draw this
 			    //for (i3=0; i3<8; i3++)
 			    {	
                     // fix it so that bgc is transparent, then we only draw on that test
                     if (fgc!=0) {
-				        pixel(i2,i1+i3,fgc);
-				        pixel(i2+1,i1+i3,fgc);
-				        pixel(i2+2,i1+i3,fgc);
-				        pixel(i2+3,i1+i3,fgc);
-                    }
+						fgc = F18APalette[fgc];
+
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+                    } else {
+						plong+=4;
+					}
                     if (bgc!=0) {
-				        pixel(i2+4,i1+i3,bgc);
-				        pixel(i2+5,i1+i3,bgc);
-                    }
+						bgc = F18APalette[bgc];
+
+						*(plong++) = bgc;
+						*(plong++) = bgc;
+                    } else {
+						plong += 2;
+					}
 			    }
             } else {
     //			for (i3=0; i3<8; i3++)				// 6 pixels wide
 			    {	
-				    pixel(i2,i1+i3  ,fgc);
-				    pixel(i2+1,i1+i3,fgc);
-				    pixel(i2+2,i1+i3,fgc);
-				    pixel(i2+3,i1+i3,fgc);
-				    pixel(i2+4,i1+i3,bgc);
-				    pixel(i2+5,i1+i3,bgc);
-			    }
+					if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
+					if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+
+					*(plong++) = fgc;
+					*(plong++) = fgc;
+					*(plong++) = fgc;
+					*(plong++) = fgc;
+					*(plong++) = bgc;
+					*(plong++) = bgc;
+				}
             }
 		}
 	}
 	// no sprites in this mode
 }
 
-/////////////////////////////////////////////////////
 // Draw Multicolor Mode
-/////////////////////////////////////////////////////
-void VDPmulticolor(int scanline, int isLayer2) 
+void TMS9918::VDPmulticolor(int scanline, int isLayer2) 
 {
 	int o;				// temp variables
 	int i2;				// temp variables
@@ -1916,6 +1817,9 @@ void VDPmulticolor(int scanline, int isLayer2)
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x04;
 	const int i4 = scanline&0x03;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*32;			// offset in SIT
 	off=(scanline>>2)&0x06;		// offset in pattern
@@ -1945,29 +1849,40 @@ void VDPmulticolor(int scanline, int isLayer2)
 			        //for (i3=0; i3<8; i3++)
 			        {	
                         if (fgc != 0) {     // skip if fgc is also transparent
-					        pixel(i2,i1+i3+i4,fgc);
-					        pixel(i2+1,i1+i3+i4,fgc);
-					        pixel(i2+2,i1+i3+i4,fgc);
-					        pixel(i2+3,i1+i3+i4,fgc);
-                        }
+							fgc = F18APalette[fgc];
+
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+                        } else {
+							plong += 4;
+						}
                         if (bgc != 0) {
-					        pixel(i2+4,i1+i3+i4,bgc);
-					        pixel(i2+5,i1+i3+i4,bgc);
-					        pixel(i2+6,i1+i3+i4,bgc);
-					        pixel(i2+7,i1+i3+i4,bgc);
-                        }
+							bgc = F18APalette[bgc];
+
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+                        } else {
+							plong += 4;
+						}
 			        }
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-					    pixel(i2,i1+i3+i4,fgc);
-					    pixel(i2+1,i1+i3+i4,fgc);
-					    pixel(i2+2,i1+i3+i4,fgc);
-					    pixel(i2+3,i1+i3+i4,fgc);
-					    pixel(i2+4,i1+i3+i4,bgc);
-					    pixel(i2+5,i1+i3+i4,bgc);
-					    pixel(i2+6,i1+i3+i4,bgc);
-					    pixel(i2+7,i1+i3+i4,bgc);
+						if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
+						if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
 				    }
                 }
 			}
@@ -1981,11 +1896,9 @@ void VDPmulticolor(int scanline, int isLayer2)
 	return;
 }
 
-/////////////////////////////////////////////////////
 // Draw Bitmap Multicolor Mode
 // TODO not proven to be correct anymore
-/////////////////////////////////////////////////////
-void VDPmulticolorII(int scanline, int isLayer2) 
+void TMS9918::VDPmulticolorII(int scanline, int isLayer2) 
 {
 	int o;						// temp variables
 	int i2;						// temp variables
@@ -1997,6 +1910,9 @@ void VDPmulticolorII(int scanline, int isLayer2)
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x04;
 	const int i4 = scanline&0x03;
+
+	if (pLine == NULL) return;
+	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*32;			// offset in SIT
 	off=(scanline>>2)&0x06;		// offset in pattern
@@ -2035,29 +1951,40 @@ void VDPmulticolorII(int scanline, int isLayer2)
 			        //for (i3=0; i3<8; i3++)
 			        {	
                         if (fgc != 0) {     // skip if fgc is also transparent
-					        pixel(i2,i1+i3+i4,fgc);
-					        pixel(i2+1,i1+i3+i4,fgc);
-					        pixel(i2+2,i1+i3+i4,fgc);
-					        pixel(i2+3,i1+i3+i4,fgc);
-                        }
+							fgc = F18APalette[fgc];
+
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+							*(plong++) = fgc;
+                        } else {
+							plong += 4;
+						}
                         if (bgc != 0) {
-					        pixel(i2+4,i1+i3+i4,bgc);
-					        pixel(i2+5,i1+i3+i4,bgc);
-					        pixel(i2+6,i1+i3+i4,bgc);
-					        pixel(i2+7,i1+i3+i4,bgc);
-                        }
+							bgc = F18APalette[bgc];
+
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+							*(plong++) = bgc;
+                        } else {
+							plong += 4;
+						}
 			        }
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-					    pixel(i2,i1+i3+i4,fgc);
-					    pixel(i2+1,i1+i3+i4,fgc);
-					    pixel(i2+2,i1+i3+i4,fgc);
-					    pixel(i2+3,i1+i3+i4,fgc);
-					    pixel(i2+4,i1+i3+i4,bgc);
-					    pixel(i2+5,i1+i3+i4,bgc);
-					    pixel(i2+6,i1+i3+i4,bgc);
-					    pixel(i2+7,i1+i3+i4,bgc);
+						if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
+						if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = fgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
+						*(plong++) = bgc;
 				    }
                 }
 			}
@@ -2073,10 +2000,12 @@ void VDPmulticolorII(int scanline, int isLayer2)
 
 // renders a string to the buffer - '1' is white, anything else black
 // returns new pDat
-unsigned int* drawTextLine(unsigned int *pDat, const char *buf) {
+unsigned int* TMS9918::drawTextLine(uint32_t *pDat, const char *buf) {
+	if (pDat == NULL) return;
+
 	for (int idx = 0; idx<(signed)strlen(buf); idx++) {
         if (buf[idx] == '1') {
-    		*(pDat++)=0xffffff;
+    		*(pDat++)=0xffffffff;
 		} else {
 			*(pDat++)=0;
 		}
@@ -2084,436 +2013,12 @@ unsigned int* drawTextLine(unsigned int *pDat, const char *buf) {
     return pDat;
 }
 
-////////////////////////////////////////////////////////////////
-// Stretch-blit the buffer into the active window
-//
-// NOTES: Graphics modes we have (and some we need)
-// 272x208 -- the standard default pixel mode of the 9918A plus a fixed (incorrect) border
-// 
-//
-// NOTES: Graphics modes we have (and some we need)
-// 272x208 -- the standard default pixel mode of the 9918A plus a fixed (incorrect) border
-// 544x413 -- the double-sized filters (minus 1 scanline due to corruption)
-// 1088x832 - HQ4x buffer
-// 634x413 -- TV mode
-// 528x208 -- 80-column mode
-// These are all with 24 rows -- the F18A adds a 26.5 row mode (212 pixels) (todo: or was it 240?)
-// So this adds another 20 (or 48) pixels to each mode
-// One solution might be to simply render a fixed TV display and scale to fit...
-// The only place it really matters if resolution changes is video recording.
-// In that case, the vertical can always be the same - the extra rows just cut into overscan.
-// Horizontal, unscaled, is either 272, 528 or 634. We could adapt a buffer size that
-// fits all, maybe, and just adjust the amount of overscan area...?
-// Alternately... maybe we just blit whatever into a fixed size video buffer (say, 2x) and be done?
-////////////////////////////////////////////////////////////////
-void doBlit()
-{
-	RECT rect1, rect2;
-	int x,y;
-	HRESULT ret;
-
-	if (bShowFPS) {
-		static int cnt = 0;
-		static time_t lasttime = 0;
-		static char buf[32] = "";
-		++cnt;
-		if (time(NULL) != lasttime) {
-			sprintf(buf, "%d", cnt);
-			//debug_write("%d fps", cnt);
-			cnt = 0;
-			time(&lasttime);
-		}
-		// draw digits
-		for (int i2=0; i2<5; i2++) {
-			unsigned int *pDat = framedata + (256+16)*(6-i2);
-			for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-                int digit = buf[idx] - '0';
-                pDat = drawTextLine(pDat, digpat[digit][i2]);
-				*(pDat++)=0;
-			}
-		}
-	}
-    if (bShowKeyboard) {
-		// draw digits
-        const char *caps[5] = {
-            "111  1  111",
-            "1   1 1 1 1",
-            "1   111 111",
-            "1   1 1 1  ",
-            "111 1 1 1  "   };
-        const char *lock[5] = {
-            "1   111 111 1 1",
-            "1   1 1 1   11 ",
-            "1   1 1 1   11 ",
-            "1   1 1 1   1 1",
-            "111 111 111 1 1"   };
-        const char *scrl[5] = {
-            "111 111 111 1  ",
-            "1   1   1 1 1  ",
-            "111 1   11  1  ",
-            "  1 1   1 1 1  ",
-            "111 111 1 1 111"   };
-        const char *num[5] = {
-            "1 1 1 1 1 1",
-            "111 1 1 111",
-            "111 1 1 111",
-            "111 1 1 1 1",
-            "1 1 111 1 1"   };
-        const char *joy[5] = {
-            "  1 111 1 1",
-            "  1 1 1 1 1",
-            "  1 1 1 111",
-            "1 1 1 1  1 ",
-            "111 111  1 "   };
-        const char *ign[5] = {
-            "111 111 1 1",
-            " 1  1   111",
-            " 1  1 1 111",
-            " 1  1 1 111",
-            "111 111 1 1"   };
-        const char *fctn[5] = {
-            "111 111 111 1 1",
-            "1   1    1  111",
-            "11  1    1  111",
-            "1   1    1  111",
-            "1   111  1  1 1"   };
-        const char *shift[5] = {
-            "111 1 1 111 111",
-            "1   1 1 1    1 ",
-            "111 111 11   1 ",
-            "  1 1 1 1    1 ",
-            "111 1 1 1    1 "   };
-        const char *ctrl[5] = {
-            "111 111 111 1  ",
-            "1    1  1 1 1  ",
-            "1    1  11  1  ",
-            "1    1  1 1 1  ",
-            "111  1  1 1 111"   };
-		char buf[32];
-
-		for (int i2=0; i2<5; i2++) {
-			unsigned int *pDat = framedata + (256+16)*(6-i2)+20;
-
-            if (capslock) {
-                drawTextLine(pDat, caps[i2]);
-			}
-            pDat += 20;
-
-            if (lockedshiftstate) {
-                drawTextLine(pDat, lock[i2]);
-			}
-            pDat += 20;
-
-            if (scrolllock) {
-                drawTextLine(pDat, scrl[i2]);
-			}
-            pDat += 20;
-
-            if (numlock) {
-                drawTextLine(pDat, num[i2]);
-			}
-            pDat += 20;
-        
-            if (fJoystickActiveOnKeys) {
-                drawTextLine(pDat, joy[i2]);
-			}
-            pDat += 20;
-
-            pDat = drawTextLine(pDat, ign[i2]);
-            *(pDat++) = 0;
-            sprintf(buf, "%d", ignorecount);
-			for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-                int digit = buf[idx] - '0';
-                pDat = drawTextLine(pDat, digpat[digit][i2]);
-				*(pDat++)=0;
-			}
-            pDat+=4;
-
-            pDat = drawTextLine(pDat, fctn[i2]);
-            *(pDat++) = 0;
-            sprintf(buf, "%d", fctnrefcount);
-			for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-                int digit = buf[idx] - '0';
-                pDat = drawTextLine(pDat, digpat[digit][i2]);
-				*(pDat++)=0;
-			}
-            pDat+=4;
-
-            pDat = drawTextLine(pDat, shift[i2]);
-            *(pDat++) = 0;
-            sprintf(buf, "%d", shiftrefcount);
-			for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-                int digit = buf[idx] - '0';
-                pDat = drawTextLine(pDat, digpat[digit][i2]);
-				*(pDat++)=0;
-			}
-            pDat+=4;
-            
-            pDat = drawTextLine(pDat, ctrl[i2]);
-            *(pDat++) = 0;
-            sprintf(buf, "%d", ctrlrefcount);
-			for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-                int digit = buf[idx] - '0';
-                pDat = drawTextLine(pDat, digpat[digit][i2]);
-				*(pDat++)=0;
-			}
-		}
-
-        for (int i2=0; i2<8; i2++) {
-			unsigned int *pDat = framedata + (256+16)*(9-i2)+220;
-            for (int mask=1; mask<0x100; mask<<=1) {
-                *(pDat++) = (ticols[i2]&mask) ? 0xffffff : 0;
-                *(pDat++) = 0xffffff;
-            }
-        }
-
-	}
-
-
-	if (!TryEnterCriticalSection(&VideoCS)) {
-		return;		// do it later
-	}
-
-	GetClientRect(myWnd, &rect1);
-	myDC=GetDC(myWnd);
-	SetStretchBltMode(myDC, COLORONCOLOR);
-
-	// TODO: hacky city - 80-column mode doesn't filter or anything, cause we'd have to change ALL the stuff below.
-	if ((bEnable80Columns)&&(VDPREG[0]&0x04)&&(VDPREG[1]&0x10)) {
-		// render 80 columns to the screen using DIB blit
-		StretchDIBits(myDC, 0, 0, rect1.right-rect1.left, rect1.bottom-rect1.top, 0, 0, 512+16, 192+16, framedata, &myInfo80Col, 0, SRCCOPY);
-		ReleaseDC(myWnd, myDC);
-		LeaveCriticalSection(&VideoCS);
-		return;
-	}
-
-	// make sure filters work before calling them
-	if (FilterMode == 4) {
-		if ((!TVFiltersAvailable) || (NULL == sms_ntsc_blit)) {
-			MessageBox(myWnd, "Filter DLL not available - reverting to no filter.", "Classic99 Error", MB_OK);
-			PostMessage(myWnd, WM_COMMAND, ID_VIDEO_FILTERMODE_NONE, 0);
-			ReleaseDC(myWnd, myDC);
-			LeaveCriticalSection(&VideoCS);
-			return;
-		}
-	}
-	if (FilterMode == 5) {
-		if ((NULL == hHQ4DLL) || (NULL == hq4x_init)) {
-			MessageBox(myWnd, "HQ4 DLL not available - reverting to no filter.", "Classic99 Error", MB_OK);
-			PostMessage(myWnd, WM_COMMAND, ID_VIDEO_FILTERMODE_NONE, 0);
-			ReleaseDC(myWnd, myDC);
-			LeaveCriticalSection(&VideoCS);
-			return;
-		}
-	}
-
-	// Do the filtering - we throw away the top and bottom 3 scanlines due to some garbage there - it's border anyway
-	switch (FilterMode) {
-	case 1: // 2xSaI
-		_2xSaI((uint8*) framedata+((256+16)*4), ((256+16)*4), NULL, (uint8*)framedata2, (512+32)*4, 256+16, 191+16);
-		break;
-	case 2: // Super2xSaI
-		Super2xSaI((uint8*) framedata+((256+16)*4), ((256+16)*4), NULL, (uint8*)framedata2, (512+32)*4, 256+16, 191+16);
-		break;
-	case 3: // SuperEagle
-		SuperEagle((uint8*) framedata+((256+16)*4), ((256+16)*4), NULL, (uint8*)framedata2, (512+32)*4, 256+16, 191+16);
-		break;
-	case 4:	// TV filter
-		// This filter outputs 602 pixels for 256 in. What we should do is resize the window
-		// we eventually produce a TV_WIDTH x 384+29 image (leaving vertical the same)
-		sms_ntsc_blit(&tvFilter, framedata, 256+16, 256+16, 192+16, framedata2, (TV_WIDTH)*2*4);
-		if (TVScanLines) {
-			sms_ntsc_scanlines(framedata2, TV_WIDTH, (TV_WIDTH)*4, 384+29);
-		} else {
-			// Duplicate every line instead
-			for (int y=1; y<384+29; y+=2) {
-				memcpy(&framedata2[y*TV_WIDTH], &framedata2[(y-1)*TV_WIDTH], sizeof(framedata2[0])*TV_WIDTH);
-			}
-		}
-		break;
-	case 5:	// HQ4x filter - super hi-def!
-		{
-			if (NULL != hq4x_process) {
-				hq4x_process((unsigned char*)framedata, (unsigned char*)framedata2);
-			}
-		}
-	}
-
-	switch (StretchMode) {
-	case 1:	// DIB
-		switch (FilterMode) {
-		case 0:		// none
-			StretchDIBits(myDC, 0, 0, rect1.right-rect1.left, rect1.bottom-rect1.top, 0, 0, 256+16, 192+16, framedata, &myInfo, 0, SRCCOPY);
-			break;
-
-		case 4:		// TV
-			StretchDIBits(myDC, 0, 0, rect1.right-rect1.left, rect1.bottom-rect1.top, 0, 0, TV_WIDTH, 384+29, framedata2, &myInfoTV, 0, SRCCOPY);
-			break;
-
-		case 5:		// hq4x
-			StretchDIBits(myDC, 0, 0, rect1.right-rect1.left, rect1.bottom-rect1.top, 0, 0, (256+16)*4, (192+16)*4, framedata2, &myInfo32, 0, SRCCOPY);
-			break;
-
-		default:	// all the SAI ones
-			StretchDIBits(myDC, 0, 0, rect1.right-rect1.left, rect1.bottom-rect1.top, 0, 0, 512+32, 384+29, framedata2, &myInfo2, 0, SRCCOPY);
-		}
-		break;
-
-	case 2: // DX
-		if (NULL == lpdd) {
-			SetupDirectDraw(0);
-			if (NULL == lpdd) {
-				StretchMode=0;
-				break;
-			}
-		}
-
-		if (DD_OK != lpdd->TestCooperativeLevel()) {
-			break;
-		}
-
-		if (NULL == ddsBack) {
-			StretchMode=0;
-			break;
-		}
-
-		if (DD_OK == ddsBack->GetDC(&tmpDC)) {	// color depth translation
-			switch (FilterMode) {
-				case 0:
-					// original buffer
-					SetDIBitsToDevice(tmpDC, 0, 0, 256+16, 192+16, 0, 0, 0, 192+16, framedata, &myInfo, DIB_RGB_COLORS);
-					break;
-
-				case 4:
-					// TV buffer
-					SetDIBitsToDevice(tmpDC, 0, 0, TV_WIDTH, 384+29, 0, 0, 0, 384+29, framedata2, &myInfoTV, DIB_RGB_COLORS);
-					break;
-				
-				case 5:
-					// 4x buffer
-					SetDIBitsToDevice(tmpDC, 0, 0, (256+16)*4, (192+16)*4, 0, 0, 0, (192+16)*4, framedata2, &myInfo32, DIB_RGB_COLORS);
-					break;
-
-				default:
-					// 2x buffer
-					SetDIBitsToDevice(tmpDC, 0, 0, 512+32, 384+29, 0, 0, 0, 384+29, framedata2, &myInfo2, DIB_RGB_COLORS);
-					break;
-			}
-		}
-		ddsBack->ReleaseDC(tmpDC);
-		GetWindowRect(myWnd, &rect2);
-		// rect1 contains client coordinates (with the correct size!)
-		// rect2 contains window coordinates
-
-		POINT pt;
-		pt.x = 0;
-		pt.y = 0;
-		ClientToScreen(myWnd, &pt);
-		rect1.top = pt.y;
-		rect1.bottom += pt.y;
-		rect1.left = pt.x;
-		rect1.right+= pt.x;
-
-		// The DirectDraw blit will draw using screen coordinates but into the client area thanks to the clipper
-		if (DDERR_SURFACELOST == lpdds->Blt(&rect1, ddsBack, NULL, DDBLT_DONOTWAIT, NULL)) {	// Just go as quick as we can, don't bother waiting
-			lpdd->RestoreAllSurfaces();
-		}
-		break;
-
-	case 3: // DX Full
-		if (NULL == lpdd) {
-			SetupDirectDraw(FullScreenMode);
-			if (NULL == lpdd) {
-				StretchMode=0;
-				break;
-			}
-		}
-
-		if (DD_OK != lpdd->TestCooperativeLevel()) {
-			break;
-		}
-		
-		if (NULL == ddsBack) {
-			StretchMode=0;
-			break;
-		}
-		if (DD_OK == ddsBack->GetDC(&tmpDC)) {	// color depth translation
-			switch (FilterMode) {
-				case 0:		// none
-					SetDIBitsToDevice(tmpDC, 0, 0, 256+16, 192+16, 0, 0, 0, 192+16, framedata, &myInfo, DIB_RGB_COLORS);
-					break;
-
-				case 4:		// tv
-					SetDIBitsToDevice(tmpDC, 0, 0, TV_WIDTH, 384+29, 0, 0, 0, 384+29, framedata2, &myInfoTV, DIB_RGB_COLORS);
-					break;
-
-				case 5:		// hq4x
-					SetDIBitsToDevice(tmpDC, 0, 0, (256+16)*4, (192+16)*4, 0, 0, 0, (192+16)*4, framedata2, &myInfo32, DIB_RGB_COLORS);
-					break;
-
-				default:	// 2x
-					SetDIBitsToDevice(tmpDC, 0, 0, 512+32, 384+29, 0, 0, 0, 384+29, framedata2, &myInfo2, DIB_RGB_COLORS);
-					break;
-			}
-		}
-		ddsBack->ReleaseDC(tmpDC);
-		if (DD_OK != (ret=lpdds->Blt(NULL, ddsBack, NULL, DDBLT_DONOTWAIT, NULL))) {
-			if (DDERR_SURFACELOST == ret) {
-				lpdd->RestoreAllSurfaces();
-			}
-		}
-		break;
-
-	default:// None
-		// Center it in the window, whatever size
-		switch (FilterMode) {
-		case 0:		// none
-			x=(rect1.right-rect1.left-(256+16))/2;
-			y=(rect1.bottom-rect1.top-(192+16))/2;
-			x=SetDIBitsToDevice(myDC, x, y, 256+16, 192+16, 0, 0, 0, 192+16, framedata, &myInfo, DIB_RGB_COLORS);
-			y=GetLastError();
-			break;
-		
-		case 4:		// TV
-			x=(rect1.right-rect1.left-(TV_WIDTH))/2;
-			y=(rect1.bottom-rect1.top-(384+29))/2;
-			SetDIBitsToDevice(myDC, x, y, TV_WIDTH, 384+29, 0, 0, 0, 384+29, framedata2, &myInfoTV, DIB_RGB_COLORS);
-			break;
-
-		case 5:		// hq4x
-			x=(rect1.right-rect1.left-(256+16)*4)/2;
-			y=(rect1.bottom-rect1.top-(192+16)*4)/2;
-			x=SetDIBitsToDevice(myDC, x, y, (256+16)*4, (192+16)*4, 0, 0, 0, (192+16)*4, framedata2, &myInfo32, DIB_RGB_COLORS);
-			y=GetLastError();
-			break;
-
-		default:	// 2x
-			x=(rect1.right-rect1.left-(512+32))/2;
-			y=(rect1.bottom-rect1.top-(384+29))/2;
-			SetDIBitsToDevice(myDC, x, y, 512+32, 384+29, 0, 0, 0, 384+29, framedata2, &myInfo2, DIB_RGB_COLORS);
-			break;
-		}
-		break;
-	}
-
-	ReleaseDC(myWnd, myDC);
-
-	LeaveCriticalSection(&VideoCS);
-}
-
-//////////////////////////////////////////////////////////
 // Draw Sprites into the backbuffer
-//////////////////////////////////////////////////////////
-void DrawSprites(int scanline)
+// TODO: put sprites on their own layer. This function
+// can do the layer lock itself rather than use the
+// member pLine
+void TMS9918::DrawSprites(int scanline)
 {
-	int i1, i2, i3, xx, yy, pat, col, p_add, t, sc;
-	int highest;
-	int curSAL;
-
-	// a hacky, but effective 4-sprite-per-line limitation emulation
-	// We can do this right when we have scanline based VDP (TODO: or even later)
-	char nLines[192];
-	char bSkipScanLine[32][32];		// 32 sprites, 32 lines max
 	// fifth sprite on a scanline, or last sprite processed in table
 	// note that this value counts up as
 	// it processes the sprite list (or at least,
@@ -2548,355 +2053,168 @@ void DrawSprites(int scanline)
 	// reproduce this very well without a line-by-line VDP.
 	//
 	// TODO: fix Miner2049 without a hack.
-	// TODO: and do all the above properly, now that we're scanline based
+	// TODO: and do all the above properly, now that we're scanline based - it'll probably be faster ;)
 	int b5OnLine=-1;
 
 	if (bDisableSprite) {
 		return;
 	}
 
+	if (NULL == pLine) return;
+	uint32_t *plong = pLine;
+
 	// check if b5OnLine is already latched, and set it if so.
 	if (VDPS & VDPS_5SPR) {
 		b5OnLine = VDPS & 0x1f;
 	}
 
-	memset(nLines, 0, sizeof(nLines));
-	memset(bSkipScanLine, 0, sizeof(bSkipScanLine));
+	// generate a list of sprites to process in reverse order
+	int sprList[32];
 
 	// set up the draw
-	memset(SprColBuf, 0, 256*192);
+	memset(SprColBuf, 0, 256);	// only need one line now
 	SprColFlag=0;
 	
-	highest=31;
-
-	// find the highest active sprite
-	for (i1=0; i1<32; i1++)			// 32 sprites 
-	{
-		yy=VDP[SAL+(i1<<2)];
-		if (yy==0xd0)
-		{
-			highest=i1-1;
-			break;
-		}
-	}
-	
-	if (bUse5SpriteLimit) {
-		// go through the sprite table and check if any scanlines are obliterated by 4-per-line
-		i3=8;							// number of sprite scanlines
-		if (VDPREG[1] & 0x2) {			 // TODO: Handle F18A ECM where sprites are doubled individually
-			// double-sized
-			i3*=2;
-		}
-		if (VDPREG[1]&0x01)	{
-			// magnified sprites
-			i3*=2;
-		}
-        int max = 5;                    // 9918A - fifth sprite is lost
+	int highest=31;
+#if 0
         if (bF18AActive) {
-            max = VDPREG[0x33];         // F18A - configurable value
-            if (max == 0) max = 5;      // assume jumper set to 9918A mode
+			// TODO: make sure reg 0x33 is initialized to 31
+            highest = VDPREG[0x33]&0x1f;		// F18A - configurable value
         }
-		for (i1=0; i1<=highest; i1++) {
-			curSAL=SAL+(i1<<2);
-			yy=VDP[curSAL]+1;				// sprite Y, it's stupid, cause 255 is line 0 
-			if (yy>225) yy-=256;			// fade in from top
-			t=yy;
-			for (i2=0; i2<i3; i2++,t++) {
-				if ((t>=0) && (t<=191)) {
-					nLines[t]++;
-					if (nLines[t]>=max) {
-						if (t == scanline) {
-							if (b5OnLine == -1) b5OnLine=i1;
-						}
-						bSkipScanLine[i1][i2]=1;
-					}
-				}
+#endif
+
+	int nextSprite = 0;
+	int height = 8;
+	if (VDPREG[1]&0x01) height *= 2;	// magnified
+	if (VDPREG[1]&0x02)	height *= 2;	// double size
+
+    int max = 5;                    // 9918A - fifth sprite is lost
+#if 0
+    if (bF18AActive) {
+        max = VDPREG[0x1e]&0x1f;    // F18A - configurable value
+        if (max == 0) max = 5;      // assume jumper set to 9918A mode
+    }
+#endif
+	if (!bUse5SpriteLimit) {
+		max = highest+1;
+	}
+
+	for (int i1=0; i1<=highest; ++i1) {
+		// TODO: F18A can do double-size sprites per sprite!
+		//int dblSize = F18AECModeSprite ? VDP[curSAL] & 0x10 : VDPREG[1] & 0x2;
+		int adr = SAL+(i1<<2);
+		int yy = VDP[adr];
+		if ((scanline >= yy) && (scanline < yy+height)) {
+			sprList[nextSprite++] = adr;
+			if (nextSprite >= max) {
+				if (b5OnLine == -1) b5OnLine=i1;
+				break;
 			}
 		}
 	}
 
-	// now draw
-	for (i1=highest; i1>=0; i1--)	
-	{	
-		curSAL=SAL+(i1<<2);
-		yy=VDP[curSAL++]+1;				// sprite Y, it's stupid, cause 255 is line 0 
+	// now sprList has a list of sprite addresses to draw, and nextSprite
+	// points to 1 past the end of that list, which we'll walk backwards
+	// in order to draw in the correct order
+	while (--nextSprite >= 0) {
+		int curSAL = sprList[nextSprite];
+		int yy=VDP[curSAL++]+1;			// sprite Y, it's stupid, cause 255 is line 0 
 		if (yy>225) yy-=256;			// fade in from top: TODO: is this right??
-		xx=VDP[curSAL++];				// sprite X 
-		pat=VDP[curSAL++];				// sprite pattern
+		int xx=VDP[curSAL++];			// sprite X 
+		int pat=VDP[curSAL++];			// sprite pattern index
+		int mag = VDPREG[1] & 0x01;
 		int dblSize = F18AECModeSprite ? VDP[curSAL] & 0x10 : VDPREG[1] & 0x2;
 		if (dblSize) {
 			pat=pat&0xfc;				// if double-sized, it must be a multiple of 4
 		}
-		col=VDP[curSAL]&0xf;			// sprite color 
+		int col=VDP[curSAL]&0xf;		// sprite color
+		if (col == 0) col = 0xff00ff00; else col=F18APalette[col];
 	
-		if (VDP[curSAL++]&0x80)	{		// early clock
+		if (VDP[curSAL]&0x80) {			// early clock
 			xx-=32;
 		}
 
-		// Even transparent sprites get drawn into the collision buffer
-		p_add=SDT+(pat<<3);
-		sc=0;						// current scanline
-		
-		// Added by Rasmus M
-		// TODO: For ECM 1 we need one more bit from R24 (Mike: is that ECM? I think it's always!)
-		int paletteBase = F18AECModeSprite ? (col >> (F18AECModeSprite - 2)) * F18ASpritePaletteSize : 0;
-		int F18ASpriteColorLine[8]; // Colors indices for each of the 8 pixels in a sprite scan line
+		// TODO: F18A ECM sprites are up to 8 colors so need a different fetch system
+		// for now, just collect the first pattern to scan out
+		int p_add = SDT+(pat<<3)+(scanline%8);
+		plong += xx;	// warning: can be negative, and can be offscreen!
+		for (int cnt = 0; cnt < dblSize ? 2:1; ++cnt) {
+			int mask = 0x80;
+			int p = VDP[p_add];
+			for (int idx = 0; idx<8; ++idx) {
+				// TODO: maximum width check - it's smaller in text mode on F18A
+				if ((xx >= 0) && (xx <= 255)) {
+					if (mag) {
+						if (p & mask) {
+							// collision buffer
+							SprColFlag |= SprColBuf[xx];
+							SprColBuf[xx] = 1;
+							if (xx < 255) {
+								SprColFlag |= SprColBuf[xx+1];
+								SprColBuf[xx+1] = 1;
+							}
 
-		if (VDPREG[1]&0x01)	{		// magnified sprites
-			for (i3=0; i3<16; i3++)
-			{	
-				t = pixelMask(p_add, F18ASpriteColorLine);	// Modified by RasmusM. Sets up the F18ASpriteColorLine[] array.
+							// rendering
+							if (col != 0xff00ff00) {
+								*plong = col;
+								if (xx < 255) {
+									// skipping just this is okay, cause it means end of line anyway
+									*(plong+1) = col;
+								}
+							}
+						}
+					} else {
+						if (p & mask) {
+							// collision buffer
+							SprColFlag |= SprColBuf[xx];
+							SprColBuf[xx] = 1;
 
-				if ((!bSkipScanLine[i1][sc]) && (yy+i3 == scanline)) {
-					if (t&0x80) 
-						bigpixel(xx, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-					if (t&0x40)
-						bigpixel(xx+2, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-					if (t&0x20)
-						bigpixel(xx+4, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-					if (t&0x10)
-						bigpixel(xx+6, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-					if (t&0x08)
-						bigpixel(xx+8, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-					if (t&0x04)
-						bigpixel(xx+10, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-					if (t&0x02)
-						bigpixel(xx+12, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-					if (t&0x01)
-						bigpixel(xx+14, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-				}
-
-				if (dblSize)		// double-size sprites, need to draw 3 more chars 
-				{	
-					t = pixelMask(p_add + 8, F18ASpriteColorLine);	// Modified by RasmusM
-	
-					if ((!bSkipScanLine[i1][sc+16]) && (yy+i3+16 == scanline)) {
-						if (t&0x80)
-							bigpixel(xx, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							bigpixel(xx+2, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							bigpixel(xx+4, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)
-							bigpixel(xx+6, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							bigpixel(xx+8, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							bigpixel(xx+10, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							bigpixel(xx+12, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							bigpixel(xx+14, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-
-						t = pixelMask(p_add + 24, F18ASpriteColorLine);	// Modified by RasmusM
-						if (t&0x80)
-							bigpixel(xx+16, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							bigpixel(xx+18, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							bigpixel(xx+20, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)
-							bigpixel(xx+22, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							bigpixel(xx+24, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							bigpixel(xx+26, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							bigpixel(xx+28, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							bigpixel(xx+30, yy+i3+16, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-					}
-
-					if ((!bSkipScanLine[i1][sc]) && (yy+i3 == scanline)) {
-						t = pixelMask(p_add + 16, F18ASpriteColorLine);	// Modified by RasmusM
-						if (t&0x80)
-							bigpixel(xx+16, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							bigpixel(xx+18, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							bigpixel(xx+20, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)	
-							bigpixel(xx+22, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							bigpixel(xx+24, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							bigpixel(xx+26, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							bigpixel(xx+28, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							bigpixel(xx+30, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
+							// rendering
+							if (col != 0xff00ff00) {
+								*plong = col;
+							}
+						}
 					}
 				}
-				sc++;
-				p_add += i3&0x01;
+
+				if (mag) {
+					xx += 2;
+					plong += 2;
+				} else {
+					++xx;
+					++plong;
+				}
+				mask >>= 1;
 			}
-		} else {
-			for (i3=0; i3<8; i3++)
-			{	
-				t = pixelMask(p_add++, F18ASpriteColorLine);	// Modified by RasmusM
-
-				if ((!bSkipScanLine[i1][sc]) && (yy+i3 == scanline)) {
-					if (t&0x80)
-						spritepixel(xx, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-					if (t&0x40)
-						spritepixel(xx+1, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-					if (t&0x20)
-						spritepixel(xx+2, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-					if (t&0x10)
-						spritepixel(xx+3, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-					if (t&0x08)
-						spritepixel(xx+4, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-					if (t&0x04)
-						spritepixel(xx+5, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-					if (t&0x02)
-						spritepixel(xx+6, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-					if (t&0x01)
-						spritepixel(xx+7, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-				}
-
-				if (dblSize)		// double-size sprites, need to draw 3 more chars 
-				{	
-					t = pixelMask(p_add + 7, F18ASpriteColorLine);	// Modified by RasmusM
-
-					if ((!bSkipScanLine[i1][sc+8]) && (yy+i3+8 == scanline)) {
-						if (t&0x80)
-							spritepixel(xx, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							spritepixel(xx+1, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							spritepixel(xx+2, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)
-							spritepixel(xx+3, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							spritepixel(xx+4, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							spritepixel(xx+5, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							spritepixel(xx+6, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							spritepixel(xx+7, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-
-						t = pixelMask(p_add + 23, F18ASpriteColorLine);	// Modified by RasmusM
-						if (t&0x80)
-							spritepixel(xx+8, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							spritepixel(xx+9, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							spritepixel(xx+10, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)
-							spritepixel(xx+11, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							spritepixel(xx+12, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							spritepixel(xx+13, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							spritepixel(xx+14, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							spritepixel(xx+15, yy+i3+8, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-					}
-
-					if ((!bSkipScanLine[i1][sc]) && (yy+i3 == scanline)) {
-						t = pixelMask(p_add + 15, F18ASpriteColorLine);	// Modified by RasmusM
-						if (t&0x80)
-							spritepixel(xx+8, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[0] : col);
-						if (t&0x40)
-							spritepixel(xx+9, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[1] : col);
-						if (t&0x20)
-							spritepixel(xx+10, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[2] : col);
-						if (t&0x10)	
-							spritepixel(xx+11, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[3] : col);
-						if (t&0x08)
-							spritepixel(xx+12, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[4] : col);
-						if (t&0x04)
-							spritepixel(xx+13, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[5] : col);
-						if (t&0x02)
-							spritepixel(xx+14, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[6] : col);
-						if (t&0x01)
-							spritepixel(xx+15, yy+i3, F18AECModeSprite ? paletteBase + F18ASpriteColorLine[7] : col);
-					}
-				}
-				sc++;
-			}
+			// Second character, if in double-size sprite mode
+			p_add += 16;
 		}
 	}
+
 	// Set the VDP collision bit
 	if (SprColFlag) {
 		VDPS|=VDPS_SCOL;
 	}
 	if (b5OnLine != -1) {
-		VDPS|=VDPS_5SPR;
-		VDPS&=(VDPS_INT|VDPS_5SPR|VDPS_SCOL);
-		VDPS|=b5OnLine&(~(VDPS_INT|VDPS_5SPR|VDPS_SCOL));
+		VDPS &= (VDPS_INT|VDPS_5SPR|VDPS_SCOL);
+		VDPS |= (b5OnLine&(~(VDPS_INT|VDPS_5SPR|VDPS_SCOL))) | VDPS_5SPR;
 	} else {
 		VDPS&=(VDPS_INT|VDPS_5SPR|VDPS_SCOL);
 		// TODO: so if all 32 sprites are in used, the 5-on-line value for not
 		// having 5 on a line anywhere will be 0? (0x1f+1)=0x20 -> 0x20&0x1f = 0!
+		// See notes above.
 		// The correct behaviour is probably to count in realtime - that goes in with
-		// the scanline code.
+		// the scanline code. -- Except I don't think that will work here because
+		// the CPU doesn't execute in parallel with this processing... random number
+		// might actually BE better...
 		VDPS|=(highest+1)&(~(VDPS_INT|VDPS_5SPR|VDPS_SCOL));
 	}
 }
 
-////////////////////////////////////////////////////////////
-// Draw a pixel onto the backbuffer surface
-////////////////////////////////////////////////////////////
-void pixel(int x, int y, int c)
-{
-	if ((x > 255)||(y>192)) {
-		debug_write("here");
-	}
-
-	framedata[((199-y)<<8)+((199-y)<<4)+x+8]=GETPALETTEVALUE(c);
-}
-
-////////////////////////////////////////////////////////////
-// Draw a pixel onto the backbuffer surface in 80 column mode
-////////////////////////////////////////////////////////////
-void pixel80(int x, int y, int c)
-{
-	framedata[((199-y)<<9)+((199-y)<<4)+x+8]=GETPALETTEVALUE(c);
-}
-
-////////////////////////////////////////////////////////////
-// Draw a range-checked pixel onto the backbuffer surface
-////////////////////////////////////////////////////////////
-void spritepixel(int x, int y, int c)
-{
-	if ((y>191)||(y<0)) return;
-    if ((VDPREG[1] & 0x10) == 0) {
-        // normal modes
-        if ((x>255)||(x<0)) return;
-    } else {
-        // text mode - we only get here in the F18A case, and it truncates on the text coordinates
-        if ((x>=248)||(x<8)) return;
-    }
-	
-	if (SprColBuf[x][y]) {
-		SprColFlag=1;
-	} else {
-		SprColBuf[x][y]=1;
-	}
-
-	if (!(F18AECModeSprite ? c % F18ASpritePaletteSize : c)) return;		// don't DRAW transparent, Modified by RasmusM
-	// TODO: this is probably okay but needs to be cleaned up with removal of TIPALETTE - note we do NOT use GETPALETTEVALUE
-	// here because the palette index was calculated for full ECM sprites
-	framedata[((199-y)<<8)+((199-y)<<4)+x+8] = F18APalette[c];	// Modified by RasmusM
-	return;
-}
-
-////////////////////////////////////////////////////////////
-// Draw a magnified pixel onto the backbuffer surface
-////////////////////////////////////////////////////////////
-void bigpixel(int x, int y, int c)
-{
-	spritepixel(x,y,c);
-	spritepixel(x+1,y,c);
-//	spritepixel(x,y+1,c);
-//	spritepixel(x+1,y+1,c);
-}
-
+#if 0
 ////////////////////////////////////////////////////////////
 // Pixel mask
+// Function by Rasmus to get 8 color pixels for one sprite for F18A
 ////////////////////////////////////////////////////////////
 int pixelMask(int addr, int F18ASpriteColorLine[])
 {
@@ -2922,426 +2240,9 @@ int pixelMask(int addr, int F18ASpriteColorLine[])
 	}
 	return t;
 }
+#endif
 
-////////////////////////////////////////////////////////////
-// DirectX full screen enumeration callback
-////////////////////////////////////////////////////////////
-HRESULT WINAPI myCallBack(LPDDSURFACEDESC2 ddSurface, LPVOID pData) {
-	int *c;
-
-	c=(int*)pData;
-
-	if (ddSurface->ddpfPixelFormat.dwRGBBitCount == (DWORD)*c) {
-		*c=(*c)|0x80;
-		return DDENUMRET_CANCEL;
-	}
-	return DDENUMRET_OK;
-}
-
-////////////////////////////////////////////////////////////
-// Setup DirectDraw, with the requested fullscreen mode
-// In order for Fullscreen to work, only the main thread
-// may call this function!
-////////////////////////////////////////////////////////////
-void SetupDirectDraw(int fullscreen) {
-	int x,y,c;
-	RECT myRect;
-
-	EnterCriticalSection(&VideoCS);
-
-	// directdraw is deprecated -- for now we can still do this, but
-	// we need to replace this API with Direct3D (TODO)
-    HINSTANCE hInstDDraw;
-    LPDIRECTDRAWCREATEEX pDDCreate = NULL;
-
-    hInstDDraw = LoadLibrary( "ddraw.dll" );
-    if( hInstDDraw == NULL ) {
-		MessageBox(myWnd, "Can't load DLL for DirectDraw 7\nClassic99 Requires DirectX 7 for DX and Full screen modes", "Classic99 Error", MB_OK);
-		lpdd=NULL;
-		StretchMode=0;
-		goto optout;
-	}
-
-    pDDCreate = ( LPDIRECTDRAWCREATEEX )GetProcAddress( hInstDDraw, "DirectDrawCreateEx" );
-
-	if (pDDCreate(NULL, (void**)&lpdd, IID_IDirectDraw7, NULL)!=DD_OK) {
-		MessageBox(myWnd, "Unable to initialize DirectDraw 7\nClassic99 Requires DirectX 7 for DX and Full screen modes", "Classic99 Error", MB_OK);
-		lpdd=NULL;
-		StretchMode=0;
-	} else {
-		if (fullscreen) {
-			DDSURFACEDESC2 myDesc;
-
-			GetWindowRect(myWnd, &myRect);
-
-			switch (fullscreen) {
-				case 1: x=320; y=240; c=8; break;
-				case 2: x=640; y=480; c=8; break;
-				case 3: x=640; y=480; c=16; break;
-				case 4: x=640; y=480; c=32; break;
-				case 5: x=800; y=600; c=16; break;
-				case 6: x=800; y=600; c=32; break;
-				case 7: x=1024; y=768; c=16; break;
-				case 8: x=1024; y=768; c=32; break;
-				default:x=640; y=480; c=16; break;
-			}
-
-			// Check if mode is legal
-			ZeroMemory(&myDesc, sizeof(myDesc));
-			myDesc.dwSize=sizeof(myDesc);
-			myDesc.dwFlags=DDSD_HEIGHT | DDSD_WIDTH;
-			myDesc.dwWidth=x;
-			myDesc.dwHeight=y;
-			lpdd->EnumDisplayModes(0, &myDesc, (void*)&c, myCallBack);
-			// If a valid mode was found, 'c' has 0x80 ORd with it
-			if (0 == (c&0x80)) {
-				MessageBox(myWnd, "Requested graphics mode is not supported on the primary display.", "Classic99 Error", MB_OK);
-				if (lpdd) lpdd->Release();
-				lpdd=NULL;
-				StretchMode=0;
-				MoveWindow(myWnd, myRect.left, myRect.top, myRect.right-myRect.left, myRect.bottom-myRect.top, true);
-				goto optout;
-			}
-
-			c&=0x7f;	// Remove the flag bit
-
-			if (lpdd->SetCooperativeLevel(myWnd, DDSCL_EXCLUSIVE | DDSCL_ALLOWREBOOT | DDSCL_FULLSCREEN | DDSCL_ALLOWMODEX)!=DD_OK) {
-				MessageBox(myWnd, "Unable to set cooperative level\nFullscreen DX is not available", "Classic99 Error", MB_OK);
-				if (lpdd) lpdd->Release();
-				lpdd=NULL;
-				StretchMode=0;
-				MoveWindow(myWnd, myRect.left, myRect.top, myRect.right-myRect.left, myRect.bottom-myRect.top, true);
-				goto optout;
-			}
-
-			if (lpdd->SetDisplayMode(x,y,c,0,0) != DD_OK) {
-				MessageBox(myWnd, "Unable to set display mode.\nRequested DX mode is not available", "Classic99 Error", MB_OK);
-				MoveWindow(myWnd, myRect.left, myRect.top, myRect.right-myRect.left, myRect.bottom-myRect.top, true);
-				StretchMode=0;
-				goto optout;
-			}
-
-            // disable the menu
-            SetMenuMode(false, false);
-		} else {
-			if (lpdd->SetCooperativeLevel(myWnd, DDSCL_NORMAL)!=DD_OK) {
-				MessageBox(myWnd, "Unable to set cooperative level\nDX mode is not available", "Classic99 Error", MB_OK);
-				if (lpdd) lpdd->Release();
-				lpdd=NULL;
-				StretchMode=0;
-				goto optout;
-			}
-
-            // enable the menu
-            SetMenuMode(true, !bEnableAppMode);
-		}
-
-		ZeroMemory(&CurrentDDSD, sizeof(CurrentDDSD));
-		CurrentDDSD.dwSize=sizeof(CurrentDDSD);
-		CurrentDDSD.dwFlags=DDSD_CAPS;
-		CurrentDDSD.ddsCaps.dwCaps=DDSCAPS_PRIMARYSURFACE;
-
-		if (lpdd->CreateSurface(&CurrentDDSD, &lpdds, NULL) !=DD_OK) {
-			MessageBox(myWnd, "Unable to create primary surface\nDX mode is not available", "Classic99 Error", MB_OK);
-			if (lpdd) lpdd->Release();
-			lpdd=NULL;
-			StretchMode=0;
-			goto optout;
-		}
-
-		ZeroMemory(&CurrentDDSD, sizeof(CurrentDDSD));
-		CurrentDDSD.dwSize=sizeof(CurrentDDSD);
-		CurrentDDSD.dwFlags=DDSD_HEIGHT | DDSD_WIDTH;
-		switch (FilterMode) {
-			case 0:		// none
-				CurrentDDSD.dwWidth=256+16;
-				CurrentDDSD.dwHeight=192+16;
-				break;
-
-			case 4:		// TV
-				CurrentDDSD.dwWidth=TV_WIDTH;
-				CurrentDDSD.dwHeight=384+29;
-				break;
-
-			case 5:		// hq4x
-				CurrentDDSD.dwWidth=(256+16)*4;
-				CurrentDDSD.dwHeight=(192+16)*4;
-				break;
-
-			default:	// others (*2)
-				CurrentDDSD.dwWidth=512+32;
-				CurrentDDSD.dwHeight=384+29;
-				break;
-		}
-
-		if (lpdd->CreateSurface(&CurrentDDSD, &ddsBack, NULL) !=DD_OK) {
-			MessageBox(myWnd, "Unable to create back buffer surface\nDX mode is not available", "Classic99 Error", MB_OK);
-			ddsBack=NULL;
-			lpdds->Release();
-			lpdds=NULL;
-			lpdd->Release();
-			lpdd=NULL;
-			StretchMode=0;
-			goto optout;
-		}
-
-		if (!fullscreen) {
-			if (lpdd->CreateClipper(0, &lpDDClipper, NULL) != DD_OK) {
-				MessageBox(myWnd, "Warning: Unable to create Direct Draw Clipper", "Classic99 Warning", MB_OK);
-			} else {
-				if (lpDDClipper->SetHWnd(0, myWnd) != DD_OK) {
-					MessageBox(myWnd, "Warning: Unable to set Clipper Window", "Classic99 Warning", MB_OK);
-					lpDDClipper->Release();
-					lpDDClipper=NULL;
-				} else {
-					if (DD_OK != lpdds->SetClipper(lpDDClipper)) {
-						MessageBox(myWnd, "Warning: Unable to attach Clipper", "Classic99 Warning", MB_OK);
-						lpDDClipper->Release();
-						lpDDClipper=NULL;
-					}
-				}
-			}
-		}
-	}
-	LeaveCriticalSection(&VideoCS);
-	return;
-
-optout: ;
-	takedownDirectDraw();
-	LeaveCriticalSection(&VideoCS);
-}
-
-////////////////////////////////////////////////////////////
-// Release all references to DirectDraw objects
-////////////////////////////////////////////////////////////
-void takedownDirectDraw() {	
-	EnterCriticalSection(&VideoCS);
-
-	if (NULL != lpDDClipper) lpDDClipper->Release();
-	lpDDClipper=NULL;
-	if (NULL != ddsBack) ddsBack->Release();
-	ddsBack=NULL;
-	if (NULL != lpdds) lpdds->Release();
-	lpdds=NULL;
-	if (NULL != lpdd) lpdd->Release();
-	lpdd=NULL;
-
-	LeaveCriticalSection(&VideoCS);
-}
-
-////////////////////////////////////////////////////////////
-// Resize the back buffer
-////////////////////////////////////////////////////////////
-int ResizeBackBuffer(int w, int h) {
-	EnterCriticalSection(&VideoCS);
-
-	if (NULL != ddsBack) ddsBack->Release();
-	ddsBack=NULL;
-
-	if (NULL == lpdd) {
-		SetupDirectDraw(0);
-		if (NULL == lpdd) {
-			MessageBox(myWnd, "Unable to create back buffer surface\nDX mode is not available", "Classic99 Error", MB_OK);
-			ddsBack=NULL;
-			StretchMode=0;
-			LeaveCriticalSection(&VideoCS);
-			return 1;
-		}
-	}
-
-	ZeroMemory(&CurrentDDSD, sizeof(CurrentDDSD));
-	CurrentDDSD.dwSize=sizeof(CurrentDDSD);
-	CurrentDDSD.dwFlags=DDSD_HEIGHT | DDSD_WIDTH;
-	CurrentDDSD.dwWidth=w;
-	CurrentDDSD.dwHeight=h;
-
-	if (lpdd->CreateSurface(&CurrentDDSD, &ddsBack, NULL) != DD_OK) {
-		MessageBox(myWnd, "Unable to create back buffer surface\nDX mode is not available", "Classic99 Error", MB_OK);
-		ddsBack=NULL;
-		StretchMode=0;
-		LeaveCriticalSection(&VideoCS);
-		return 1;
-	}
-
-	LeaveCriticalSection(&VideoCS);
-	return 0;
-}
-
-//////////////////////////////////////
-// Save a screenshot - just BMP for now
-// there are lots of nice helpers for others in
-// 2000 and higher, but that's ok 
-//////////////////////////////////////
-void SaveScreenshot(bool bAuto, bool bFiltered) {
-	static int nLastNum=0;
-	static CString csFile;
-	CString csTmp;
-	OPENFILENAME ofn;
-	char buf[256], buf2[256];
-	BOOL bRet;
-
-	if ((!bAuto) || (csFile.IsEmpty())) {
-		memset(&ofn, 0, sizeof(OPENFILENAME));
-		ofn.lStructSize=sizeof(OPENFILENAME);
-		ofn.hwndOwner=myWnd;
-		ofn.lpstrFilter="BMP Files\0*.bmp\0\0";
-		strcpy(buf, "");
-		ofn.lpstrFile=buf;
-		ofn.nMaxFile=256;
-		strcpy(buf2, "");
-		ofn.lpstrFileTitle=buf2;
-		ofn.nMaxFileTitle=256;
-		ofn.Flags=OFN_HIDEREADONLY|OFN_OVERWRITEPROMPT;
-
-		char szTmpDir[MAX_PATH];
-		GetCurrentDirectory(MAX_PATH, szTmpDir);
-
-		bRet = GetSaveFileName(&ofn);
-
-		SetCurrentDirectory(szTmpDir);
-
-		csTmp = ofn.lpstrFile;				// save the file we are opening now
-		if (ofn.nFileExtension > 1) {
-			csFile = csTmp.Left(ofn.nFileExtension-1);
-		} else {
-			csFile = csTmp;
-			csTmp+=".bmp";
-		}
-	} else {
-		int nCnt=10000;
-		for (;;) {
-			csTmp.Format("%s%04d.bmp", (LPCSTR)csFile, nLastNum++);
-			FILE *fp=fopen(csTmp, "r");
-			if (NULL != fp) {
-				fclose(fp);
-				nCnt--;
-				if (nCnt == 0) {
-					MessageBox(myWnd, "Can't take another auto screenshot without overwriting file!", "Classic99 Error", MB_OK);
-					return;
-				}
-				continue;
-			}
-			break;
-		}
-	}
-
-	if (bRet) {
-		// we just create a 24-bit BMP file
-		int nX, nY, nBits;
-		unsigned char *pBuf;
-
-		if (bFiltered) {
-			switch (FilterMode) {
-			case 0:		// none
-				nX=256+16;
-				nY=192+16;
-				pBuf=(unsigned char*)framedata;
-				nBits=32;
-				break;
-			
-			case 4:		// TV
-				nX=TV_WIDTH;
-				nY=384+29;
-				pBuf=(unsigned char*)framedata2;
-				nBits=32;
-				break;
-
-			case 5:		// hq4x
-				nX=(256+16)*4;
-				nY=(192+16)*4;
-				pBuf=(unsigned char*)framedata2;
-				nBits=32;
-				break;
-
-			default:	// All SAI2x modes
-				nX=512+32;
-				nY=384+29;
-				pBuf=(unsigned char*)framedata2;
-				nBits=32;
-				break;
-			}
-		} else {
-			nX=256+16;
-			nY=192+16;
-			pBuf=(unsigned char*)framedata;
-			nBits=32;
-		}
-
-		FILE *fp=fopen(csTmp, "wb");
-		if (NULL == fp) {
-			MessageBox(myWnd, "Failed to open output file", "Classic99 Error", MB_OK);
-			return;
-		}
-
-		int tmp;
-		fputc('B', fp);				// signature, BM
-		fputc('M', fp);
-		tmp=nX*nY*3+54;
-		fwrite(&tmp, 4, 1, fp);		// size of file
-		tmp=0;
-		fwrite(&tmp, 4, 1, fp);		// four reserved bytes (2x 2 byte fields)
-		tmp=26;
-		fwrite(&tmp, 4, 1, fp);		// offset to data
-		tmp=12;
-		fwrite(&tmp, 4, 1, fp);		// size of the header (v1)
-		fwrite(&nX, 2, 1, fp);		// width in pixels
-		fwrite(&nY, 2, 1, fp);		// height in pixels
-		tmp=1;
-		fwrite(&tmp, 2, 1, fp);		// number of planes (1)
-		tmp=24;
-		fwrite(&tmp, 2, 1, fp);		// bits per pixel (0x18=24)
-
-		if (nBits == 16) {
-			// 16-bit 0rrr rrgg gggb bbbb values
-			// TODO: not used anymore
-			unsigned short *p = (unsigned short*)pBuf;
-
-			for (int idx=0; idx<nX*nY; idx++) {
-				int r,g,b;
-				
-				// extract colors
-				r=((*p)&0x7c00)>>10;
-				g=((*p)&0x3e0)>>5;
-				b=((*p)&0x1f);
-
-				// scale up from 5 bit to 8 bit
-				r<<=3;
-				g<<=3;
-				b<<=3;
-
-				// write out to file
-				fputc(b, fp);
-				fputc(g, fp);
-				fputc(r, fp);
-
-				p++;
-			}
-		} else {
-			// 32-bit 0BGR
-			for (int idx=0; idx<nX*nY; idx++) {
-				int r,g,b;
-				
-				// extract colors
-				b=*pBuf++;
-				g=*pBuf++;
-				r=*pBuf++;
-				pBuf++;					// skip	0
-
-				// write out to file
-				fputc(b, fp);
-				fputc(g, fp);
-				fputc(r, fp);
-			}
-		}
-
-		fclose(fp);
-
-		CString csTmp2;
-		csTmp2.Format("Classic99 - Saved %sfiltered - %s", bFiltered?"":"un", (LPCSTR)csTmp);
-		SetWindowText(myWnd, csTmp2);
-	}
-}
-
+#if 0
 // F18A Status registers
 // This function must only be called when the register is not 0
 // and F18A is active
@@ -3419,8 +2320,11 @@ unsigned char getF18AStatus() {
 	debug_write("Warning - bad register value %d", F18AStatusRegisterNo);
 	return 0;
 }
+#endif
 
+#if 0
 // captures a text or graphics mode screen (will do bitmap too, assuming graphics mode)
+// I think this is for edit->copy
 CString captureScreen(int offset) {
     CString csout;
     int stride = getCharsPerLine();
@@ -3442,5 +2346,4 @@ CString captureScreen(int offset) {
 
     return csout;
 }
-
-
+#endif
