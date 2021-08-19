@@ -284,7 +284,7 @@ protected:
 	Word X_flag;									// Set during an 'X' instruction, 0 if not active, else address of PC after the X (ignoring arguments if any)
 	Word ST;										// Status register
 	Word in,D,S,Td,Ts,B;							// Opcode interpretation
-	int nCycleCount;			                    // Cycles used for this operation
+	volatile long nCycleCount;	                    // Cycles used for this operation
 
 #ifdef BUILD_CPU
 	CPU9900Fctn opcode[65536];						// CPU Opcode address table

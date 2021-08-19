@@ -9,6 +9,9 @@
 #include <atomic>
 #include "System.h"
 
+// we need this because this header is included from system.h before the class is defined
+class Classic99System;
+
 // TODO: we can add a "debug_write" wrapper function to this class, and this
 // would allow the debug system to turn debug on or off per peripheral.
 

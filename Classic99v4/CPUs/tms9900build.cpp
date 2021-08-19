@@ -8,7 +8,7 @@
 #include "..\EmulatorSupport\System.h"
 #include "tms9900.h"
 
-const CPU9900Fctn opcode[64*1024] = {
+extern const CPU9900Fctn opcode[64*1024] = {
 &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , 
 &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , 
 &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , &TMS9900::op_bad , 
@@ -13119,7 +13119,7 @@ const CPU9900Fctn opcode[64*1024] = {
 &TMS9900::op_socb
 };
 
-const Word WStatusLookup[64*1024] = {
+extern const Word WStatusLookup[64*1024] = {
 0x3000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 
 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 
 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 0xc000, 
@@ -21314,7 +21314,7 @@ const Word WStatusLookup[64*1024] = {
 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000
 };
 
-const Word BStatusLookup[256] = {
+extern const Word BStatusLookup[256] = {
 0x3000, 0xc400, 0xc400, 0xc000, 0xc400, 0xc000, 0xc000, 0xc400, 
 0xc400, 0xc000, 0xc000, 0xc400, 0xc000, 0xc400, 0xc400, 0xc000, 
 0xc400, 0xc000, 0xc000, 0xc400, 0xc000, 0xc400, 0xc400, 0xc000, 

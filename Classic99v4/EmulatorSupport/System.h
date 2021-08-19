@@ -4,8 +4,8 @@
 #ifndef EMULATOR_SUPPORT_SYSTEM_H
 #define EMULATOR_SUPPORT_SYSTEM_H
 
-#include "peripheral.h"
-#include "tv.h
+#include <atomic>
+#include "tv.h"
 #include "debuglog.h"
 
 // TODO: probably need a smart pointered list of possible systems,
@@ -67,10 +67,10 @@ public:
     bool claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
                                                     
     // The CPUs normally default into these maps, but some CPUs might have their own handlers
-    uint8_t readMemoryByte(int address, int &cycles, MEMACCESSTYPE rmw);
-    void writeMemoryByte(int address, int &cycles, MEMACCESSTYPE rmw, int data);
-    uint8_t readIOByte(int address, int &cycles, MEMACCESSTYPE rmw);
-    void writeIOByte(int address, int &cycles, MEMACCESSTYPE rmw, int data);
+    uint8_t readMemoryByte(int address, volatile long &cycles, MEMACCESSTYPE rmw);
+    void writeMemoryByte(int address, volatile long &cycles, MEMACCESSTYPE rmw, int data);
+    uint8_t readIOByte(int address, volatile long &cycles, MEMACCESSTYPE rmw);
+    void writeIOByte(int address, volatile long &cycles, MEMACCESSTYPE rmw, int data);
 
     // access to the I/O
     Classic99TV *getTV() { return theTV; }
@@ -106,6 +106,7 @@ public:
         } else {
             debug_write("Invalid peripheral index for hold release %d", device);
         }
+        return true;
     }
 
     // interrupts - we don't need to track who, but we do need level and which CPU

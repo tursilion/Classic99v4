@@ -32,9 +32,9 @@
 #include "tms9900.h"
 
 #ifndef BUILD_CPU
-extern CPU9900Fctn opcode[65536];						// CPU Opcode address table
-extern Word WStatusLookup[64*1024];                     // word statuses
-extern Word BStatusLookup[256];                         // byte statuses
+extern const CPU9900Fctn opcode[65536];				// CPU Opcode address table
+extern const Word WStatusLookup[64*1024];           // word statuses
+extern const Word BStatusLookup[256];               // byte statuses
 #endif
 
 // protect the disassembly backtrace

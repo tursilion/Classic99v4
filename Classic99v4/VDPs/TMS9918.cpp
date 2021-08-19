@@ -6,6 +6,41 @@
 // and F18A versions/overrides and clean this one up as a base class
 // TODO: VDP register write breakpoints?
 
+#if 0
+F18A Reset from Matt:
+
+0 in all registers, except:
+
+VR1 = >40 (no blanking, the 4K/16K bit is ignored in the F18A)
+VR3 = >10 (color table at >0400)
+VR4 = >01 (pattern table at >0800)
+VR5 = >0A (sprite table at >0500)
+VR6 = >02 (sprite pattern table at >1000)
+VR7 = >1F (fg=black, bg=white)
+VR30 = sprite_max (set from external jumper setting)
+VR48 = 1 (increment set to 1)
+VR51 = 32 (stop sprite to max)
+VR54 = >40 (GPU PC MSB)
+VR55 = >00 (GPU PC LBS)
+VR58 = 6 (GROMCLK divider)
+
+The real 9918A will set all VRs to 0, which basically makes the screen black, blank, and off, 4K VRAM selected, and no interrupts. 
+
+Note that nothing restores the F18A palette registers to the power-on defaults, other than a power on.
+
+As for the GPU, the VR50 >80 reset will *not* stop the GPU, and if the GPU code is modifying VDP registers, then it can overwrite the reset values.  However, since the reset does clear VR50, the horizontal and vertical interrupt enable bits will be cleared, and thus the GPU will not be triggered on those events.
+
+The reset also changes VR54 and VR55, but they are *not* loaded to the GPU PC (program counter).  The only events that change the GPU PC are:
+
+* normal GPU instruction execution.
+* the external hardware reset.
+* writing to VR55 (GPU PC LSB).
+* writing >00 to VR56 (load GPU PC from VR54 and VR55, then idle).
+
+#endif
+
+
+
 #include "TMS9918.h"
 #include <ctype.h>
 #include "..\EmulatorSupport\peripheral.h"
@@ -290,7 +325,7 @@ uint8_t TMS9918::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE 
 			// we have to remember if the prefetch was initted, since there are other things it could have
 			debug_write("Breakpoint - PC >%04X reading uninitialized VDP memory at >%04X (or other prefetch)", 
 						getInterestingDataIndirect(INDIRECT_MAIN_CPU_PC), (RealVDP-1)&0x3fff);
-			theCore->triggerBreakPoint();
+			theCore->triggerBreakpoint();
 		}
 
         if (rmw == ACCESS_READ) {
@@ -369,7 +404,7 @@ void TMS9918::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
 				// upon - particularly since it involved investigating freed buffers ;)
 				if (((VDPADD == 0x3fe1)||(VDPADD == 0x3fe2)) && (getInterestingData(DATA_TMS9900_8356) == 0x3fe1)) {
 					debug_write("Software may be trying to track filenames using deleted TI VDP buffers... (>8356)");
-					if (getInterestingData(DATA_BREAK_ON_DISK_CORRUPT) == DATA_TRUE) theCore->triggerBreakPoint();
+					if (getInterestingData(DATA_BREAK_ON_DISK_CORRUPT) == DATA_TRUE) theCore->triggerBreakpoint();
 				}
 			}
 
@@ -682,6 +717,8 @@ bool TMS9918::operate(double timestamp) {
 
 		lastTimestamp += timePerScanline;
 	}
+
+	return true;
 }
 
 // release everything claimed in init, save NV data, etc
@@ -725,7 +762,7 @@ void TMS9918::getDebugWindow(char *buffer) {
 		// bitmap - check if the mask has holes in it
 		tmp1 = 16;
 		tmp2 = CTsize;
-		while ((tmp1--) && ((tmp2&0x8000)==0) { tmp2<<=1; }
+		while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
 		if (tmp1 > 0) {
 			while (tmp1--) {
 				tmp2<<=1;
@@ -743,7 +780,7 @@ void TMS9918::getDebugWindow(char *buffer) {
 		// bitmap - check if the mask has holes in it
 		tmp1 = 16;
 		tmp2 = PDTsize;
-		while ((tmp1--) && ((tmp2&0x8000)==0) { tmp2<<=1; }
+		while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
 		if (tmp1 > 0) {
 			while (tmp1--) {
 				tmp2<<=1;
@@ -1134,7 +1171,6 @@ char TMS9918::VDPGetChar(int x, int y, int width, int height) {
 // Determines which screen mode to draw
 void TMS9918::VDPdisplay(int scanline)
 {
-	int idx;
 	int nMax;
 
 	// if no display, can not draw
@@ -1270,7 +1306,7 @@ void TMS9918::VDPdisplay(int scanline)
 			// draw digits
 			for (int i2=0; i2<5; i2++) {
 				// TODO: probably wrong calculation now
-				unsigned int *pDat = (unsigned char*)pImg->data + (256+16)*(6-i2);
+				uint32_t *pDat = (uint32_t*)((unsigned char*)pImg->data + (256+16)*(6-i2));
 				for (int idx = 0; idx<(signed)strlen(buf); idx++) {
 					int digit = buf[idx] - '0';
 					pDat = drawTextLine(pDat, digpat[digit][i2]);
@@ -2001,7 +2037,7 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
 // renders a string to the buffer - '1' is white, anything else black
 // returns new pDat
 unsigned int* TMS9918::drawTextLine(uint32_t *pDat, const char *buf) {
-	if (pDat == NULL) return;
+	if (pDat == NULL) return pDat;
 
 	for (int idx = 0; idx<(signed)strlen(buf); idx++) {
         if (buf[idx] == '1') {
