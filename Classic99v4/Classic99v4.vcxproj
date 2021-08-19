@@ -171,6 +171,8 @@
     <ClInclude Include="EmulatorSupport\interestingData.h" />
     <ClInclude Include="EmulatorSupport\peripheral.h" />
     <ClInclude Include="EmulatorSupport\tv.h" />
+    <ClInclude Include="Memories\TI994GROM.h" />
+    <ClInclude Include="Memories\TI994ROM.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="EmulatorSupport\System.h" />
     <ClInclude Include="targetver.h" />
@@ -192,6 +194,7 @@
     <ClCompile Include="Memories\TI994AROM.cpp" />
     <ClCompile Include="Memories\TI994GROM.cpp" />
     <ClCompile Include="Memories\TI994ROM.cpp" />
+    <ClCompile Include="Memories\TI994ROMData.cpp" />
     <ClCompile Include="Systems\Coleco\ColecoVision.cpp" />
     <ClCompile Include="VDPs\F18A_19.cpp" />
     <ClCompile Include="Systems\Coleco\Phoenix.cpp" />

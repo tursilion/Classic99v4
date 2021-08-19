@@ -53,6 +53,10 @@ public:
     Classic99System();
     virtual ~Classic99System();
 
+    // disallow copy and assign constructors
+    Classic99System(Classic99System const& other) = delete;
+    Classic99System &operator=(Classic99System const &other) = delete;
+
     // Setup the system, create everything needed
     virtual bool initSystem() = 0;      // create the needed components and register them
     // tear down the system, destroy everything created. Before being called,

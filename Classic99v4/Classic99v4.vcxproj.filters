@@ -76,6 +76,12 @@
     <ClInclude Include="EmulatorSupport\interestingData.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
+    <ClInclude Include="Memories\TI994GROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
+    <ClInclude Include="Memories\TI994ROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -159,6 +165,9 @@
     </ClCompile>
     <ClCompile Include="EmulatorSupport\interestingData.cpp">
       <Filter>Emulator Support</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994ROMData.cpp">
+      <Filter>Memories</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

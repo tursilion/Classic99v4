@@ -111,6 +111,10 @@ public:
     };
     Classic99Peripheral() = delete;
 
+    // disallow copy and assign constructors
+    Classic99Peripheral(Classic99Peripheral const& other) = delete;
+    Classic99Peripheral &operator=(Classic99Peripheral const &other) = delete;
+
     // dummy read and write - IO flag is unused on most, but just in case they need to know
     virtual uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
     virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
