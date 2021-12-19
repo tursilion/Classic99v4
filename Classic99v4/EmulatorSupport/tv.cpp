@@ -62,7 +62,8 @@ bool Classic99TV::init() {
         }
 
         al_register_event_source(evtQ, al_get_display_event_source(myWnd));
-        al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_RGBA_8888);   // let's see how well forcing it works...
+        //al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_RGBA_8888);   // let's see how well forcing it works...
+        al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_ARGB_8888);   // let's see how well forcing it works...
 
         debug_write("Bitmap format is %d", al_get_new_bitmap_format());
     }
@@ -145,8 +146,10 @@ bool Classic99TV::runWindowLoop() {
 
         // render the layers
         for (unsigned int idx=0; idx<layers.size(); ++idx) {
-            al_draw_scaled_bitmap(layers[idx]->bmp, 0, 0, layers[idx]->w, layers[idx]->h, 
-                                                    0, 0, windowXSize, windowYSize, 0);
+            if (nullptr != layers[idx]->bmp) {
+                al_draw_scaled_bitmap(layers[idx]->bmp, 0, 0, layers[idx]->w, layers[idx]->h, 
+                                                        0, 0, windowXSize, windowYSize, 0);
+            }
         }
 
         al_flip_display();

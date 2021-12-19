@@ -49,7 +49,8 @@ void Classic99Peripheral::testBreakpoint(bool isRead, int addr, bool isIO, int d
     // assumes a non-sparse breaks[] array!
     for (int idx=0; idx<MAX_BREAKPOINTS; ++idx) {
         if (breaks[idx].typeMask == 0) break;
-            if (addr != breaks[idx].address) continue;                                              // check address match (most likely false)
+            if (breaks[idx].typeMask & BREAKPOINT::BREAKPOINT_MASK_PERIPHERAL) continue;            // skip non-CPU address breaks
+            if (!breaks[idx].CheckRange(addr, 0)) continue;                                         // check address match (most likely false)
             if ((isRead)&&((breaks[idx].typeMask&BREAKPOINT::BREAKPOINT_MASK_READ)==0)) continue;   // check for read
             if ((!isRead)&&((breaks[idx].typeMask&BREAKPOINT::BREAKPOINT_MASK_WRITE)==0)) continue; // check for write
             if ((isIO)&&((breaks[idx].typeMask&BREAKPOINT::BREAKPOINT_MASK_IO)==0)) continue;       // check for IO

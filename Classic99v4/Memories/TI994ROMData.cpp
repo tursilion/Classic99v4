@@ -7,7 +7,7 @@ extern const uint8_t TI994ROMData[8192] = {
 	//
 	// Data file CON4R0.ROM - Aug 19, 2021
 	//
-	// TI-99/4 CPU ROM data, 8k
+	// TI-99/4 CPU ROM data, 8k, loads at >0000
 	// This data is Copyright to Texas Instruments, used in Classic99 with permission
 	//
 	0x83,0xE0,0x00,0x12,0x83,0xC0,0x0A,0x4C,0x83,0xC0,0x0A,0x12,0x30,0xAA,0x04,0x60,	// 00000000 .......L....0..` //

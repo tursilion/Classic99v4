@@ -5,6 +5,7 @@
 // Basically, I want to get this VDP working more or less like the old Classic99 one did, then I can split it up into the 9918A
 // and F18A versions/overrides and clean this one up as a base class
 // TODO: VDP register write breakpoints?
+// TODO: make sure this is a TMS9918 (not A) after the other variants are dropped in
 
 #if 0
 F18A Reset from Matt:
@@ -206,6 +207,7 @@ const char *digpat[10][5] = {
 // some local defines
 #define REDRAW_LINES 262
 
+#define HOT_PINK_TRANS 0x00ff00ff
 
 // So the TMS9918 only has two addresses - zero for data and 1 for registers
 
@@ -344,8 +346,8 @@ uint8_t TMS9918::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE 
 
 // write request from the system
 void TMS9918::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
-    // address 0 - read data
-    // address 1 - read status
+    // address 0 - write data
+    // address 1 - write address
     // IO: don't care (but passed to breakpoint test)
     // cycles - no additional cycles added, but we do need the existing count
     // rmw - direct access when free
@@ -657,6 +659,8 @@ bool TMS9918::init(int index) {
 	// the character set and sprites, and blit them all at once, but that would
 	// not allow for a scanline-based display... so we'll just pixel them...
 	pDisplay = theCore->getTV()->requestLayer(TMS_WIDTH, TMS_HEIGHT);
+	hzRate = 60;
+	bDisableBlank = true;
 
     vdpReset(true);     // todo: need to allow warm reset
 
@@ -914,11 +918,11 @@ void TMS9918::wVDPreg(uint8_t r, uint8_t v) {
 	{	/* color of screen, set TV background color to match */
 		t=v&0xf;
 		ALLEGRO_COLOR bg;
-		// pixel format RGBA
+		// pixel format ARGB
 		bg.r = (F18APalette[t]>>24)&0xff;
 		bg.g = (F18APalette[t]>>16)&0xff;
 		bg.b = (F18APalette[t]>>8)&0xff;
-		bg.a=255;
+		bg.a = 255;
 		theCore->getTV()->setBgColor(bg);
 		redraw_needed=REDRAW_LINES;
 	}
@@ -1034,12 +1038,12 @@ void TMS9918::vdpReset(bool isCold) {
     if (isCold) {
 	    // todo: move the other system-level init (what does the VDP do?) into here
 	    // convert from 12-bit to float and load F18APalette
-		// RGBA palette
+		// ARGB palette
 	    for (int idx=0; idx<64; idx++) {
 		    int r = (F18APaletteReset[idx]&0xf00)>>8;
 		    int g = (F18APaletteReset[idx]&0xf0)>>4;
 		    int b = (F18APaletteReset[idx]&0xf);
-		    F18APalette[idx] = (r<<28)|(r<<24)|(g<<20)|(g<<16)|(b<<12)|(b<<8)|0xff;	// double up each palette gun, suggestion by Sometimes99er
+		    F18APalette[idx] = (r<<20)|(r<<16)|(g<<12)|(g<<8)|(b<<4)|(b)|0xff000000;	// double up each palette gun, suggestion by Sometimes99er
 	    }
 
 		memset(VDPREG, 0, sizeof(VDPREG));
@@ -1175,11 +1179,13 @@ void TMS9918::VDPdisplay(int scanline)
 
 	// if no display, can not draw
 	if (NULL == pDisplay) return;
+	if (NULL == pDisplay->bmp) return;
 
 	int reg0 = gettables(0);
 	int gfxline = scanline - 27;	// skip top border (TODO: still correct?)
 
 	// the mode is a 32-bit format with alpha, but I guess it might vary
+	// format should be ARGB
 	// Do not early RETURN after this lock!
 	int fmt = al_get_bitmap_format(pDisplay->bmp);
 	ALLEGRO_LOCKED_REGION *pImg = al_lock_bitmap(pDisplay->bmp, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_READWRITE);
@@ -1216,10 +1222,10 @@ void TMS9918::VDPdisplay(int scanline)
 					// blank out the entire line first (unrolled 4 times)
 					uint32_t *plong = pLine;
 					for (int idx=0; idx<nMax; ++idx) {
-						*(plong++) = 0xff00ff00;	// hot pink transparent
-						*(plong++) = 0xff00ff00;	// hot pink transparent
-						*(plong++) = 0xff00ff00;	// hot pink transparent
-						*(plong++) = 0xff00ff00;	// hot pink transparent
+						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
 					}
 				}
 			}
@@ -1395,8 +1401,8 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
 						}
 			        }
                 } else {
-					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1477,8 +1483,8 @@ void TMS9918::VDPgraphicsII(int scanline, int isLayer2)
     				fgc>>=4;
                 }
 				{
-					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1570,8 +1576,8 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1661,8 +1667,8 @@ void TMS9918::VDPtextII(int scanline, int isLayer2)
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1749,8 +1755,8 @@ void TMS9918::VDPtext80(int scanline, int isLayer2)
                 //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = 0xff00ff00; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1825,8 +1831,8 @@ void TMS9918::VDPillegal(int scanline, int isLayer2)
             } else {
     //			for (i3=0; i3<8; i3++)				// 6 pixels wide
 			    {	
-					if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
-					if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
 
 					*(plong++) = fgc;
 					*(plong++) = fgc;
@@ -1908,8 +1914,8 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-						if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
-						if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
+						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
 
 						*(plong++) = fgc;
 						*(plong++) = fgc;
@@ -2010,8 +2016,8 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-						if (fgc == 0) fgc = 0xff00ff00; else fgc = F18APalette[fgc];
-						if (bgc == 0) bgc = 0xff00ff00; else bgc = F18APalette[bgc];
+						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
+						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
 
 						*(plong++) = fgc;
 						*(plong++) = fgc;
@@ -2097,7 +2103,6 @@ void TMS9918::DrawSprites(int scanline)
 	}
 
 	if (NULL == pLine) return;
-	uint32_t *plong = pLine;
 
 	// check if b5OnLine is already latched, and set it if so.
 	if (VDPS & VDPS_5SPR) {
@@ -2164,7 +2169,7 @@ void TMS9918::DrawSprites(int scanline)
 			pat=pat&0xfc;				// if double-sized, it must be a multiple of 4
 		}
 		int col=VDP[curSAL]&0xf;		// sprite color
-		if (col == 0) col = 0xff00ff00; else col=F18APalette[col];
+		if (col == 0) col = HOT_PINK_TRANS; else col=F18APalette[col];
 	
 		if (VDP[curSAL]&0x80) {			// early clock
 			xx-=32;
@@ -2173,8 +2178,9 @@ void TMS9918::DrawSprites(int scanline)
 		// TODO: F18A ECM sprites are up to 8 colors so need a different fetch system
 		// for now, just collect the first pattern to scan out
 		int p_add = SDT+(pat<<3)+(scanline%8);
+		uint32_t *plong = pLine;
 		plong += xx;	// warning: can be negative, and can be offscreen!
-		for (int cnt = 0; cnt < dblSize ? 2:1; ++cnt) {
+		for (int cnt = 0; cnt < (dblSize ? 2:1); ++cnt) {
 			int mask = 0x80;
 			int p = VDP[p_add];
 			for (int idx = 0; idx<8; ++idx) {
@@ -2191,7 +2197,7 @@ void TMS9918::DrawSprites(int scanline)
 							}
 
 							// rendering
-							if (col != 0xff00ff00) {
+							if (col != HOT_PINK_TRANS) {
 								*plong = col;
 								if (xx < 255) {
 									// skipping just this is okay, cause it means end of line anyway
@@ -2206,7 +2212,7 @@ void TMS9918::DrawSprites(int scanline)
 							SprColBuf[xx] = 1;
 
 							// rendering
-							if (col != 0xff00ff00) {
+							if (col != HOT_PINK_TRANS) {
 								*plong = col;
 							}
 						}

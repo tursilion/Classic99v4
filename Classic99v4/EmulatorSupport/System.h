@@ -65,6 +65,8 @@ public:
     virtual bool runSystem(int microSeconds) = 0;   // run the system for a fixed amount of time
 
     // allocating memory space to devices
+    // TODO: this array system won't scale to 32-bit systems...??
+    // I guess we could allocate blocks instead of bytes in those cases?
     bool claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
     bool claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
     bool claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
@@ -139,7 +141,6 @@ public:
 protected:
     ALLEGRO_MUTEX *coreLock;      // our object lock
 
-private:
     // derived classes are expected to allocate these
     // read and write are separate because some systems are clever...
     PeripheralMap *memorySpaceRead;
@@ -149,10 +150,13 @@ private:
     int memorySize;     // power of 2 mask
     int ioSize;         // power of 2 mask
 
+    double currentTimestamp;
+    Classic99TV *theTV;
+
+private:
     // we have a single set of I/O devices that the peripherals can talk to
     // These MUST be initialized in the derived class constructors, and MUST point to something,
     // even a dummy if needed.
-    Classic99TV *theTV;
     // sound
     // inputs
     // etc...

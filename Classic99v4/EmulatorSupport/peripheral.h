@@ -35,16 +35,19 @@ public:
     static const int BREAKPOINT_MASK_WRITE = 0x02;
     static const int BREAKPOINT_MASK_IO = 0x04;
 
+    static const int BREAKPOINT_MASK_GROM = 0x08;
+    static const int BREAKPOINT_MASK_PERIPHERAL = (BREAKPOINT_MASK_GROM);
+
     static const int BREAKPOINT_MASK_ACCESS = BREAKPOINT_MASK_READ | BREAKPOINT_MASK_WRITE;
     static const int BREAKPOINT_MASK_READ_IO = BREAKPOINT_MASK_READ | BREAKPOINT_MASK_IO;
     static const int BREAKPOINT_MASK_WRITE_IO = BREAKPOINT_MASK_WRITE | BREAKPOINT_MASK_IO;
     static const int BREAKPOINT_MASK_ACCESS_IO = BREAKPOINT_MASK_IO | BREAKPOINT_MASK_ACCESS;
 
     BREAKPOINT() :
-        typeMask(0), page(0), address(0), dataMask(0), data(0) { 
+        typeMask(0), page(0), addressA(0), addressB(0), dataMask(0), data(0) { 
     };
-    BREAKPOINT(int inType, int inPage, int inAdr, int inMask, int inData) :
-        typeMask(inType), page(inPage), address(inAdr), dataMask(inMask), data(inData) { 
+    BREAKPOINT(int inType, int inPage, int inAdrA, int inAdrB, int inMask, int inData) :
+        typeMask(inType), page(inPage), addressA(inAdrA), addressB(inAdrB), dataMask(inMask), data(inData) { 
     };
 
     BREAKPOINT& operator=(const BREAKPOINT &other) {
@@ -54,7 +57,8 @@ public:
 
         typeMask = other.typeMask;
         page = other.page;
-        address = other.address;
+        addressA = other.addressA;
+        addressB = other.addressB;
         dataMask = other.dataMask;
         data = other.data;
 
@@ -64,7 +68,8 @@ public:
     inline bool operator==(const BREAKPOINT& rhs) {
         if ((typeMask == rhs.typeMask) &&
             (page == rhs.page) && 
-            (address == rhs.address) &&
+            (addressA == rhs.addressA) &&
+            (addressB == rhs.addressB) &&
             (dataMask == rhs.dataMask) &&
             (data == rhs.data)) {
             return true;
@@ -75,9 +80,33 @@ public:
         return !((*this)==rhs);
     }
 
+    bool CheckRange(int x, int inPage) {
+	    // check bank first (assumes ranges are only for addresses, not data)
+	    if (page != 0) {
+			if (page != inPage) {
+				// bank required and not the right bank
+				return false;
+			}
+	    }
+
+	    if (addressB) {
+		    // this is a range
+		    if ((x >= addressA) && (x <= addressB)) {
+			    return true;
+		    }
+	    } else {
+		    // not a range
+		    if (x == addressA) {
+			    return true;
+		    }
+	    }
+	    return false;
+    }
+
     int typeMask;   // access mask as above
     int page;       // page on peripheral, or 0
-    int address;    // system address, or 0
+    int addressA;   // first system address, or 0
+    int addressB;   // second system address, or 0 if not a range
     int dataMask;   // a mask to apply to data comparisons, or zero if ignored
     int data;       // the data to compare using dataMask
 };
@@ -172,12 +201,11 @@ protected:
     Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
     double lastTimestamp;               // last time we ran to
     int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints
+    BREAKPOINT breaks[MAX_BREAKPOINTS]; // list of device breakpoints
 
 private:
     char formattedName[128];            // the two combined
 
-    BREAKPOINT breaks[MAX_BREAKPOINTS]; // list of device breakpoints
-    
     volatile bool trackIsActive;        // flag for the memory update - used by setActive/isActive/clearActive
 
     friend class Classic99System;       // allowed access to our lock methods

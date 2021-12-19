@@ -62,6 +62,8 @@ void TI994ROM::getDebugWindow(char *buffer) {
 
 int TI994ROM::saveStateSize() {
     // no save state needed
+    // TODO: I wonder if that's true - how do we get ROMs back on save state?
+    // Also, accessing const arrays means we can't change them. Do we need CPU memory after all?
     return 0;
 }
 

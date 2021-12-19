@@ -7,6 +7,8 @@
 #ifndef TMS9900_H
 #define TMS9900_H
 
+#include "../EmulatorSupport/peripheral.h"
+
 // ditching the 16 bit version to improve optimization
 typedef uint8_t Byte;
 typedef uint16_t Word;
@@ -80,6 +82,7 @@ typedef void (TMS9900::*CPU9900Fctn)(void);			// now function pointers are just 
 // Let's see what a CPU needs
 class TMS9900 : public Classic99Peripheral {
 public:
+	TMS9900() = delete;
     TMS9900(Classic99System *core);
     virtual ~TMS9900();
 

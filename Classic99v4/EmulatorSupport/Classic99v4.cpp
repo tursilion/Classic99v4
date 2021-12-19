@@ -20,13 +20,13 @@
 #include "tv.h"
 #include "debuglog.h"
 
-// singletons that we need
-Classic99TV *television = nullptr;
+#include "../Systems/TexasInstruments/TI994.h"
+
+#include <Windows.h>
 
 // Cleanup - shared function to release resources
 void Cleanup() {
     debug_write("Cleaning up...");
-    delete television;
     debug_shutdown();
 }
 
@@ -66,20 +66,19 @@ int main(int argc, char **argv) {
     // now we can start starting
     debug_write("Starting Classic99 version " VERSION);
 
-    // we need this early for the event queue
-    television = new Classic99TV();
+    debug_write("Starting a 99/4...");
+    TI994 *pSys = new TI994();
+    pSys->initSystem();
 
-    debug_write("Doing nonsense...");
     for (;;) {
-        television->setBgColor(al_map_rgba(255,0,0,255));
-        if (television->runWindowLoop()) break;
-        al_rest(0.100);
-        television->setBgColor(al_map_rgba(0,0,255,255));
-        if (television->runWindowLoop()) break;
-        al_rest(0.100);
+        al_rest(0.01);
+        pSys->runSystem(10000);
+        if (pSys->getTV()->runWindowLoop()) break;  // TODO: maybe this comes out of runSystem instead.
     }
 
     // ... shutdown
+    pSys->deInitSystem();
+    delete pSys;
     Cleanup();
 
     // all done!

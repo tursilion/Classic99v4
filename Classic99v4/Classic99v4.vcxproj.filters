@@ -82,6 +82,15 @@
     <ClInclude Include="Memories\TI994ROM.h">
       <Filter>Memories</Filter>
     </ClInclude>
+    <ClInclude Include="Memories\Classic99GROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
+    <ClInclude Include="Systems\TexasInstruments\TI994.h">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClInclude>
+    <ClInclude Include="Memories\TI994Scratchpad.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -167,6 +176,15 @@
       <Filter>Emulator Support</Filter>
     </ClCompile>
     <ClCompile Include="Memories\TI994ROMData.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\Classic99GROM.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994GROMData.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994Scratchpad.cpp">
       <Filter>Memories</Filter>
     </ClCompile>
   </ItemGroup>

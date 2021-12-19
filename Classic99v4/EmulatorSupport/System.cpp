@@ -21,11 +21,18 @@ Classic99System::Classic99System()
     ioSpaceWrite = new PeripheralMap(&dummyPeripheral, 0);
     memorySize = 0;
     ioSize = 0;
+    currentTimestamp = 0.0;
 }
 
 Classic99System::~Classic99System() {
     // release the lock object
     al_destroy_mutex(coreLock);
+    
+    // delete the dummy objects
+    if (nullptr != memorySpaceRead) delete memorySpaceRead;
+    if (nullptr != memorySpaceWrite) delete memorySpaceWrite;
+    if (nullptr != ioSpaceRead) delete ioSpaceRead;
+    if (nullptr != ioSpaceWrite) delete ioSpaceWrite;
 }
 
 // handle allocating memory space in the general flat case
