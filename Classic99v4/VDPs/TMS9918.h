@@ -22,6 +22,14 @@
 #define TMS_WIDTH 284
 #define TMS_HEIGHT 243
 
+#define TMS_DISPLAY_HEIGHT 192
+#define TMS_DISPLAY_WIDTH 256
+#define TMS_DISPLAY_TEXT 240
+
+#define TMS_FIRST_DISPLAY_LINE 27
+#define TMS_FIRST_DISPLAY_PIXEL 13
+#define TMS_FIRST_DISPLAY_TEXT 19
+
 class TMS9918 : public Classic99Peripheral {
 public:
     TMS9918(Classic99System *core) 

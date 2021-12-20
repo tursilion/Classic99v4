@@ -913,10 +913,10 @@ void TMS9900::op_dec()
     FormatVI(x3=x1-1);
 
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 
-    if (x1!=0xffff) set_C;
-    if (x1==0x7fff) set_OV;
+    if (x3!=0xffff) set_C;
+    if (x3==0x7fff) set_OV;
 }
 
 void TMS9900::op_dect()
@@ -931,10 +931,10 @@ void TMS9900::op_dect()
     FormatVI(x3=x1-2);
     
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 
-    if (x1<0xfffe) set_C;
-    if ((x1==0x7fff)||(x1==0x7ffe)) set_OV;
+    if (x3<0xfffe) set_C;
+    if ((x3==0x7fff)||(x3==0x7ffe)) set_OV;
 }
 
 void TMS9900::op_div()
@@ -1066,7 +1066,7 @@ void TMS9900::op_inc()
     FormatVI(x3=x1+1);
 
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV_C;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ_OV_C;
 }
 
 void TMS9900::op_inct()
@@ -1081,10 +1081,10 @@ void TMS9900::op_inct()
     FormatVI(x3=x1+2);
     
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 
-    if (x1<2) set_C;
-    if ((x1==0x8000)||(x1==0x8001)) set_OV;
+    if (x3<2) set_C;
+    if ((x3==0x8000)||(x3==0x8001)) set_OV;
 }
 
 void TMS9900::op_mpy()
@@ -1132,7 +1132,7 @@ void TMS9900::op_neg()
     AddCycleCount(2);       // this one is a little slower
 
     reset_EQ_LGT_AGT_C_OV;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ_OV_C;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ_OV_C;
 }
 
 void TMS9900::op_s()
@@ -1963,7 +1963,7 @@ void TMS9900::op_mov()
     WRWORD(D,x3);   // Write Dest
   
     reset_LGT_AGT_EQ;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 }
 
 void TMS9900::op_movb()
@@ -2083,7 +2083,7 @@ void TMS9900::op_inv()
     FormatVI(x3=~x1);
 
     reset_LGT_AGT_EQ;
-    ST|=WStatusLookup[x1]&mask_LGT_AGT_EQ;
+    ST|=WStatusLookup[x3]&mask_LGT_AGT_EQ;
 }
 
 void TMS9900::op_clr()

@@ -9,7 +9,7 @@
 
 #include "../EmulatorSupport/peripheral.h"
 
-// ditching the 16 bit version to improve optimization
+// needed types, lots of code makes assumptions on these sizes
 typedef uint8_t Byte;
 typedef uint16_t Word;
 

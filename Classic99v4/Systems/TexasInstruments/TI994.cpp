@@ -7,6 +7,7 @@
 // and ROMs differ.
 
 #include "TI994.h"
+#include "..\..\EmulatorSupport\interestingData.h"
 
 TI994::TI994()
     : Classic99System()
@@ -34,6 +35,10 @@ bool TI994::initSystem() {
     ioSpaceRead = new PeripheralMap[4*1024];
     ioSpaceWrite = new PeripheralMap[4*1024];
     ioSize = 4*1024;
+
+    // set the indirect interesting data
+    setInterestingData(INDIRECT_MAIN_CPU_PC, DATA_TMS9900_PC);
+    setInterestingData(INDIRECT_MAIN_CPU_INTERRUPTS_ENABLED, DATA_TMS9900_INTERRUPTS_ENABLED);
 
     // now create the peripherals we need
     theTV = new Classic99TV();

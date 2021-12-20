@@ -64,6 +64,10 @@ bool Classic99TV::init() {
         al_register_event_source(evtQ, al_get_display_event_source(myWnd));
         //al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_RGBA_8888);   // let's see how well forcing it works...
         al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_ARGB_8888);   // let's see how well forcing it works...
+        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
+        al_set_render_state(ALLEGRO_ALPHA_TEST, 1);
+        al_set_render_state(ALLEGRO_ALPHA_FUNCTION, ALLEGRO_RENDER_EQUAL);
+        al_set_render_state(ALLEGRO_ALPHA_TEST_VALUE, 255);
 
         debug_write("Bitmap format is %d", al_get_new_bitmap_format());
     }

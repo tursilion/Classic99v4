@@ -207,6 +207,7 @@ const char *digpat[10][5] = {
 // some local defines
 #define REDRAW_LINES 262
 
+// ARGB format
 #define HOT_PINK_TRANS 0x00ff00ff
 
 // So the TMS9918 only has two addresses - zero for data and 1 for registers
@@ -352,7 +353,7 @@ void TMS9918::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
     // cycles - no additional cycles added, but we do need the existing count
     // rmw - direct access when free
 
-	int RealVDP;		
+	int RealVDP;
 
     if (rmw != ACCESS_FREE) {
         if (getInterestingDataIndirect(INDIRECT_MAIN_CPU_INTERRUPTS_ENABLED) == DATA_TRUE) {
@@ -660,9 +661,13 @@ bool TMS9918::init(int index) {
 	// not allow for a scanline-based display... so we'll just pixel them...
 	pDisplay = theCore->getTV()->requestLayer(TMS_WIDTH, TMS_HEIGHT);
 	hzRate = 60;
-	bDisableBlank = true;
+	bDisableBlank = false;
+	bDisableSprite = false;
+	bDisableBackground = false;
+    bDisableColorLayer = false;
+	bDisablePatternLayer = false;
 
-    vdpReset(true);     // todo: need to allow warm reset
+	vdpReset(true);     // todo: need to allow warm reset
 
     return true;
 }
@@ -683,11 +688,11 @@ bool TMS9918::operate(double timestamp) {
 
 	while (lastTimestamp + timePerScanline < timestamp) {
 		++vdpscanline;
-		if (vdpscanline == 192+27) {
+		if (vdpscanline == TMS_DISPLAY_HEIGHT+TMS_FIRST_DISPLAY_LINE) {
 			// set the vertical interrupt
 			VDPS|=VDPS_INT;
 			end_of_frame = 1;
-		} else if (vdpscanline > 261) {
+		} else if (vdpscanline >= TMS_HEIGHT) {
 			vdpscanline = 0;
 
 			// TODO: full frame ready to draw - tell TV system
@@ -713,12 +718,10 @@ bool TMS9918::operate(double timestamp) {
 		VDP[0x7001] = 0x01;		// hblank OR vblank
 #endif
 
-		// are we off the screen?
-		if (vdpscanline < 192+27+24) {
-			// nope, we can process this one
-			VDPdisplay(vdpscanline);
-		}
+		// process this scanline
+		VDPdisplay(vdpscanline);
 
+		// update the timestamp
 		lastTimestamp += timePerScanline;
 	}
 
@@ -919,10 +922,10 @@ void TMS9918::wVDPreg(uint8_t r, uint8_t v) {
 		t=v&0xf;
 		ALLEGRO_COLOR bg;
 		// pixel format ARGB
-		bg.r = (F18APalette[t]>>24)&0xff;
-		bg.g = (F18APalette[t]>>16)&0xff;
-		bg.b = (F18APalette[t]>>8)&0xff;
-		bg.a = 255;
+		bg.r = ((F18APalette[t]>>16)&0xff)/(double)255.0;
+		bg.g = ((F18APalette[t]>>8)&0xff)/(double)255.0;
+		bg.b = ((F18APalette[t])&0xff)/(double)255.0;
+		bg.a = 1.0;
 		theCore->getTV()->setBgColor(bg);
 		redraw_needed=REDRAW_LINES;
 	}
@@ -1182,13 +1185,15 @@ void TMS9918::VDPdisplay(int scanline)
 	if (NULL == pDisplay->bmp) return;
 
 	int reg0 = gettables(0);
-	int gfxline = scanline - 27;	// skip top border (TODO: still correct?)
+	int gfxline = scanline - TMS_FIRST_DISPLAY_LINE;
+	if ((gfxline < 0) || (gfxline >= TMS_DISPLAY_HEIGHT)) {
+		return;
+	}
 
 	// the mode is a 32-bit format with alpha, but I guess it might vary
 	// format should be ARGB
 	// Do not early RETURN after this lock!
-	int fmt = al_get_bitmap_format(pDisplay->bmp);
-	ALLEGRO_LOCKED_REGION *pImg = al_lock_bitmap(pDisplay->bmp, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_READWRITE);
+	ALLEGRO_LOCKED_REGION *pImg = al_lock_bitmap_region(pDisplay->bmp, 0, scanline, TMS_WIDTH, 1, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_WRITEONLY);
 	if (NULL == pImg) {
 		debug_write("Could not lock bitmap!");
 		return;
@@ -1196,93 +1201,95 @@ void TMS9918::VDPdisplay(int scanline)
 	pLine = NULL;	// make sure it's zeroed unless we need it
 
 	// count down scanlines to redraw
-	if (redraw_needed > REDRAW_LINES) redraw_needed = REDRAW_LINES;	// no need to draw more than one frame
+	// todo: the redraw_needed code all seems pretty broken
 	if (redraw_needed > 0) {
-		while (redraw_needed--) {
-			// draw blanking area
-			if ((vdpscanline >= 0) && (vdpscanline < 192+27+24)) {
-				// extra hack - we only have 8 pixels of border on each side, unlike the real VDP
-				// TODO: I'm sure this is all wrong now...
-				int tmplin = (199-(vdpscanline - 19-8));		// 27-8 = 19, don't remember where 199 comes from though...
-				if ((tmplin >= 0) && (tmplin < 192+16)) {
-					// we don't need to worry about the actual color, we just set hot pink transparent (R+B)
-	#if 0
-					if ((reg0&0x04)&&(VDPREG[1]&0x10)&&(bEnable80Columns)) {
-						// 80 column text
-						nMax = (512+16)/4;
-					} else 
-	#endif
-					{
-						// all other modes
-						nMax = (256+16)/4;
-					}
+		--redraw_needed;
 
-					pLine = (uint32_t*)((unsigned char*)pImg->data + tmplin*pImg->pitch);
+		// draw blanking area
+		// we don't need to worry about the actual color, we just set hot pink transparent (R+B)
+		// it's the alpha that matters ;)
+#if 0
+		if ((reg0&0x04)&&(VDPREG[1]&0x10)&&(bEnable80Columns)) {
+			// 80 column text
+			nMax = (512+16)/4;
+		} else 
+#endif
+		{
+			// all other modes
+			nMax = TMS_WIDTH/4;
+		}
 
-					// blank out the entire line first (unrolled 4 times)
-					uint32_t *plong = pLine;
-					for (int idx=0; idx<nMax; ++idx) {
-						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
-						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
-						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
-						*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
-					}
-				}
-			}
+		pLine = ((uint32_t*)pImg->data);
 
-			// now that the blank is done, draw the display data
-			if (!bDisableBlank) {
-				if (!(VDPREG[1] & 0x40)) {	// Disable display
-					continue;
-				}
-			}
+		// blank out the entire line first (unrolled 4 times)
+		uint32_t *plong = pLine;
+		for (int idx=0; idx<nMax; ++idx) {
+			*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+			*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+			*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+			*(plong++) = HOT_PINK_TRANS;	// hot pink transparent
+		}
 
-			if ((!bDisableBackground) && (gfxline < 192) && (gfxline >= 0)) {
-				for (int isLayer2=0; isLayer2<2; ++isLayer2) {
-					reg0 = gettables(isLayer2);
+		// now center the actual draw area
+		pLine += TMS_FIRST_DISPLAY_PIXEL;
 
-					if ((VDPREG[1] & 0x18)==0x18)	// MODE BITS 2 and 1
-					{
-						VDPillegal(gfxline, isLayer2);
-					} else if (VDPREG[1] & 0x10)			// MODE BIT 2
-					{
-						if (reg0 & 0x02) {			// BITMAP MODE BIT
-							VDPtextII(gfxline, isLayer2);	// undocumented bitmap text mode
-						} else if (reg0 & 0x04) {	// MODE BIT 4 (9938)
-							VDPtext80(gfxline, isLayer2);	// 80-column text, similar to 9938/F18A
-						} else {
-							VDPtext(gfxline, isLayer2);		// regular 40-column text
-						}
-					} else if (VDPREG[1] & 0x08)				// MODE BIT 1
-					{
-						if (reg0 & 0x02) {				// BITMAP MODE BIT
-							VDPmulticolorII(gfxline, isLayer2);	// undocumented bitmap multicolor mode
-						} else {
-							VDPmulticolor(gfxline, isLayer2);
-						}
-					} else if (reg0 & 0x02) {					// BITMAP MODE BIT
-						VDPgraphicsII(gfxline, isLayer2);		// documented bitmap graphics mode
-					} else {
-						VDPgraphics(gfxline, isLayer2);
-					}
-
-	#if 0
-					// Tile layer 2, if applicable
-					// TODO: sprite priority is not taken into account
-					if ((!bF18AActive) || ((VDPREG[49]&0x80)==0)) {
-						break;
-					}
-	#else
-					// never draw layer 2
-					break;
-	#endif
-				}
-			} else {
+		// now that the blank is done, draw the display data
+		if (!bDisableBlank) {
+			if (!(VDPREG[1] & 0x40)) {	// Disable display
 				// This case is hit if nothing else is being drawn (ie: disable background is set), otherwise the graphics modes call DrawSprites
 				// as long as mode bit 2 is not set, sprites are okay
 				if (/*(bF18AActive) ||*/ ((VDPREG[1] & 0x10) == 0)) {
 					DrawSprites(gfxline);
 				}
+				goto bottom;
+			}
+		} 
+		
+		if ((!bDisableBackground) && (gfxline < 192) && (gfxline >= 0)) {
+			for (int isLayer2=0; isLayer2<2; ++isLayer2) {
+				reg0 = gettables(isLayer2);
+
+				if ((VDPREG[1] & 0x18)==0x18)				// MODE BITS 2 and 1
+				{
+					VDPillegal(gfxline, isLayer2);
+				} else if (VDPREG[1] & 0x10)				// MODE BIT 2
+				{
+					if (reg0 & 0x02) {						// BITMAP MODE BIT
+						VDPtextII(gfxline, isLayer2);			// undocumented bitmap text mode
+					} else if (reg0 & 0x04) {				// MODE BIT 4 (9938)
+						VDPtext80(gfxline, isLayer2);			// 80-column text, similar to 9938/F18A
+					} else {
+						VDPtext(gfxline, isLayer2);				// regular 40-column text
+					}
+				} else if (VDPREG[1] & 0x08)				// MODE BIT 1
+				{
+					if (reg0 & 0x02) {						// BITMAP MODE BIT
+						VDPmulticolorII(gfxline, isLayer2);		// undocumented bitmap multicolor mode
+					} else {
+						VDPmulticolor(gfxline, isLayer2);
+					}
+				} else if (reg0 & 0x02) {					// BITMAP MODE BIT
+					VDPgraphicsII(gfxline, isLayer2);			// documented bitmap graphics mode
+				} else {
+					VDPgraphics(gfxline, isLayer2);
+				}
+
+#if 0
+				// Tile layer 2, if applicable
+				// TODO: sprite priority is not taken into account
+				if ((!bF18AActive) || ((VDPREG[49]&0x80)==0)) {
+					break;
+				}
+#else
+				// never draw layer 2
+				break;
+#endif
+			}
+		} else {
+			// This case is hit if nothing else is being drawn (ie: disable background is set), otherwise the graphics modes call DrawSprites
+			// as long as mode bit 2 is not set, sprites are okay
+			if (/*(bF18AActive) ||*/ ((VDPREG[1] & 0x10) == 0)) {
+				DrawSprites(gfxline);
 			}
 		}
 	} else {
@@ -1296,6 +1303,7 @@ void TMS9918::VDPdisplay(int scanline)
 		}
 	}
 
+bottom:
 	// TODO: replace with actual bottom of display frame - varies on F18A
 	if (gfxline == 191) {
 		if (bShowFPS) {
@@ -1514,7 +1522,7 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
 	const int i3 = scanline&0x07;
 
 	if (pLine == NULL) return;
-	uint32_t *plong = pLine;	// get base line address
+	uint32_t *plong = pLine+(TMS_FIRST_DISPLAY_TEXT-TMS_FIRST_DISPLAY_PIXEL);	// get base line address
 
 	o=(scanline/8)*40;			// offset in SIT
 
