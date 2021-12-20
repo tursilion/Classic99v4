@@ -40,7 +40,8 @@ void fail(const char *str) {
 
 // MAN I wanted this basic signature in the old Classic99... ;)
 int main(int argc, char **argv) {
-    debug_init();                       // everyone relies on debug
+    // everyone relies on debug
+    debug_init();
 
     // set up Allegro
     if (!al_init()) {

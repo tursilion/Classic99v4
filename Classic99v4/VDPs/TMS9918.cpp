@@ -226,6 +226,14 @@ const char *digpat[10][5] = {
 // is sufficient for all reasonable values...
 // Anyway, don't need to cover all possible cases, only the cases we care about.
 
+// return true if our interrupt line is active
+bool TMS9918::isIntActive() {
+	if ((VDPS&VDPS_INT) && (VDPREG[1] & 0x20)) {
+		return true;
+	}
+	return false;
+}
+
 // read request from the system
 // cycles is the cycles used so far on this operation, and should be
 // updated if we consume any extra (VDP doesn't, but we do use this to catch up the VDP for status reads)

@@ -1,13 +1,17 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-// Implementation of the TMS9918 VDP for Classic99
+// Implementation of the TMS9918A VDP for Classic99
+
+// TODO: literally no work has been done on this yet - this should be derived from TMS9918
 
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#ifndef TMS9918_H
-#define TMS9918_H
+#ifndef TMS9918A_H
+#define TMS9918A_H
+
+#if 0
 
 #include <allegro5/allegro.h>
 #include <allegro5/threads.h>
@@ -85,7 +89,6 @@ public:
     void increment_vdpadd();
     int GetRealVDP();
     void wVDPreg(uint8_t r, uint8_t v);
-    bool isIntActive();
 
     // VDP status flags
     const int VDPS_INT  = 0x80;
@@ -176,6 +179,8 @@ protected:
 
     std::shared_ptr<autoBitmap> pDisplay;       // allocated display - always 284x243 for 9918, so we only need one layer
 };
+
+#endif
 
 #endif
 

@@ -91,6 +91,15 @@
     <ClInclude Include="Memories\TI994Scratchpad.h">
       <Filter>Memories</Filter>
     </ClInclude>
+    <ClInclude Include="VDPs\F18A_19.h">
+      <Filter>VDPs</Filter>
+    </ClInclude>
+    <ClInclude Include="VDPs\TMS9918A.h">
+      <Filter>VDPs</Filter>
+    </ClInclude>
+    <ClInclude Include="Keyboard\kb_994.h">
+      <Filter>Keyboard</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -186,6 +195,9 @@
     </ClCompile>
     <ClCompile Include="Memories\TI994Scratchpad.cpp">
       <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard\kb_994.cpp">
+      <Filter>Keyboard</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -12,6 +12,7 @@
 #include "..\..\Memories\TI994ROM.h"
 #include "..\..\Memories\TI994Scratchpad.h"
 #include "..\..\VDPs\TMS9918.h"
+#include "..\..\Keyboard\kb_994.h"
 
 // define the actual system class
 class TI994 : public Classic99System {
@@ -33,5 +34,6 @@ private:
     TI994ROM *pRom;
     TI994Scratchpad *pScratch;
     TMS9918 *pVDP;
+    KB994 *pKey;
 };
 

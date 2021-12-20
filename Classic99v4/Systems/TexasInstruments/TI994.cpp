@@ -51,21 +51,31 @@ bool TI994::initSystem() {
     pScratch->init(0);
     pVDP = new TMS9918(this);
     pVDP->init(0);
+    pKey = new KB994(this);
+    pKey->init(0);
 
     // now we can claim resources
+
+    // system ROM
     for (int idx=0; idx<0x2000; ++idx) {
         claimRead(idx, pRom, idx);
     }
+
+    // scratchpad RAM
     for (int idx=0x8000; idx<0x8400; ++idx) {
         claimRead(idx, pScratch, idx&0xff);
         claimWrite(idx, pScratch, idx&0xff);
     }
+
+    // VDP ports
     for (int idx=0x8800; idx<0x8c00; idx+=2) {
         claimRead(idx, pVDP, (idx&2) ? 1 : 0);
     }
     for (int idx=0x8c00; idx<0x9000; idx+=2) {
         claimWrite(idx, pVDP, (idx&2) ? 1 : 0);
     }
+
+    // GROM ports
     for (int idx=0x9800; idx<0x9c00; idx+=2) {
         claimRead(idx, pGrom, (idx&2) ? Classic99GROM::GROM_MODE_ADDRESS : 0);
     }
@@ -73,7 +83,16 @@ bool TI994::initSystem() {
         claimWrite(idx, pGrom, (idx&2) ? (Classic99GROM::GROM_MODE_ADDRESS|Classic99GROM::GROM_MODE_WRITE) : Classic99GROM::GROM_MODE_WRITE);
     }
 
-    // TODO Keyboard and the rest of the 9901
+    // IO ports for keyboard
+    for (int idx=0; idx<0x800; idx+=20) {
+        for (int off=3; off<=10; ++off) {
+            claimIORead(idx+off, pKey, off);
+        }
+        for (int off=18; off<=21; ++off) {
+            claimIOWrite(idx+off, pKey, off);
+        }
+    }
+
     // TODO sound
 
     // last, build and init the CPU (needs the memory map active!)
@@ -115,6 +134,12 @@ bool TI994::runSystem(int microSeconds) {
     // ROM and GROM don't need any runtime, so we can skip them
     pCPU->operate(currentTimestamp);
     pVDP->operate(currentTimestamp);
+
+    // route the interrupt lines
+    if (pVDP->isIntActive()) {
+        // TODO: emulate the masking on the 9901 - we may need a peripheral device
+        requestInt(1);
+    }
 
     return true;
 }

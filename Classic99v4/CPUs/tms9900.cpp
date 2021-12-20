@@ -122,6 +122,7 @@ bool TMS9900::operate(double timestamp) {
                             // the first instruction to be safe. But the hard-coded ROM has
                             // that, so how can we test this on real hardware? We just need
                             // a routine that dumps the status register...
+                            // There is another gotcha - this needs to run through the 9901...
                             TriggerInterrupt(idx);
                             continue;
                         }

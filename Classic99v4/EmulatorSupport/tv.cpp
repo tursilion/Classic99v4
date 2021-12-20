@@ -139,6 +139,9 @@ bool Classic99TV::runWindowLoop() {
             // If we take too long to send this, we will be considered unresponsive
             al_acknowledge_drawing_resume(myWnd);
             break;
+        case ALLEGRO_EVENT_JOYSTICK_CONFIGURATION:
+            al_reconfigure_joysticks();
+            break;
         default:
             debug_write("Got unexpected event %d", evt.type);
         }

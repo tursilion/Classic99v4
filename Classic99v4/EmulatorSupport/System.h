@@ -116,10 +116,8 @@ public:
     }
 
     // interrupts - we don't need to track who, but we do need level and which CPU
-    // CPU will clear this when serviced - is that okay? Some CPUs are level based
-    // and some CPUs are edge based, this is going to treat everything as edge based...
-    // TODO: we probably want level based someday, which means edge trigger moves
-    // into the CPU, and we need to add methods to release the request...
+    // CPU will clear this when serviced - is that okay? The 9900 is level based, so
+    // for now, we will assume that's what we want to do here.
     virtual void requestInt(int level) {
         intReqLevel |= (1<<level);
     }
