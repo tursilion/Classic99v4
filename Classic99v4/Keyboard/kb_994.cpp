@@ -23,11 +23,13 @@ BIT	HW	C99	Purpose						Status
 9	1	0	keyboard q					Implemented, but wrong?
 10	1	1	keyboard l					Implemented
 
+17  0   0   reserved					Implemented as loopback (not sure the intent, but 99/4 reads it)
+
 18	0	0	keyboard select bit 2		Implemented as loopback
 19	0	0	keyboard select bit 1		Implemented as loopback
 20	0	0	keyboard select bit 0		Implemented as loopback
 
-21	1	0	alpha lock					Implemented, but wrong?
+21	1	0	alpha lock					Implemented, but wrong? (actually, remove this, the 99/4 doesn't have one!)
 
 #endif
 
@@ -36,7 +38,7 @@ BIT	HW	C99	Purpose						Status
 #define JOY1COL 2
 #define JOY2COL 4
 
-int KEYS[8][8]= {  
+static int KEYS[8][8]= {  
     // Keyboard - 99/4
     /* unused */	ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
 
@@ -57,7 +59,7 @@ KB994::KB994(Classic99System *core)
 	, bJoy(true)
 	, fJoystickActiveOnKeys(0)
     , scanCol(0)
-    , alphaActive(false)
+	, bit17(false)
 {
 }
 KB994::~KB994() {
@@ -260,16 +262,14 @@ uint8_t KB994::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
     al_get_keyboard_state(&state);
 
     // the address will match the CRU bits as above
-    
-    // First check if we are reading alpha lock - we do the inversion of caps lock
-    if ((addr == 0x07) && (alphaActive)) {
-        uint8_t ret = 0;
-        // TODO: verify this works as CAPS /state/, not caps KEY status
-        if (al_key_down(&state, ALLEGRO_KEY_CAPSLOCK)) {
-            ret = 1;
-        }
-        return 1;
-    }
+
+	// try the magic loopback
+	if (addr == 17) {
+		// going to just flip flop this to get past whatever is wrong...
+		// TODO: Classic99 3xx does NOT have this problem...
+		bit17 = !bit17;
+		return bit17 ? true : false;
+	}
 
     // try joysticks... 
     uint8_t ret = CheckJoysticks(addr, scanCol, &state);
@@ -291,6 +291,15 @@ void KB994::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw,
 
     // only 4 bits matter here
     switch (addr) {
+		case 0x11:
+			// magic loopback
+			if (data) {
+				bit17 = true;
+			} else {
+				bit17 = false;
+			}
+			break;
+
         case 0x12:
             scanCol = (scanCol&0x3) | (data?0:4);
             break;
@@ -301,14 +310,6 @@ void KB994::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw,
 
         case 0x14:
             scanCol = (scanCol&0x6) | (data?0:1);
-            break;
-
-        case 0x21:
-            if (data) {
-                alphaActive = false;
-            } else {
-                alphaActive = true;
-            }
             break;
     }
 }
@@ -345,14 +346,12 @@ int KB994::saveStateSize() {
 }
 
 bool KB994::saveState(unsigned char *buffer) {
-	// only using 2 of the 4 bytes...
+	// only using 1 of the 4 bytes...
 	buffer[0] = scanCol&0xff;
-	buffer[1] = alphaActive ? 1:0;
     return true;
 }
 
 bool KB994::restoreState(unsigned char *buffer) {
 	scanCol = buffer[0];
-	alphaActive = buffer[1] ? true : false;
 	return true;
 }

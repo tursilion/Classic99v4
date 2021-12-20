@@ -2161,6 +2161,9 @@ void TMS9918::DrawSprites(int scanline)
 		//int dblSize = F18AECModeSprite ? VDP[curSAL] & 0x10 : VDPREG[1] & 0x2;
 		int adr = SAL+(i1<<2);
 		int yy = VDP[adr];
+		if (yy == 0xd0) break;
+		++yy;
+		if (yy>225) yy-=256;
 		if ((scanline >= yy) && (scanline < yy+height)) {
 			sprList[nextSprite++] = adr;
 			if (nextSprite >= max) {

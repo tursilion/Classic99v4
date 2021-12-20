@@ -88,9 +88,15 @@ bool TI994::initSystem() {
         for (int off=3; off<=10; ++off) {
             claimIORead(idx+off, pKey, off);
         }
-        for (int off=18; off<=21; ++off) {
+//      for (int off=18; off<=21; ++off) {    // 21 for 99/4A
+        for (int off=18; off<=20; ++off) {      // 20 for 99/4
             claimIOWrite(idx+off, pKey, off);
         }
+        // I'm not sure what this is for, but the emulation seems to help
+        // it not hang... (I hope). We just treat this bit as a loopback.
+        // The 99/4 sometimes hangs on this bit...
+        claimIORead(idx+17, pKey, 17);
+        claimIOWrite(idx+17, pKey, 17);
     }
 
     // TODO sound

@@ -172,6 +172,7 @@
     <ClInclude Include="EmulatorSupport\peripheral.h" />
     <ClInclude Include="EmulatorSupport\tv.h" />
     <ClInclude Include="Keyboard\kb_994.h" />
+    <ClInclude Include="Keyboard\kb_994A.h" />
     <ClInclude Include="Memories\Classic99GROM.h" />
     <ClInclude Include="Memories\TI994GROM.h" />
     <ClInclude Include="Memories\TI994ROM.h" />
@@ -194,6 +195,7 @@
     <ClCompile Include="EmulatorSupport\System.cpp" />
     <ClCompile Include="EmulatorSupport\tv.cpp" />
     <ClCompile Include="Keyboard\kb_994.cpp" />
+    <ClCompile Include="Keyboard\kb_994A.cpp" />
     <ClCompile Include="Memories\Classic99GROM.cpp" />
     <ClCompile Include="Memories\ColecoVisionROM.cpp" />
     <ClCompile Include="Memories\PhoenixROM.cpp" />

@@ -67,7 +67,8 @@ private:
     int fJoystickActiveOnKeys;
 
     int scanCol;
-    bool alphaActive;
+
+    bool bit17;
 };
 
 
