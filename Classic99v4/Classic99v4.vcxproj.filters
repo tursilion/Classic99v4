@@ -241,6 +241,9 @@
     <ClCompile Include="Keyboard\TIKeyboard.cpp">
       <Filter>Keyboard</Filter>
     </ClCompile>
+    <ClCompile Include="Memories\Demonstration.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="License.txt" />

@@ -30,6 +30,7 @@ Classic99GROM::Classic99GROM(Classic99System *core, const uint8_t *pDat, unsigne
 
     // all GROMs are read-only (ie: not GRAM)
     // TODO: or should I make GRAM a separate device altogether???
+    // probably yes...
     for (int idx=0; idx<8; ++idx) {
         bWritable[idx] = false;
     }
@@ -43,6 +44,18 @@ Classic99GROM::Classic99GROM(Classic99System *core, const uint8_t *pDat, unsigne
     }
 }
 Classic99GROM::~Classic99GROM() {
+}
+
+// protected methods to let derived classes load additional data without a new object
+// really just a hack for demonstration, normally create a new object
+void Classic99GROM::LoadAdditionalData(const uint8_t *pDat, unsigned int datSize, unsigned int baseAddress) {
+    if (NULL == pDat) {
+        debug_write("NULL pointer to GROM init, failed to load.");
+    } else if (baseAddress + datSize > 64*1024) {
+        debug_write("GROM memory overrun, failed to load.");
+    } else {
+        memcpy(GROMDATA+baseAddress, pDat, datSize);
+    }
 }
 
 // increment the GROM address and handle wraparound

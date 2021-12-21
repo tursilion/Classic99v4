@@ -207,6 +207,7 @@
     <ClCompile Include="Memories\Classic99GROM.cpp" />
     <ClCompile Include="Memories\Classic99ROM.cpp" />
     <ClCompile Include="Memories\ColecoVisionROM.cpp" />
+    <ClCompile Include="Memories\Demonstration.cpp" />
     <ClCompile Include="Memories\PhoenixROM.cpp" />
     <ClCompile Include="Memories\TI994A22GROM.cpp" />
     <ClCompile Include="Memories\TI994A22GROMData.cpp" />

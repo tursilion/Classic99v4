@@ -97,6 +97,9 @@ public:
     // configuration interface... not fully sussed out yet - could be in the debug system if that becomes doable
     void setWritable(int grom, bool isWrite) { bWritable[grom&7] = isWrite; }
 
+protected:
+    void LoadAdditionalData(const uint8_t *pDat, unsigned int datSize, unsigned int baseAddress);
+
 private:
     void IncrementGROMAddress(int &adrRef);
 

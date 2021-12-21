@@ -2176,6 +2176,7 @@ void TMS9918::DrawSprites(int scanline)
 	// now sprList has a list of sprite addresses to draw, and nextSprite
 	// points to 1 past the end of that list, which we'll walk backwards
 	// in order to draw in the correct order
+	// TODO: verify sprite Y coordinate is correct, especially with magnified sprites
 	while (--nextSprite >= 0) {
 		int curSAL = sprList[nextSprite];
 		int yy=VDP[curSAL++]+1;			// sprite Y, it's stupid, cause 255 is line 0 
@@ -2194,9 +2195,17 @@ void TMS9918::DrawSprites(int scanline)
 			xx-=32;
 		}
 
+		// work out which line of the sprite to draw
+		int spriteline = scanline-yy;
+		if (mag) spriteline/=2;
+		if (spriteline>7) {
+			spriteline-=8;
+			++pat;
+		}
+
 		// TODO: F18A ECM sprites are up to 8 colors so need a different fetch system
 		// for now, just collect the first pattern to scan out
-		int p_add = SDT+(pat<<3)+(scanline%8);
+		int p_add = SDT+(pat<<3)+(spriteline%8);
 		uint32_t *plong = pLine;
 		plong += xx;	// warning: can be negative, and can be offscreen!
 		for (int cnt = 0; cnt < (dblSize ? 2:1); ++cnt) {
