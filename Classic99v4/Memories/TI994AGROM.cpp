@@ -5,11 +5,11 @@
 
 #include "TI994AGROM.h"
 
-extern const uint8_t TI994GROMData[8192*3];
+extern const uint8_t TI994AGROMData[8192*3];
 
 // not much needed for construction, except pointing to the data
 TI994AGROM::TI994AGROM(Classic99System *core) 
-    : Classic99GROM(core, TI994GROMData, 8192*3, 0)
+    : Classic99GROM(core, TI994AGROMData, 8192*3, 0)
 {
 }
 

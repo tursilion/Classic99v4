@@ -8,6 +8,9 @@
 
 #include "TI994.h"
 #include "..\..\EmulatorSupport\interestingData.h"
+#include "..\..\Memories\TI994GROM.h"
+#include "..\..\Memories\TI994ROM.h"
+#include "..\..\Keyboard\kb_994.h"
 
 TI994::TI994()
     : Classic99System()
@@ -15,6 +18,21 @@ TI994::TI994()
 }
 
 TI994::~TI994() {
+}
+
+// this virtual function is used to subclass the various types of TI99 - anything that varies is
+// loaded and initialized in here.
+bool TI994::initSpecificSystem() {
+    pGrom = new TI994GROM(this);
+    pGrom->init(0);
+    pRom = new TI994ROM(this);
+    pRom->init(0);
+    pVDP = new TMS9918(this);
+    pVDP->init(0);
+    pKey = new KB994(this);
+    pKey->init(0);
+
+    return true;
 }
 
 bool TI994::initSystem() { 
@@ -36,23 +54,19 @@ bool TI994::initSystem() {
     ioSpaceWrite = new PeripheralMap[4*1024];
     ioSize = 4*1024;
 
-    // set the indirect interesting data
+    // set the interesting data
+    setInterestingData(DATA_SYSTEM_TYPE, SYSTEM_TI99);
     setInterestingData(INDIRECT_MAIN_CPU_PC, DATA_TMS9900_PC);
     setInterestingData(INDIRECT_MAIN_CPU_INTERRUPTS_ENABLED, DATA_TMS9900_INTERRUPTS_ENABLED);
 
     // now create the peripherals we need
     theTV = new Classic99TV();
     theTV->init();
-    pGrom = new TI994GROM(this);
-    pGrom->init(0);
-    pRom = new TI994ROM(this);
-    pRom->init(0);
     pScratch = new TI994Scratchpad(this);
     pScratch->init(0);
-    pVDP = new TMS9918(this);
-    pVDP->init(0);
-    pKey = new KB994(this);
-    pKey->init(0);
+
+    // call the virtual handler for the variants
+    initSpecificSystem();
 
     // now we can claim resources
 
@@ -88,8 +102,7 @@ bool TI994::initSystem() {
         for (int off=3; off<=10; ++off) {
             claimIORead(idx+off, pKey, off);
         }
-//      for (int off=18; off<=21; ++off) {    // 21 for 99/4A
-        for (int off=18; off<=20; ++off) {      // 20 for 99/4
+        for (int off=18; off<=20; ++off) {
             claimIOWrite(idx+off, pKey, off);
         }
         // I'm not sure what this is for, but the emulation seems to help
@@ -132,6 +145,9 @@ bool TI994::deInitSystem() {
     delete pRom;
     delete pGrom;
     delete pCPU;
+    delete pKey;
+    delete pScratch;
+    delete theTV;
 
     return true;
 }

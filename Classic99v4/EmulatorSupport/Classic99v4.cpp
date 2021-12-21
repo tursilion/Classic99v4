@@ -21,6 +21,8 @@
 #include "debuglog.h"
 
 #include "../Systems/TexasInstruments/TI994.h"
+#include "../Systems/TexasInstruments/TI994A.h"
+#include "../Systems/TexasInstruments/TI994A_22.h"
 
 #include <Windows.h>
 
@@ -67,8 +69,15 @@ int main(int argc, char **argv) {
     // now we can start starting
     debug_write("Starting Classic99 version " VERSION);
 
-    debug_write("Starting a 99/4...");
-    TI994 *pSys = new TI994();
+    //debug_write("Starting a 99/4...");
+    //TI994 *pSys = new TI994();
+
+    debug_write("Starting a 99/4A...");
+    TI994 *pSys = new TI994A();
+
+    //debug_write("Starting a v2.2 99/4A...");
+    //TI994 *pSys = new TI994A22();
+
     pSys->initSystem();
 
     for (;;) {

@@ -112,6 +112,18 @@
     <ClInclude Include="Memories\Classic99ROM.h">
       <Filter>Memories</Filter>
     </ClInclude>
+    <ClInclude Include="Systems\TexasInstruments\TI994A.h">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClInclude>
+    <ClInclude Include="Systems\TexasInstruments\TI994A_22.h">
+      <Filter>Systems\Texas Instruments</Filter>
+    </ClInclude>
+    <ClInclude Include="Keyboard\TIKeyboard.h">
+      <Filter>Keyboard</Filter>
+    </ClInclude>
+    <ClInclude Include="Memories\TI994A22GROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -225,6 +237,9 @@
     </ClCompile>
     <ClCompile Include="Memories\Classic99ROM.cpp">
       <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard\TIKeyboard.cpp">
+      <Filter>Keyboard</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

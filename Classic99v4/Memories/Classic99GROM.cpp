@@ -8,6 +8,8 @@
 #include "Classic99GROM.h"
 
 // static data storage - todo: bases?
+// because the GROMs maintain their own address counter, we need all the
+// GROM sources to load to a common data target
 uint8_t Classic99GROM::GROMDATA[64*1024] = { 0 };
 int Classic99GROM::GRMADD = 0;
 int Classic99GROM::grmaccess = 0;

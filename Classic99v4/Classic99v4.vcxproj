@@ -103,7 +103,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>allegro.lib;allegro_main.lib;allegro_dialog.lib</AdditionalDependencies>
+      <AdditionalDependencies>allegro.lib;allegro_main.lib;allegro_dialog.lib;user32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -173,8 +173,10 @@
     <ClInclude Include="EmulatorSupport\tv.h" />
     <ClInclude Include="Keyboard\kb_994.h" />
     <ClInclude Include="Keyboard\kb_994A.h" />
+    <ClInclude Include="Keyboard\TIKeyboard.h" />
     <ClInclude Include="Memories\Classic99GROM.h" />
     <ClInclude Include="Memories\Classic99ROM.h" />
+    <ClInclude Include="Memories\TI994A22GROM.h" />
     <ClInclude Include="Memories\TI994AGROM.h" />
     <ClInclude Include="Memories\TI994AROM.h" />
     <ClInclude Include="Memories\TI994GROM.h" />
@@ -183,6 +185,8 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="EmulatorSupport\System.h" />
     <ClInclude Include="Systems\TexasInstruments\TI994.h" />
+    <ClInclude Include="Systems\TexasInstruments\TI994A.h" />
+    <ClInclude Include="Systems\TexasInstruments\TI994A_22.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="VDPs\F18A_19.h" />
     <ClInclude Include="VDPs\TMS9918.h" />
@@ -199,6 +203,7 @@
     <ClCompile Include="EmulatorSupport\tv.cpp" />
     <ClCompile Include="Keyboard\kb_994.cpp" />
     <ClCompile Include="Keyboard\kb_994A.cpp" />
+    <ClCompile Include="Keyboard\TIKeyboard.cpp" />
     <ClCompile Include="Memories\Classic99GROM.cpp" />
     <ClCompile Include="Memories\Classic99ROM.cpp" />
     <ClCompile Include="Memories\ColecoVisionROM.cpp" />
