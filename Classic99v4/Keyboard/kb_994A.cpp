@@ -23,8 +23,6 @@ BIT	HW	C99	Purpose						Status
 9	1	0	keyboard q					Implemented, but wrong?
 10	1	1	keyboard l					Implemented
 
-17  0   0   reserved					Implemented as loopback (not sure the intent, but 99/4 reads it)
-
 18	0	0	keyboard select bit 2		Implemented as loopback
 19	0	0	keyboard select bit 1		Implemented as loopback
 20	0	0	keyboard select bit 0		Implemented as loopback
@@ -33,39 +31,40 @@ BIT	HW	C99	Purpose						Status
 
 #endif
 
-#include "kb_994.h"
+#include "kb_994A.h"
 
 #define JOY1COL 2
 #define JOY2COL 4
 
 static int KEYS[8][8]= {  
-    // Keyboard - 99/4
-    /* unused */	ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
+	// Keyboard - 99/4A
+	/* Joy 2 */		ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
 
-    /* 1 */			ALLEGRO_KEY_N, ALLEGRO_KEY_H, ALLEGRO_KEY_U, ALLEGRO_KEY_7, ALLEGRO_KEY_C, ALLEGRO_KEY_D, ALLEGRO_KEY_R, ALLEGRO_KEY_4,
-    /* Joy 1 */		ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
-    /* 3 */			ALLEGRO_KEY_FULLSTOP, ALLEGRO_KEY_K, ALLEGRO_KEY_O, ALLEGRO_KEY_9, ALLEGRO_KEY_Z, ALLEGRO_KEY_A, ALLEGRO_KEY_W, ALLEGRO_KEY_2,
+	/* 1 */			ALLEGRO_KEY_M, ALLEGRO_KEY_J, ALLEGRO_KEY_U, ALLEGRO_KEY_7, ALLEGRO_KEY_4, ALLEGRO_KEY_F, ALLEGRO_KEY_R, ALLEGRO_KEY_V,					// MJU7 4FRV
+	/* 2 */			ALLEGRO_KEY_SLASH, ALLEGRO_KEY_SEMICOLON, ALLEGRO_KEY_P, ALLEGRO_KEY_0, ALLEGRO_KEY_1, ALLEGRO_KEY_A, ALLEGRO_KEY_Q, ALLEGRO_KEY_Z,		// /;P0 1AQZ
+	/* 3 */			ALLEGRO_KEY_FULLSTOP, ALLEGRO_KEY_L, ALLEGRO_KEY_O, ALLEGRO_KEY_9, ALLEGRO_KEY_2, ALLEGRO_KEY_S, ALLEGRO_KEY_W, ALLEGRO_KEY_X,			// .LO9 2SWX
 
-    /* Joy 2 */		ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
+	/* Joy 1 */		ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ESCAPE,
 	
-    /* 5 */			ALLEGRO_KEY_M, ALLEGRO_KEY_J, ALLEGRO_KEY_I, ALLEGRO_KEY_8, ALLEGRO_KEY_X, ALLEGRO_KEY_S, ALLEGRO_KEY_E, ALLEGRO_KEY_3,
-    /* 6 */			ALLEGRO_KEY_B, ALLEGRO_KEY_G, ALLEGRO_KEY_Y, ALLEGRO_KEY_6, ALLEGRO_KEY_V, ALLEGRO_KEY_F, ALLEGRO_KEY_T, ALLEGRO_KEY_5,
-    /* 7 */			ALLEGRO_KEY_ENTER, ALLEGRO_KEY_L, ALLEGRO_KEY_P, ALLEGRO_KEY_0, ALLEGRO_KEY_LSHIFT, ALLEGRO_KEY_SPACE, ALLEGRO_KEY_Q, ALLEGRO_KEY_1
+	/* 5 */			ALLEGRO_KEY_COMMA, ALLEGRO_KEY_K, ALLEGRO_KEY_I, ALLEGRO_KEY_8, ALLEGRO_KEY_3, ALLEGRO_KEY_D, ALLEGRO_KEY_E, ALLEGRO_KEY_C,				// ,KI8 3DEC
+	/* 6 */			ALLEGRO_KEY_N, ALLEGRO_KEY_H, ALLEGRO_KEY_Y, ALLEGRO_KEY_6, ALLEGRO_KEY_5, ALLEGRO_KEY_G, ALLEGRO_KEY_T, ALLEGRO_KEY_B,					// NHY6 5GTB
+	/* 7 */			ALLEGRO_KEY_EQUALS, ALLEGRO_KEY_SPACE, ALLEGRO_KEY_ENTER, ALLEGRO_KEY_ESCAPE, ALLEGRO_KEY_ALT, ALLEGRO_KEY_LSHIFT, ALLEGRO_KEY_LCTRL, ALLEGRO_KEY_ESCAPE 
+	 																		// = rx fscx
 };
 
 // not much needed for construction
-KB994::KB994(Classic99System *core) 
+KB994A::KB994A(Classic99System *core) 
     : Classic99Peripheral(core)
 	, bJoy(true)
 	, fJoystickActiveOnKeys(0)
     , scanCol(0)
-	, bit17(false)
+    , alphaActive(false)
 {
 }
-KB994::~KB994() {
+KB994A::~KB994A() {
 }
 
-uint8_t KB994::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE *pState) {
+uint8_t KB994A::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE *pState) {
 	int joyX, joyY, joyFire;
 	int ret=1;
 
@@ -252,7 +251,7 @@ uint8_t KB994::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE *pSt
 	return ret;
 }
 
-uint8_t KB994::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {
+uint8_t KB994A::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {
     // there are no extra cycles used by the TI's CRU
     (void)isIO;
     (void)cycles;
@@ -262,16 +261,16 @@ uint8_t KB994::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
     al_get_keyboard_state(&state);
 
     // the address will match the CRU bits as above
-
-	// try the magic loopback
-	if (addr == 17) {
-		// going to just flip flop this to get past whatever is wrong...
-		// TODO: Classic99 3xx does NOT have this problem...
-		// This could be related to the missing 9901 timer mode, perhaps
-		// Can usually reproduce the issue by entering TI BASIC and pressing 6. Yes, just that. No, it doesn't make sense.
-		bit17 = !bit17;
-		return bit17 ? true : false;
-	}
+    
+    // First check if we are reading alpha lock - we do the inversion of caps lock
+    if ((addr == 0x07) && (alphaActive)) {
+        uint8_t ret = 0;
+        // TODO: verify this works as CAPS /state/, not caps KEY status
+        if (al_key_down(&state, ALLEGRO_KEY_CAPSLOCK)) {
+            ret = 1;
+        }
+        return 1;
+    }
 
     // try joysticks... 
     uint8_t ret = CheckJoysticks(addr, scanCol, &state);
@@ -285,13 +284,13 @@ uint8_t KB994::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
     return ret;
 }
 
-void KB994::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
+void KB994A::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
     // there are no extra cycles used by the TI's CRU
     (void)isIO;
     (void)cycles;
     (void)rmw;
 
-    // only 3 bits matter here
+    // only 4 bits matter here
     switch (addr) {
         case 0x12:
             scanCol = (scanCol&0x3) | (data?0:4);
@@ -304,47 +303,57 @@ void KB994::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw,
         case 0x14:
             scanCol = (scanCol&0x6) | (data?0:1);
             break;
+
+        case 0x21:
+            if (data) {
+                alphaActive = false;
+            } else {
+                alphaActive = true;
+            }
+            break;
     }
 }
 
-bool KB994::init(int idx) {
+bool KB994A::init(int idx) {
 	al_install_joystick();
 	al_install_keyboard();
     return true;
 }
 
-bool KB994::operate(double timestamp) {
+bool KB994A::operate(double timestamp) {
     // nothing special to do here
     return true;
 }
 
-bool KB994::cleanup() {
+bool KB994A::cleanup() {
     al_uninstall_keyboard();
 	al_uninstall_joystick();
     return true;
 }
 
-void KB994::getDebugSize(int &x, int &y) {
+void KB994A::getDebugSize(int &x, int &y) {
     // we had a nice bitmapped keyboard map, but right now, not sure
     x=0;
     y=0;
 }
 
-void KB994::getDebugWindow(char *buffer) {
+void KB994A::getDebugWindow(char *buffer) {
     // nothing at the moment
 }
 
-int KB994::saveStateSize() {
+int KB994A::saveStateSize() {
     return 4;
 }
 
-bool KB994::saveState(unsigned char *buffer) {
-	// only using 1 of the 4 bytes...
+bool KB994A::saveState(unsigned char *buffer) {
+	// only using 2 of the 4 bytes...
 	buffer[0] = scanCol&0xff;
+	buffer[1] = alphaActive ? 1:0;
     return true;
 }
 
-bool KB994::restoreState(unsigned char *buffer) {
+bool KB994A::restoreState(unsigned char *buffer) {
 	scanCol = buffer[0];
+	alphaActive = buffer[1] ? true : false;
 	return true;
 }

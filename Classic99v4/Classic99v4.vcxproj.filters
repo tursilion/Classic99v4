@@ -103,6 +103,15 @@
     <ClInclude Include="Keyboard\kb_994A.h">
       <Filter>Keyboard</Filter>
     </ClInclude>
+    <ClInclude Include="Memories\TI994AGROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
+    <ClInclude Include="Memories\TI994AROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
+    <ClInclude Include="Memories\Classic99ROM.h">
+      <Filter>Memories</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -204,6 +213,18 @@
     </ClCompile>
     <ClCompile Include="Keyboard\kb_994A.cpp">
       <Filter>Keyboard</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994AGROMData.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994AROMData.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\TI994A22GROMData.cpp">
+      <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="Memories\Classic99ROM.cpp">
+      <Filter>Memories</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -93,10 +93,12 @@ bool TI994::initSystem() {
             claimIOWrite(idx+off, pKey, off);
         }
         // I'm not sure what this is for, but the emulation seems to help
-        // it not hang... (I hope). We just treat this bit as a loopback.
-        // The 99/4 sometimes hangs on this bit...
+        // it not hang... (I hope). We just toggle this bit as a workaround -
+        // the schematics say it's not even hooked up. (Though maybe it's 
+        // related to timer mode, which I haven't coded yet. TODO.)
+        // The 99/4 sometimes hangs on this bit... I suppose a disassembly
+        // MIGHT clue in what's going on... Classic99 3xx does not have this issue.
         claimIORead(idx+17, pKey, 17);
-        claimIOWrite(idx+17, pKey, 17);
     }
 
     // TODO sound
