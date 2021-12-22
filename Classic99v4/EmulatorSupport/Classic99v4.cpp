@@ -45,6 +45,25 @@ void fail(const char *str) {
 
 // MAN I wanted this basic signature in the old Classic99... ;)
 int main(int argc, char **argv) {
+    int sys = 1981;
+
+    if (argc > 1) {
+        sys = atoi(argv[1]);
+        switch (sys) {
+            case 1979:
+            case 1981:
+            case 1983:
+                break;
+
+            default:
+                printf("Run classic99v4 with a number to select a specific system:\n");
+                printf("  classic99v4.exe 1979 - selects 99/4\n");
+                printf("  classic99v4.exe 1981 - selects 99/4A\n");
+                printf("  classic99v4.exe 1983 - selects 99/4A v2.2\n");
+                return 0;
+        }
+    }
+
     // everyone relies on debug
     debug_init();
 
@@ -72,14 +91,18 @@ int main(int argc, char **argv) {
     // now we can start starting
     debug_write("Starting Classic99 version " VERSION);
 
-    //debug_write("Starting a 99/4...");
-    //TI994 *pSys = new TI994();
+    TI994 *pSys;
 
-    debug_write("Starting a 99/4A...");
-    TI994 *pSys = new TI994A();
-
-    //debug_write("Starting a v2.2 99/4A...");
-    //TI994 *pSys = new TI994A22();
+    if (sys == 1979) {
+        debug_write("Starting a 99/4...");
+        pSys = new TI994();
+    } else if (sys == 1983) {
+        debug_write("Starting a v2.2 99/4A...");
+        pSys = new TI994A22();
+    } else {
+        debug_write("Starting a 99/4A...");
+        pSys = new TI994A();
+    }
 
     pSys->initSystem();
 
