@@ -32,7 +32,7 @@ The code is based on Allegro 5.x, so in theory, it should build cross-platform. 
 set up and have not attempted this. If you do, let me know what happened. I can say for sure that the
 timing system is only implemented for Windows, and the temp hack for anything else will run a little slower.
 
-Download the latest release zip (Windows) here: [https://github.com/tursilion/classic99v4/raw/master/dist/classic99v4.zip](https://github.com/tursilion/classic99v4/raw/master/dist/classic99v4.zip)
+Download the latest release zip (Windows) here: [https://github.com/tursilion/Classic99v4/blob/master/dist/Classic99v4.zip?raw=true](https://github.com/tursilion/Classic99v4/blob/master/dist/Classic99v4.zip?raw=true)
 
 Want to donate?
 ---------------
