@@ -264,7 +264,11 @@ uint8_t TMS9918::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE 
             // Lee's fbForth random number code to function, which worked by watching 
             // for the interrupt bit while leaving interrupts enabled.
             // Safe to just call, we know we can't be recursed.
-            operate(lastTimestamp+cycles);
+			// TODO: 'cycles' is reset every instruction, so we can't use it to
+			// determine how far along the CPU is. But we probably should
+			// That said, a fake value in here should be adequate?
+            //operate(lastTimestamp+cycles);
+			operate(lastTimestamp+64);	// about a scanline's worth
         }
 
 #if 0 
@@ -702,12 +706,12 @@ bool TMS9918::operate(double timestamp) {
 		if (vdpscanline == TMS_DISPLAY_HEIGHT+TMS_FIRST_DISPLAY_LINE) {
 			// set the vertical interrupt
 			VDPS|=VDPS_INT;
-			end_of_frame = 1;
-		} else if (vdpscanline >= TMS_HEIGHT) {
-			vdpscanline = 0;
-
-			// TODO: full frame ready to draw - tell TV system
+		} else if (vdpscanline == TMS_HEIGHT) {
+			// tell the TV to draw the frame
 			theCore->getTV()->setDrawReady(true);
+		} else if (vdpscanline >= TMS_HEIGHT+TMS_BLANKING) {
+			// reset the raster
+			vdpscanline = 0;
 		}
 
 #if 0

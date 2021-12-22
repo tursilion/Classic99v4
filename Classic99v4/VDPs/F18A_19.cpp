@@ -698,7 +698,6 @@ bool TMS9918::operate(double timestamp) {
 		if (vdpscanline == TMS_DISPLAY_HEIGHT+TMS_FIRST_DISPLAY_LINE) {
 			// set the vertical interrupt
 			VDPS|=VDPS_INT;
-			end_of_frame = 1;
 		} else if (vdpscanline >= TMS_HEIGHT) {
 			vdpscanline = 0;
 

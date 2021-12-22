@@ -208,15 +208,18 @@ bool TI994::runSystem(int microSeconds) {
     //pGrom->operate(currentTimestamp);
     //pScratch->operate(currentTimestamp);
     //pKey->operate(currentTimestamp);
+    //pPSG->operate(currentTimestamp);
     
     // these guys DO need runtime
     pCPU->operate(currentTimestamp);
     pVDP->operate(currentTimestamp);
 
-    // route the interrupt lines
+    // route the interrupt lines - VDP is on interrupt 1
     if (pVDP->isIntActive()) {
         // TODO: emulate the masking on the 9901 - we may need a peripheral device
         requestInt(1);
+    } else {
+        clearInt(1);
     }
 
     return true;

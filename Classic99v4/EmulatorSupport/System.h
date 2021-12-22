@@ -125,25 +125,22 @@ public:
     }
 
     // interrupts - we don't need to track who, but we do need level and which CPU
-    // CPU will clear this when serviced - is that okay? The 9900 is level based, so
-    // for now, we will assume that's what we want to do here.
+    // the bit represents the pin from the hardware, clearing it is dependant on the device
+    // likewise, edge triggered CPUs need to handle the edge trigger themselves
     virtual void requestInt(int level) {
         intReqLevel |= (1<<level);
     }
+    virtual void clearInt(int level) {
+        intReqLevel &= (~(1<<level));
+    }
     // I don't think we care who requested this either...?
     virtual void requestNMI() { nmiReq = true; }
+    virtual void clearNMI() { nmiReq = false; }
     // covers both kinds
     virtual bool interruptPending() { return (intReqLevel != 0) || (nmiReq); }
     // functions for the CPUs
-    virtual bool getAndClearIntReq(int level) {
-        int32_t n = 1<<level;  
-        if (intReqLevel.fetch_and(~n) & n) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    virtual bool getAndClearNMI() { return nmiReq.exchange(false); }
+    virtual uint32_t getIntLevels() { return intReqLevel; }
+    virtual bool getNMI() { return nmiReq; }
 
 protected:
     ALLEGRO_MUTEX *coreLock;      // our object lock

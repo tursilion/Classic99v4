@@ -61,10 +61,6 @@ bool TMS9900::init(int idx) {
 
 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
 bool TMS9900::operate(double timestamp) {
-    // This system runs on CPU ticks, which are 3MHz, but timestamp ticks at 1MHz,
-    // so we multiply by 3 here.
-    timestamp *= 3.0;
-
     // handle first call or timestamp wraparound
     if ((lastTimestamp == 0) || (timestamp < lastTimestamp)) {
         lastTimestamp = timestamp;
@@ -85,12 +81,10 @@ bool TMS9900::operate(double timestamp) {
         }
     }
 
-    // work on the run itself
-    int neededTicks = (timestamp - lastTimestamp);
-    int executedTicks = neededTicks;
-
     // run as many cycles as have elapsed
-    for (; neededTicks > 0; neededTicks -= GetCycleCount()) {
+    ResetCycleCount();
+    // CPU runs at 3MHz, so each CPU cycle is 1/3 of a timestamp time
+    for ( ; lastTimestamp < timestamp; lastTimestamp += (GetCycleCount()*(1.0/3.0))) {
         // prepare to count cycles this instruction
         ResetCycleCount();
 
@@ -102,7 +96,7 @@ bool TMS9900::operate(double timestamp) {
             --skip_interrupt;
         } else {
             if (theCore->interruptPending()) {
-                if (theCore->getAndClearNMI()) {
+                if (theCore->getNMI()) {
                     TriggerInterrupt(-1);
                     // now continue so the cycles are tracked
                     continue;
@@ -110,8 +104,9 @@ bool TMS9900::operate(double timestamp) {
                     // must be a level interrupt. Although the 99/4A only has one
                     // level, we'll be a good 9900 and check them all...
                     int minLevel = GetST()&0x000f;  // get the level mask, ints must be equal or lower
+                    uint32_t ints = theCore->getIntLevels();
                     for (int idx = 0; idx < minLevel; ++idx) {
-                        if (theCore->getAndClearIntReq(idx)) {
+                        if (ints & (1<<idx)) {
                             // all ints are wired to level 1 on the TI, so the vector is 4
                             // the convention to LIMI 2 actually enables levels 1 and 2, but
                             // only level 1 is wired. This is frequently confusing so documented now.
@@ -124,11 +119,15 @@ bool TMS9900::operate(double timestamp) {
                             // a routine that dumps the status register...
                             // There is another gotcha - this needs to run through the 9901...
                             TriggerInterrupt(idx);
-                            continue;
+                            minLevel = -1;
+                            break;
                         }
                     }
-                    // there may be an interrupt available, but it's not permitted, so continue
-                    // down and execute instructions
+                    // there may be another interrupt available, but it's not permitted, so loop around
+                    // to count the cycles and proceed
+                    if (minLevel == -1) {
+                        continue;
+                    }
                 }
             }
         }
@@ -138,11 +137,6 @@ bool TMS9900::operate(double timestamp) {
         ADDPC(2);
         CALL_MEMBER_FN(this, opcode[in])();
     }
-
-    // now update our lastTimestamp. Note that executedTicks was our target in CPU ticks,
-    // and neededTicks might be negative if we ran slightly over (else it's 0, but more
-    // likely it's negative).
-    lastTimestamp += executedTicks-neededTicks; // add the probably negative neededTicks
 
     // ran successfully
     return true;

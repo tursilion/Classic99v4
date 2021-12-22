@@ -146,7 +146,6 @@ protected:
     uint32_t *pLine;                            // pointer to the start of the currently locked scanline
 
     int redraw_needed;							// redraw flag
-    int end_of_frame;							// end of frame flag (move this to tiemul.cpp, not used in VDP)
     int skip_interrupt;							// flag for some instructions TODO: WTF are these two CPU flags doing in VDP?
     int doLoadInt;								// execute a LOAD after this instruction
     int VDPREG[59]; 							// VDP read-only registers (9918A has 8, we define 9 to support 80 cols, and the F18 has 59 (!) (and 16 status registers!))
