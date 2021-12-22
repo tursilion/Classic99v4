@@ -72,6 +72,8 @@ bool Classic99TV::init() {
         debug_write("Bitmap format is %d", al_get_new_bitmap_format());
     }
 
+    drawReady = true;
+
     return true;
 }
 
@@ -147,7 +149,7 @@ bool Classic99TV::runWindowLoop() {
         }
     }
 
-    if (!dontDraw) {
+    if ((!dontDraw) && (drawReady)) {
         // clear the backdrop
         al_clear_to_color(bgColor);
 
@@ -160,6 +162,9 @@ bool Classic99TV::runWindowLoop() {
         }
 
         al_flip_display();
+
+        // wait to be told it's okay to draw again
+        drawReady = false;
     }
 
     return ret;

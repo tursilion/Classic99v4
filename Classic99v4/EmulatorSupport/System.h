@@ -24,7 +24,13 @@ enum MEMACCESSTYPE {
     ACCESS_READ = 0,    // normal read (or write)
     ACCESS_WRITE = 0,   // normal write (or read)
     ACCESS_RMW,         // read-before-write access, do not breakpoint, but count cycles
-    ACCESS_FREE         // internal access, do not count or breakpoint
+    ACCESS_FREE,        // internal access, do not count or breakpoint
+
+    // this is part of a previous cycle, the system should not add an access penalty. Stripped before peripheral sees it.
+    // this is used for 16 or 32 bit accesses to hardware that has system wait states, though the emulator uses
+    // only byte accesses. The FIRST access should /not/ include this flag, any others should to avoid the
+    // wait state cycles being added
+    ACCESS_SYSTEM = 0x8000  
 };
 
 // TODO: system needs a save state too - in fact it probably triggers all the other save states
@@ -33,14 +39,16 @@ enum MEMACCESSTYPE {
 // maps an address or IO to a peripheral class
 class PeripheralMap {
 public:
-    PeripheralMap() { who = &dummyPeripheral; addr = 0; }
-    PeripheralMap(Classic99Peripheral *inWho, int inAddr) { who = inWho; addr = inAddr; }
+    PeripheralMap() { who = &dummyPeripheral; addr = 0; waitStates = 0; }
+    PeripheralMap(Classic99Peripheral *inWho, int inAddr, int inWait) { who = inWho; addr = inAddr; waitStates = inWait; }
 
-    void updateMap(Classic99Peripheral *inWho, int inAddr) { who = inWho; addr = inAddr; }
+    void updateMap(Classic99Peripheral *inWho, int inAddr, int inWait) { who = inWho; addr = inAddr; waitStates = inWait; }
 
 protected:
     Classic99Peripheral *who;   // which peripheral to call
     int addr;                   // what address to tell the peripheral
+    int waitStates;             // how many cycles does accessing this peripheral cost in wait states?
+                                // note the peripheral itself may add additional cycles, this is system-wide.
 
     friend class Classic99System;
 };
@@ -67,10 +75,10 @@ public:
     // allocating memory space to devices
     // TODO: this array system won't scale to 32-bit systems...??
     // I guess we could allocate blocks instead of bytes in those cases?
-    bool claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
-    bool claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
-    bool claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
-    bool claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
+    bool claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
+    bool claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
+    bool claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
+    bool claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
                                                     
     // The CPUs normally default into these maps, but some CPUs might have their own handlers
     uint8_t readMemoryByte(int address, volatile long &cycles, MEMACCESSTYPE rmw);

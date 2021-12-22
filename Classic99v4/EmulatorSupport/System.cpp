@@ -15,10 +15,10 @@ Classic99System::Classic99System()
 
     // derived class MUST allocate these objects!
     // the single dummies at least prevent crashes
-    memorySpaceRead = new PeripheralMap(&dummyPeripheral, 0);
-    memorySpaceWrite = new PeripheralMap(&dummyPeripheral, 0);
-    ioSpaceRead = new PeripheralMap(&dummyPeripheral, 0);
-    ioSpaceWrite = new PeripheralMap(&dummyPeripheral, 0);
+    memorySpaceRead = new PeripheralMap(&dummyPeripheral, 0, 0);
+    memorySpaceWrite = new PeripheralMap(&dummyPeripheral, 0, 0);
+    ioSpaceRead = new PeripheralMap(&dummyPeripheral, 0, 0);
+    ioSpaceWrite = new PeripheralMap(&dummyPeripheral, 0, 0);
     memorySize = 0;
     ioSize = 0;
     currentTimestamp = 0.0;
@@ -36,27 +36,27 @@ Classic99System::~Classic99System() {
 }
 
 // handle allocating memory space in the general flat case
-bool Classic99System::claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+bool Classic99System::claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
     if (sysAdr >= memorySize) return false;
-    memorySpaceRead[sysAdr].updateMap(periph, periphAdr);
+    memorySpaceRead[sysAdr].updateMap(periph, periphAdr, waitStates);
     return true;
 }
 
-bool Classic99System::claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+bool Classic99System::claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
     if (sysAdr >= memorySize) return false;
-    memorySpaceWrite[sysAdr].updateMap(periph, periphAdr);
+    memorySpaceWrite[sysAdr].updateMap(periph, periphAdr, waitStates);
     return true;
 }
 
-bool Classic99System::claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+bool Classic99System::claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
     if (sysAdr >= ioSize) return false;
-    ioSpaceRead[sysAdr].updateMap(periph, periphAdr);
+    ioSpaceRead[sysAdr].updateMap(periph, periphAdr, waitStates);
     return true;
 }
 
-bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
+bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
     if (sysAdr >= ioSize) return false;
-    ioSpaceWrite[sysAdr].updateMap(periph, periphAdr);
+    ioSpaceWrite[sysAdr].updateMap(periph, periphAdr, waitStates);
     return true;
 }
 
@@ -70,6 +70,10 @@ uint8_t Classic99System::readMemoryByte(int address, volatile long &cycles, MEMA
     if (address >= memorySize) {
         address &= memorySize;
     }
+    if ((rmw&ACCESS_SYSTEM) == 0) {
+        cycles+=memorySpaceRead[address].waitStates;
+    }
+    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
     return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, false, cycles, rmw);
 }
 
@@ -81,6 +85,10 @@ void Classic99System::writeMemoryByte(int address, volatile long &cycles, MEMACC
     if (address >= memorySize) {
         address &= memorySize;
     }
+    if ((rmw&ACCESS_SYSTEM) == 0) {
+        cycles+=memorySpaceRead[address].waitStates;
+    }
+    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
     memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, false, cycles, rmw, data);
 }
 
@@ -91,6 +99,10 @@ uint8_t Classic99System::readIOByte(int address, volatile long &cycles, MEMACCES
     if (address >= ioSize) {
         address &= ioSize;
     }
+    if ((rmw&ACCESS_SYSTEM) == 0) {
+        cycles+=memorySpaceRead[address].waitStates;
+    }
+    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
     return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, true, cycles, rmw);
 }
 
@@ -102,6 +114,10 @@ void Classic99System::writeIOByte(int address, volatile long &cycles, MEMACCESST
     if (address >= ioSize) {
         address &= ioSize;
     }
+    if ((rmw&ACCESS_SYSTEM) == 0) {
+        cycles+=memorySpaceRead[address].waitStates;
+    }
+    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
     ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, true, cycles, rmw, data);
 }
 

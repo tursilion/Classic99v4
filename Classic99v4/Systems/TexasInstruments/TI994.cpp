@@ -69,41 +69,48 @@ bool TI994::initSystem() {
     initSpecificSystem();
 
     // now we can claim resources
+    const int ROMWait = 0;      // 0 wait states on ROM
+    const int ScratchWait = 0;  // 0 wait states on scratchpad RAM
+    const int VDPWait = 4;      // 4 wait states on VDP access
+    const int GROMWait = 4;     // 4 wait states on GROM access
+    const int KeyWait = 0;      // 0 wait states on keyboard access
 
     // system ROM
     for (int idx=0; idx<0x2000; ++idx) {
-        claimRead(idx, pRom, idx);
+        claimRead(idx, pRom, idx, ROMWait);
     }
 
     // scratchpad RAM
     for (int idx=0x8000; idx<0x8400; ++idx) {
-        claimRead(idx, pScratch, idx&0xff);
-        claimWrite(idx, pScratch, idx&0xff);
+        claimRead(idx, pScratch, idx&0xff, ScratchWait);
+        claimWrite(idx, pScratch, idx&0xff, ScratchWait);
     }
 
     // VDP ports
     for (int idx=0x8800; idx<0x8c00; idx+=2) {
-        claimRead(idx, pVDP, (idx&2) ? 1 : 0);
+        claimRead(idx, pVDP, (idx&2) ? 1 : 0, VDPWait);
     }
     for (int idx=0x8c00; idx<0x9000; idx+=2) {
-        claimWrite(idx, pVDP, (idx&2) ? 1 : 0);
+        claimWrite(idx, pVDP, (idx&2) ? 1 : 0, VDPWait);
     }
 
     // GROM ports
     for (int idx=0x9800; idx<0x9c00; idx+=2) {
-        claimRead(idx, pGrom, (idx&2) ? Classic99GROM::GROM_MODE_ADDRESS : 0);
+        claimRead(idx, pGrom, (idx&2) ? Classic99GROM::GROM_MODE_ADDRESS : 0, GROMWait);
     }
     for (int idx=0x9c00; idx<0xa000; idx+=2) {
-        claimWrite(idx, pGrom, (idx&2) ? (Classic99GROM::GROM_MODE_ADDRESS|Classic99GROM::GROM_MODE_WRITE) : Classic99GROM::GROM_MODE_WRITE);
+        claimWrite(idx, pGrom, 
+            (idx&2) ? (Classic99GROM::GROM_MODE_ADDRESS|Classic99GROM::GROM_MODE_WRITE) : Classic99GROM::GROM_MODE_WRITE, 
+            GROMWait);
     }
 
     // IO ports for keyboard
     for (int idx=0; idx<0x800; idx+=20) {
         for (int off=3; off<=10; ++off) {
-            claimIORead(idx+off, pKey, off);
+            claimIORead(idx+off, pKey, off, KeyWait);
         }
         for (int off=18; off<=20; ++off) {
-            claimIOWrite(idx+off, pKey, off);
+            claimIOWrite(idx+off, pKey, off, KeyWait);
         }
         // I'm not sure what this is for, but the emulation seems to help
         // it not hang... (I hope). We just toggle this bit as a workaround -
@@ -111,7 +118,7 @@ bool TI994::initSystem() {
         // related to timer mode, which I haven't coded yet. TODO.)
         // The 99/4 sometimes hangs on this bit... I suppose a disassembly
         // MIGHT clue in what's going on... Classic99 3xx does not have this issue.
-        claimIORead(idx+17, pKey, 17);
+        claimIORead(idx+17, pKey, 17, KeyWait);
     }
 
     // TODO sound
@@ -155,7 +162,13 @@ bool TI994::deInitSystem() {
 bool TI994::runSystem(int microSeconds) {
     currentTimestamp += microSeconds;
 
-    // ROM and GROM don't need any runtime, so we can skip them
+    // these guys don't need runtime, so not going to run them
+    //pRom->operate(currentTimestamp);
+    //pGrom->operate(currentTimestamp);
+    //pScratch->operate(currentTimestamp);
+    //pKey->operate(currentTimestamp);
+    
+    // these guys DO need runtime
     pCPU->operate(currentTimestamp);
     pVDP->operate(currentTimestamp);
 

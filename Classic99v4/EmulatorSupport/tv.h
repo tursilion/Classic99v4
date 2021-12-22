@@ -44,6 +44,9 @@ public:
     // change the background color
     void setBgColor(ALLEGRO_COLOR col);
 
+    // tell the window loop it's okay to draw
+    void setDrawReady(bool isReady) { drawReady = isReady; }
+
     // Run window processing, blit the display, process all events
     // to be called 60 times a second for NTSC
     // if it returns true, we must exit the application
@@ -58,6 +61,7 @@ private:
     ALLEGRO_COLOR bgColor;
     ALLEGRO_MUTEX *windowLock;
     int windowXSize, windowYSize;
+    bool drawReady;
 };
 
 #endif

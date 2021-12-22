@@ -621,7 +621,7 @@ Byte TMS9900::RCPUBYTE(Word src) {
 
     // always read both bytes
     Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, ACCESS_READ);         // odd byte
-    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, ACCESS_READ);    // even byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_READ|ACCESS_SYSTEM));    // even byte
 
     if (src&1) {
         return lsb;
@@ -637,18 +637,18 @@ void TMS9900::WCPUBYTE(Word dest, Byte c) {
     // always read both bytes
     int adr = dest & 0xfffe;    // make even, but remember the original value
     Byte lsb = theCore->readMemoryByte(adr+1, nCycleCount, ACCESS_RMW);   // odd byte
-    Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);     // even byte
+    Byte msb = theCore->readMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_RMW|ACCESS_SYSTEM));    // even byte
 
     // always write both bytes
     if (dest&1) {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, c);
-        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, msb);
+        theCore->writeMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), msb);
 
         if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, msb*256+c);
         else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, msb*256+c);
     } else {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, lsb);
-        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, c);
+        theCore->writeMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), c);
 
         if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, c*256+lsb);
         else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, c*256+lsb);
@@ -659,8 +659,8 @@ int TMS9900::ROMWORD(Word src, MEMACCESSTYPE rmw) {
     // most common basic access
     // as above, read lsb first in a bit of 99/4A specific knowledge
     // the real TMS9900 is 16-bit only, but Classic99's architecture is 8 bit
-    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);         // odd byte
-    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, rmw);    // even byte
+    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);                // odd byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, static_cast<MEMACCESSTYPE>(rmw|ACCESS_SYSTEM));   // even byte
     return (msb<<8)|lsb;
 }
 
@@ -670,7 +670,7 @@ void TMS9900::WRWORD(Word dest, Word val) {
 
     // now write the new data, in 99/4A order
     theCore->writeMemoryByte(dest+1, nCycleCount, ACCESS_WRITE, val&0xff);
-    theCore->writeMemoryByte(dest, nCycleCount, ACCESS_WRITE, (val>>8)&0xff);
+    theCore->writeMemoryByte(dest, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), (val>>8)&0xff);
 
     if (dest == 0x8356) setInterestingData(DATA_TMS9900_8356, val);
     else if (dest == 0x8370) setInterestingData(DATA_TMS9900_8370, val);

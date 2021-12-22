@@ -182,6 +182,7 @@
     <ClInclude Include="Memories\TI994GROM.h" />
     <ClInclude Include="Memories\TI994ROM.h" />
     <ClInclude Include="Memories\TI994Scratchpad.h" />
+    <ClInclude Include="PSGs\SN76xxx.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="EmulatorSupport\System.h" />
     <ClInclude Include="Systems\TexasInstruments\TI994.h" />
@@ -220,6 +221,7 @@
     <ClCompile Include="Memories\TI994ROM.cpp" />
     <ClCompile Include="Memories\TI994ROMData.cpp" />
     <ClCompile Include="Memories\TI994Scratchpad.cpp" />
+    <ClCompile Include="PSGs\SN76xxx.cpp" />
     <ClCompile Include="Systems\Coleco\ColecoVision.cpp" />
     <ClCompile Include="VDPs\F18A_19.cpp" />
     <ClCompile Include="Systems\Coleco\Phoenix.cpp" />

@@ -24,7 +24,10 @@
 #include "../Systems/TexasInstruments/TI994A.h"
 #include "../Systems/TexasInstruments/TI994A_22.h"
 
+#ifdef ALLEGRO_WINDOWS
+// for timers
 #include <Windows.h>
+#endif
 
 // Cleanup - shared function to release resources
 void Cleanup() {
@@ -80,9 +83,52 @@ int main(int argc, char **argv) {
 
     pSys->initSystem();
 
+    // This tracks elapsed time
+    double elapsedUs = 0;
+
+#ifdef ALLEGRO_WINDOWS
+    // TODO: how to do this for Linux, Mac, Android?
+    LARGE_INTEGER nStart, nEnd, nFreq;
+    QueryPerformanceCounter(&nStart);
+#endif
+
     for (;;) {
+        // TODO: We could have a new high precision mode that doesn't sleep, just
+        // yields, and with the time measurement the quantum then becomes as
+        // tight as the system we're on allows for.
         al_rest(0.01);
-        pSys->runSystem(10000);
+
+#ifdef ALLEGRO_WINDOWS
+        // TODO: how to do this for Linux, Mac, Android?
+        QueryPerformanceCounter(&nEnd);
+        QueryPerformanceFrequency(&nFreq);
+
+        if (nEnd.QuadPart > nStart.QuadPart) {
+            nEnd.QuadPart -= nStart.QuadPart;
+            elapsedUs += ((double)nEnd.QuadPart / nFreq.QuadPart) * 1000000;
+        }
+
+        // start timing for the next loop
+        QueryPerformanceCounter(&nStart);
+#else
+        // it wil be more than this thanks to WindowLoop/etc
+        elapsedUs += 10000;
+#endif
+
+        // to try for rough scanline accuracy, we'll run 64uS slices up to the desired time
+        // TODO: this is working, but it's running fast on the CPU (? just fast)
+        // If I mess with the timing, the VDP runs fast too - in theory neither SHOULD...
+        while (elapsedUs > 64.0) {
+            pSys->runSystem(64);
+            elapsedUs -= 64.0;
+        }
+        // and for precision mode, run whatever's left
+        if (elapsedUs > 1.0) {
+            pSys->runSystem((int)elapsedUs);
+            elapsedUs -= (int)elapsedUs;
+        }
+
+        // update the display
         if (pSys->getTV()->runWindowLoop()) break;  // TODO: maybe this comes out of runSystem instead.
     }
 

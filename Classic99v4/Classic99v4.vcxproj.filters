@@ -124,6 +124,9 @@
     <ClInclude Include="Memories\TI994A22GROM.h">
       <Filter>Memories</Filter>
     </ClInclude>
+    <ClInclude Include="PSGs\SN76xxx.h">
+      <Filter>PSGs</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -243,6 +246,9 @@
     </ClCompile>
     <ClCompile Include="Memories\Demonstration.cpp">
       <Filter>Memories</Filter>
+    </ClCompile>
+    <ClCompile Include="PSGs\SN76xxx.cpp">
+      <Filter>PSGs</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

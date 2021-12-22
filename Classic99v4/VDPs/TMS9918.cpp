@@ -664,7 +664,7 @@ bool TMS9918::init(int index) {
 		return false;
 	}
 
-	// we could get much, much faster performance if we allocated textures for
+	// we could get faster performance if we allocated textures for
 	// the character set and sprites, and blit them all at once, but that would
 	// not allow for a scanline-based display... so we'll just pixel them...
 	pDisplay = theCore->getTV()->requestLayer(TMS_WIDTH, TMS_HEIGHT);
@@ -674,6 +674,8 @@ bool TMS9918::init(int index) {
 	bDisableBackground = false;
     bDisableColorLayer = false;
 	bDisablePatternLayer = false;
+
+	bShowFPS = 1;
 
 	vdpReset(true);     // todo: need to allow warm reset
 
@@ -690,9 +692,10 @@ bool TMS9918::operate(double timestamp) {
 	// 262 scanlines at 60hz or 50hz, calculate a time per scanline in microseconds
 	// the fraction is necessary for accurate timing
 	// 262 lines, 342 pixel clocks per line
-	const int timePerScanline = 1000000.0 / (double)(hzRate*262);
+	const double timePerScanline = 1000000.0 / (double)(hzRate*262);
 
 	// TODO: debug needs a way to force a full frame update
+	// can now do this with TV->setDrawReady(true), frames are now always being drawn, not tied to CPU...
 
 	while (lastTimestamp + timePerScanline < timestamp) {
 		++vdpscanline;
@@ -704,7 +707,7 @@ bool TMS9918::operate(double timestamp) {
 			vdpscanline = 0;
 
 			// TODO: full frame ready to draw - tell TV system
-			//SetEvent(BlitEvent);
+			theCore->getTV()->setDrawReady(true);
 		}
 
 #if 0
@@ -1312,6 +1315,8 @@ void TMS9918::VDPdisplay(int scanline)
 	}
 
 bottom:
+	al_unlock_bitmap(pDisplay->bmp);
+
 	// TODO: replace with actual bottom of display frame - varies on F18A
 	if (gfxline == 191) {
 		if (bShowFPS) {
@@ -1326,19 +1331,26 @@ bottom:
 				time(&lasttime);
 			}
 			// draw digits
-			for (int i2=0; i2<5; i2++) {
-				// TODO: probably wrong calculation now
-				uint32_t *pDat = (uint32_t*)((unsigned char*)pImg->data + (256+16)*(6-i2));
-				for (int idx = 0; idx<(signed)strlen(buf); idx++) {
-					int digit = buf[idx] - '0';
-					pDat = drawTextLine(pDat, digpat[digit][i2]);
-					*(pDat++)=0;
+			pImg = al_lock_bitmap_region(pDisplay->bmp, 0, 187, 12, 5, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_WRITEONLY);
+			if (NULL == pImg) {
+				debug_write("Could not lock bitmap for FPS!");
+				bShowFPS = 0;
+			} else {
+				pLine = NULL;	// make sure it's zeroed unless we need it
+
+				for (int i2=0; i2<5; i2++) {
+					uint32_t *pDat = ((uint32_t*)pImg->data) + pImg->pitch*i2/4;
+					for (int idx = 0; idx<(signed)strlen(buf); idx++) {
+						int digit = buf[idx] - '0';
+						pDat = drawTextLine(pDat, digpat[digit][i2]);
+						*(pDat++)=0;
+					}
 				}
+
+				al_unlock_bitmap(pDisplay->bmp);
 			}
 		}
 	}
-
-	al_unlock_bitmap(pDisplay->bmp);
 }
 
 // Draw graphics mode
