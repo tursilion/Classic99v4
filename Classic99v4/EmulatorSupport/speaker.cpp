@@ -55,7 +55,7 @@ bool Classic99Speaker::runSpeakerLoop() {
     // render the layers
     for (unsigned int idx=0; idx<layers.size(); ++idx) {
         std::shared_ptr<autoStream> ptr = layers[idx];
-        if (ptr->checkStreamHungry()) {
+        while (ptr->checkStreamHungry()) {
             void *pBuf = ptr->getStreamPointer();
             if (nullptr != pBuf) {
                 // bufferSize is in samples, so we multiply by 2 for ALLEGRO_AUDIO_DEPTH_INT16

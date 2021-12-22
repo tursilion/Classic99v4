@@ -411,7 +411,13 @@ void SN76xxx::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
 bool SN76xxx::init(int idx) {
 	setIndex("SN76xxx", idx);
 
+	// get a stream running
 	stream = theCore->getSpeaker()->requestStream(this);
+	if (nullptr != stream->stream) {
+		al_attach_audio_stream_to_mixer(stream->stream, al_get_default_mixer());
+	}
+
+	// init the emulation
 	sound_init(AudioSampleRate);	// TODO: need configuration input
 	return true;
 }
@@ -422,7 +428,7 @@ bool SN76xxx::operate(double timestamp) {
 }
 
 bool SN76xxx::cleanup() {
-	// nothing to cleanup, I think
+	// don't remove the stream, it's an auto
 	return true;
 }
 

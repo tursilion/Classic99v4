@@ -22,6 +22,7 @@ public:
     autoStream() = delete;
 
     ~autoStream() {
+    	al_drain_audio_stream(stream);
         al_destroy_audio_stream(stream);
     }
 

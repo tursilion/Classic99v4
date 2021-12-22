@@ -66,6 +66,8 @@ bool TI994::initSystem() {
     theSpeaker->init();
     pScratch = new TI994Scratchpad(this);
     pScratch->init(0);
+    pPSG = new SN76xxx(this);
+    pPSG->init(0);
 
     // call the virtual handler for the variants
     initSpecificSystem();
@@ -89,6 +91,11 @@ bool TI994::initSystem() {
     }
     for (int idx=0x8c00; idx<0x9000; idx+=2) {
         claimWrite(idx, pVDP, (idx&2) ? 1 : 0);
+    }
+
+    // PSG addresses (write only)
+    for (int idx=0x8400; idx<0x85ff; idx+=2) {
+        claimWrite(idx, pPSG, 0);
     }
 
     // GROM ports
@@ -170,6 +177,7 @@ bool TI994::deInitSystem() {
     ioSpaceWrite = nullptr;
 
     // free the hardware
+    delete pPSG;
     delete pVDP;
     delete pRom;
     delete pGrom;

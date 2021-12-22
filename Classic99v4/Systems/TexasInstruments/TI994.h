@@ -16,6 +16,7 @@
 #include "..\..\Memories\Classic99ROM.h"
 #include "..\..\Keyboard\TIKeyboard.h"
 #include "..\..\VDPs\TMS9918.h"
+#include "..\..\PSGs\SN76xxx.h"
 
 // define the actual system class
 class TI994 : public Classic99System {
@@ -39,6 +40,7 @@ protected:
     Classic99ROM *pRom;
     TI994Scratchpad *pScratch;
     TMS9918 *pVDP;                      // will be a 9918A on the 99/4A variant, could also be an F18A eventually
+    SN76xxx *pPSG;
     TIKeyboard *pKey;
 };
 
