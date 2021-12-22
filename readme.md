@@ -3,6 +3,8 @@ Classic99 v400.000
 
 This depot is not guaranteed to build at any given time - it's my bleeding edge repository.
 
+Open source (but restrictive license) emulator including ROMs licensed by Texas Instruments - see [older documentation](https://github.com/tursilion/classic99/raw/master/dist/Classic99%20Manual.pdf) for license and restrictions.
+
 This repository is not yet useful - however, it does boot and incldues the Demonstration cart.
 
 All features of the following hardware are complete:
@@ -30,6 +32,7 @@ The code is based on Allegro 5.x, so in theory, it should build cross-platform. 
 set up and have not attempted this. If you do, let me know what happened. I can say for sure that the
 timing system is only implemented for Windows, and the temp hack for anything else will run a little slower.
 
+Download the latest release zip (Windows) here: [https://github.com/tursilion/classic99v4/raw/master/dist/classic99v4.zip](https://github.com/tursilion/classic99v4/raw/master/dist/classic99v4.zip)
 
 Want to donate?
 ---------------
