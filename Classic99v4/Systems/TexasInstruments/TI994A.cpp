@@ -32,9 +32,8 @@ bool TI994A::initSpecificSystem() {
     pKey->init(0);
 
     // map in the alpha lock key output on bit 21
-    const int KeyWait = 0;
     for (int idx=0; idx<0x800; idx+=20) {
-        claimIOWrite(idx+21, pKey, 21, KeyWait);
+        claimIOWrite(idx+21, pKey, 21);
     }
 
     return true;

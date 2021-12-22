@@ -53,6 +53,7 @@ void TI994Scratchpad::write(int addr, bool isIO, volatile long &cycles, MEMACCES
 
 bool TI994Scratchpad::init(int idx) {
     // nothing special to do here
+    setIndex("Scratchpad", idx);
     return true;
 }
 

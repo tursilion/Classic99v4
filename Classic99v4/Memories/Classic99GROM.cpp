@@ -187,6 +187,7 @@ void Classic99GROM::write(int addr, bool isIO, volatile long &cycles, MEMACCESST
 
 bool Classic99GROM::init(int idx) {
     // nothing special to do here
+    setIndex("GROM", idx);
     return true;
 }
 
@@ -214,45 +215,26 @@ void Classic99GROM::getDebugWindow(char *buffer) {
 }
 
 int Classic99GROM::saveStateSize() {
-    // I wonder if this makes sense...?
-    return 5*4+8+64*1024;
+    return 8+64*1024+4+4+4+4+4;
 }
 
 bool Classic99GROM::saveState(unsigned char *buffer) {
-    int32_t x;      // for 64-bit, big endian compat...
-
     for (int idx=0; idx<8; ++idx) {
         *(buffer++) = bWritable[idx] ? 1 : 0;
     }
     memcpy(buffer, GROMDATA, 64*1024);
     buffer+=64*1024;
 
-    x = GRMADD;
-    memcpy(buffer, &x, 4);
-    buffer+=4;
-
-    x = grmaccess;
-    memcpy(buffer, &x, 4);
-    buffer+=4;
-
-    x = grmdata;
-    memcpy(buffer, &x, 4);
-    buffer+=4;
-
-    x = LastRead;
-    memcpy(buffer, &x, 4);
-    buffer+=4;
-
-    x = LastBase;
-    memcpy(buffer, &x, 4);
-    buffer+=4;
+    saveStateVal(buffer, GRMADD);
+    saveStateVal(buffer, grmaccess);
+    saveStateVal(buffer, grmdata);
+    saveStateVal(buffer, LastRead);
+    saveStateVal(buffer, LastBase);
 
     return true;
 }
 
 bool Classic99GROM::restoreState(unsigned char *buffer) {
-    int32_t x;      // for 64-bit, big endian compat...
-
     for (int idx=0; idx<8; ++idx) {
         bWritable[idx] = *(buffer++) ? true : false;
     }
@@ -260,25 +242,11 @@ bool Classic99GROM::restoreState(unsigned char *buffer) {
     memcpy(GROMDATA, buffer, 64*1024);
     buffer+=64*1024;
 
-    memcpy(&x, buffer, 4);
-    GRMADD = x;
-    buffer+=4;
-
-    memcpy(&x, buffer, 4);
-    grmaccess = x;
-    buffer+=4;
-
-    memcpy(&x, buffer, 4);
-    grmdata = x;
-    buffer+=4;
-
-    memcpy(&x, buffer, 4);
-    LastRead = x;
-    buffer+=4;
-
-    memcpy(&x, buffer, 4);
-    LastBase = x;
-    buffer+=4;
+    loadStateVal(buffer, GRMADD);
+    loadStateVal(buffer, grmaccess);
+    loadStateVal(buffer, grmdata);
+    loadStateVal(buffer, LastRead);
+    loadStateVal(buffer, LastBase);
 
     return true;
 }

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include "tv.h"
+#include "speaker.h"
 #include "debuglog.h"
 
 // TODO: probably need a smart pointered list of possible systems,
@@ -24,13 +25,7 @@ enum MEMACCESSTYPE {
     ACCESS_READ = 0,    // normal read (or write)
     ACCESS_WRITE = 0,   // normal write (or read)
     ACCESS_RMW,         // read-before-write access, do not breakpoint, but count cycles
-    ACCESS_FREE,        // internal access, do not count or breakpoint
-
-    // this is part of a previous cycle, the system should not add an access penalty. Stripped before peripheral sees it.
-    // this is used for 16 or 32 bit accesses to hardware that has system wait states, though the emulator uses
-    // only byte accesses. The FIRST access should /not/ include this flag, any others should to avoid the
-    // wait state cycles being added
-    ACCESS_SYSTEM = 0x8000  
+    ACCESS_FREE         // internal access, do not count or breakpoint
 };
 
 // TODO: system needs a save state too - in fact it probably triggers all the other save states
@@ -42,7 +37,12 @@ public:
     PeripheralMap() { who = &dummyPeripheral; addr = 0; waitStates = 0; }
     PeripheralMap(Classic99Peripheral *inWho, int inAddr, int inWait) { who = inWho; addr = inAddr; waitStates = inWait; }
 
-    void updateMap(Classic99Peripheral *inWho, int inAddr, int inWait) { who = inWho; addr = inAddr; waitStates = inWait; }
+    // pass nullptr or -1 to leave unchanged
+    void updateMap(Classic99Peripheral *inWho, int inAddr, int inWait) { 
+        if (nullptr != inWho) who = inWho; 
+        if (-1 != inAddr) addr = inAddr; 
+        if (-1 != inWait) waitStates = inWait; 
+    }
 
 protected:
     Classic99Peripheral *who;   // which peripheral to call
@@ -75,10 +75,10 @@ public:
     // allocating memory space to devices
     // TODO: this array system won't scale to 32-bit systems...??
     // I guess we could allocate blocks instead of bytes in those cases?
-    bool claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
-    bool claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
-    bool claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
-    bool claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates);
+    bool claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
+    bool claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
+    bool claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr);
+    bool claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr);
                                                     
     // The CPUs normally default into these maps, but some CPUs might have their own handlers
     uint8_t readMemoryByte(int address, volatile long &cycles, MEMACCESSTYPE rmw);
@@ -88,6 +88,7 @@ public:
 
     // access to the I/O
     Classic99TV *getTV() { return theTV; }
+    Classic99Speaker *getSpeaker() { return theSpeaker; }
 
     // debug interface - mainly for breakpoints, part of the main loop
     void processDebug();
@@ -158,6 +159,7 @@ protected:
 
     double currentTimestamp;
     Classic99TV *theTV;
+    Classic99Speaker *theSpeaker;
 
 private:
     // we have a single set of I/O devices that the peripherals can talk to

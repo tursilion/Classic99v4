@@ -103,7 +103,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>allegro.lib;allegro_main.lib;allegro_dialog.lib;user32.lib</AdditionalDependencies>
+      <AdditionalDependencies>allegro.lib;allegro_main.lib;allegro_dialog.lib;allegro_audio.lib;user32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -164,12 +164,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CPUs\tms9900.h" />
+    <ClInclude Include="EmulatorSupport\audioSrc.h" />
     <ClInclude Include="EmulatorSupport\autobitmap.h" />
     <ClInclude Include="EmulatorSupport\automutex.h" />
+    <ClInclude Include="EmulatorSupport\autostream.h" />
     <ClInclude Include="EmulatorSupport\Classic99v4.h" />
     <ClInclude Include="EmulatorSupport\debuglog.h" />
     <ClInclude Include="EmulatorSupport\interestingData.h" />
     <ClInclude Include="EmulatorSupport\peripheral.h" />
+    <ClInclude Include="EmulatorSupport\speaker.h" />
     <ClInclude Include="EmulatorSupport\tv.h" />
     <ClInclude Include="Keyboard\kb_994.h" />
     <ClInclude Include="Keyboard\kb_994A.h" />
@@ -200,6 +203,7 @@
     <ClCompile Include="EmulatorSupport\debuglog.cpp" />
     <ClCompile Include="EmulatorSupport\interestingData.cpp" />
     <ClCompile Include="EmulatorSupport\peripheral.cpp" />
+    <ClCompile Include="EmulatorSupport\speaker.cpp" />
     <ClCompile Include="EmulatorSupport\System.cpp" />
     <ClCompile Include="EmulatorSupport\tv.cpp" />
     <ClCompile Include="Keyboard\kb_994.cpp" />

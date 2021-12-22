@@ -62,6 +62,8 @@ bool TI994::initSystem() {
     // now create the peripherals we need
     theTV = new Classic99TV();
     theTV->init();
+    theSpeaker = new Classic99Speaker();
+    theSpeaker->init();
     pScratch = new TI994Scratchpad(this);
     pScratch->init(0);
 
@@ -69,48 +71,62 @@ bool TI994::initSystem() {
     initSpecificSystem();
 
     // now we can claim resources
-    const int ROMWait = 0;      // 0 wait states on ROM
-    const int ScratchWait = 0;  // 0 wait states on scratchpad RAM
-    const int VDPWait = 4;      // 4 wait states on VDP access
-    const int GROMWait = 4;     // 4 wait states on GROM access
-    const int KeyWait = 0;      // 0 wait states on keyboard access
 
     // system ROM
     for (int idx=0; idx<0x2000; ++idx) {
-        claimRead(idx, pRom, idx, ROMWait);
+        claimRead(idx, pRom, idx);
     }
 
     // scratchpad RAM
     for (int idx=0x8000; idx<0x8400; ++idx) {
-        claimRead(idx, pScratch, idx&0xff, ScratchWait);
-        claimWrite(idx, pScratch, idx&0xff, ScratchWait);
+        claimRead(idx, pScratch, idx&0xff);
+        claimWrite(idx, pScratch, idx&0xff);
     }
 
     // VDP ports
     for (int idx=0x8800; idx<0x8c00; idx+=2) {
-        claimRead(idx, pVDP, (idx&2) ? 1 : 0, VDPWait);
+        claimRead(idx, pVDP, (idx&2) ? 1 : 0);
     }
     for (int idx=0x8c00; idx<0x9000; idx+=2) {
-        claimWrite(idx, pVDP, (idx&2) ? 1 : 0, VDPWait);
+        claimWrite(idx, pVDP, (idx&2) ? 1 : 0);
     }
 
     // GROM ports
     for (int idx=0x9800; idx<0x9c00; idx+=2) {
-        claimRead(idx, pGrom, (idx&2) ? Classic99GROM::GROM_MODE_ADDRESS : 0, GROMWait);
+        claimRead(idx, pGrom, (idx&2) ? Classic99GROM::GROM_MODE_ADDRESS : 0);
     }
     for (int idx=0x9c00; idx<0xa000; idx+=2) {
         claimWrite(idx, pGrom, 
-            (idx&2) ? (Classic99GROM::GROM_MODE_ADDRESS|Classic99GROM::GROM_MODE_WRITE) : Classic99GROM::GROM_MODE_WRITE, 
-            GROMWait);
+            (idx&2) ? (Classic99GROM::GROM_MODE_ADDRESS|Classic99GROM::GROM_MODE_WRITE) : Classic99GROM::GROM_MODE_WRITE);
     }
 
-    // IO ports for keyboard
+    // set up the wait states
+    // TODO: is this bad API? We created the PeripheralMap, then we use claimXXX to claim it,
+    // then we directly access it to update the wait states? But claimXXX was not enough, we
+    // need to update regions even if we didn't load devices there... so...?
+    // 0000-1FFF - system ROM, no wait states
+    // 2000-3FFF - 8k ram expansion, 4 wait states per 16-bit access, 2 wait states each
+    // 4000-5FFF - DSR space - 4 wait states per... 
+    // 6000-7FFF - cartridge ROM - 4 wait states per...
+    for (int idx=0x2000; idx<0x7fff; ++idx) {
+        memorySpaceRead[idx].updateMap(nullptr, -1, 2);
+        memorySpaceWrite[idx].updateMap(nullptr, -1, 2);
+    }
+    // 8000-83FF - 256 byte scratchpad, no wait states
+    // 8400-9FFF - IO space, 4 wait states per...
+    // A000-FFFF - 24k memory expansion, 4 wait states per...
+    for (int idx=0x8400; idx<0xffff; ++idx) {
+        memorySpaceRead[idx].updateMap(nullptr, -1, 2);
+        memorySpaceWrite[idx].updateMap(nullptr, -1, 2);
+    }
+
+    // IO ports for keyboard - the IO induces no wait states
     for (int idx=0; idx<0x800; idx+=20) {
         for (int off=3; off<=10; ++off) {
-            claimIORead(idx+off, pKey, off, KeyWait);
+            claimIORead(idx+off, pKey, off);
         }
         for (int off=18; off<=20; ++off) {
-            claimIOWrite(idx+off, pKey, off, KeyWait);
+            claimIOWrite(idx+off, pKey, off);
         }
         // I'm not sure what this is for, but the emulation seems to help
         // it not hang... (I hope). We just toggle this bit as a workaround -
@@ -118,8 +134,14 @@ bool TI994::initSystem() {
         // related to timer mode, which I haven't coded yet. TODO.)
         // The 99/4 sometimes hangs on this bit... I suppose a disassembly
         // MIGHT clue in what's going on... Classic99 3xx does not have this issue.
-        claimIORead(idx+17, pKey, 17, KeyWait);
+        claimIORead(idx+17, pKey, 17);
     }
+
+    // Fill in wait states on the entire memory map
+    // it's okay to define them in the devices as well as above, but even unmapped
+    // memory still triggers the TI multiplexer
+    // 0000-1FFF = no wait states
+    // 2000-3FFF = 4 wait states
 
     // TODO sound
 
@@ -154,7 +176,18 @@ bool TI994::deInitSystem() {
     delete pCPU;
     delete pKey;
     delete pScratch;
+    delete theSpeaker;
     delete theTV;
+
+    // zero the pointers
+    pVDP = nullptr;
+    pRom = nullptr;
+    pGrom = nullptr;
+    pCPU = nullptr;
+    pKey = nullptr;
+    pScratch = nullptr;
+    theSpeaker = nullptr;
+    theTV = nullptr;
 
     return true;
 }

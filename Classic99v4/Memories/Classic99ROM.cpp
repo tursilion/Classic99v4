@@ -36,6 +36,7 @@ uint8_t Classic99ROM::read(int addr, bool isIO, volatile long &cycles, MEMACCESS
 }
 
 bool Classic99ROM::init(int idx) {
+    setIndex("ROM", idx);
     // get the user data into our own memory space
     if (dataSize > 0) {
         if (nullptr != pData) {

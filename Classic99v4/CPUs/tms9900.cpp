@@ -217,54 +217,28 @@ void TMS9900::getDebugWindow(char *buffer) {
 // You can grow a buffer, but you can never shrink it.
 // Try to make save states as compatible as possible when you do.
 int TMS9900::saveStateSize() {
-    return 6*4;
+    return 5*4;
 }
 
 // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
 bool TMS9900::saveState(unsigned char *buffer) {
-    // Write out the data we need to save, with a version so we know if it changed.
-    // just going to write everything as binary 32-bit ints
-    // since it matters here, we'll be specific
-    *(int32_t*)buffer = SAVE_STATE_VERSION;
-    buffer+=4;
-    *(int32_t*)buffer = PC;
-    buffer+=4;
-    *(int32_t*)buffer = WP;
-    buffer+=4;
-    *(int32_t*)buffer = ST;
-    buffer+=4;
-    *(int32_t*)buffer = idling;
-    buffer+=4;
-    *(int32_t*)buffer = skip_interrupt;
-    buffer+=4;
+    // Write out the data we need to save
+    saveStateVal(buffer, PC);
+    saveStateVal(buffer, WP);
+    saveStateVal(buffer, ST);
+    saveStateVal(buffer, idling);
+    saveStateVal(buffer, skip_interrupt);
 
     return true;
 }
 
 // restore state data from the provided buffer - guaranteed to be AT LEAST the size returned by saveStateSize
 bool TMS9900::restoreState(unsigned char *buffer) {
-    // This function needs to know all previous versions and do its best to import them
-    // Hopefully it won't need to change much.
-
-    int32_t version = *(int32_t*)buffer;
-    if (version >= 1) {
-        // collect the version 1 data
-        // we already got the version, so skip that
-        buffer+=4;
-        SetPC(*(int32_t*)buffer);
-        buffer+=4;
-        SetWP(*(int32_t*)buffer);
-        buffer+=4;
-        SetST(*(int32_t*)buffer);
-        buffer+=4;
-        idling = *(int32_t*)buffer;
-        buffer+=4;
-        skip_interrupt = *(int32_t*)buffer;
-        buffer+=4;
-    }
-    if (version >= 2) {
-        debug_write("Warning: restoring CPU state from newer version %d (we expect %d)", version, SAVE_STATE_VERSION);
-    }
+    loadStateVal(buffer, PC);
+    loadStateVal(buffer, WP);
+    loadStateVal(buffer, ST);
+    loadStateVal(buffer, idling);
+    loadStateVal(buffer, skip_interrupt);
 
     return true;
 }
@@ -621,7 +595,7 @@ Byte TMS9900::RCPUBYTE(Word src) {
 
     // always read both bytes
     Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, ACCESS_READ);         // odd byte
-    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_READ|ACCESS_SYSTEM));    // even byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, ACCESS_READ);    // even byte
 
     if (src&1) {
         return lsb;
@@ -637,18 +611,18 @@ void TMS9900::WCPUBYTE(Word dest, Byte c) {
     // always read both bytes
     int adr = dest & 0xfffe;    // make even, but remember the original value
     Byte lsb = theCore->readMemoryByte(adr+1, nCycleCount, ACCESS_RMW);   // odd byte
-    Byte msb = theCore->readMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_RMW|ACCESS_SYSTEM));    // even byte
+    Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);    // even byte
 
     // always write both bytes
     if (dest&1) {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, c);
-        theCore->writeMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), msb);
+        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, msb);
 
         if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, msb*256+c);
         else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, msb*256+c);
     } else {
         theCore->writeMemoryByte(adr+1, nCycleCount, ACCESS_WRITE, lsb);
-        theCore->writeMemoryByte(adr, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), c);
+        theCore->writeMemoryByte(adr, nCycleCount, ACCESS_WRITE, c);
 
         if (adr == 0x8356) setInterestingData(DATA_TMS9900_8356, c*256+lsb);
         else if (adr == 0x8370) setInterestingData(DATA_TMS9900_8370, c*256+lsb);
@@ -660,7 +634,7 @@ int TMS9900::ROMWORD(Word src, MEMACCESSTYPE rmw) {
     // as above, read lsb first in a bit of 99/4A specific knowledge
     // the real TMS9900 is 16-bit only, but Classic99's architecture is 8 bit
     Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);                // odd byte
-    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, static_cast<MEMACCESSTYPE>(rmw|ACCESS_SYSTEM));   // even byte
+    Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, rmw);   // even byte
     return (msb<<8)|lsb;
 }
 
@@ -670,7 +644,7 @@ void TMS9900::WRWORD(Word dest, Word val) {
 
     // now write the new data, in 99/4A order
     theCore->writeMemoryByte(dest+1, nCycleCount, ACCESS_WRITE, val&0xff);
-    theCore->writeMemoryByte(dest, nCycleCount, static_cast<MEMACCESSTYPE>(ACCESS_WRITE|ACCESS_SYSTEM), (val>>8)&0xff);
+    theCore->writeMemoryByte(dest, nCycleCount, ACCESS_WRITE, (val>>8)&0xff);
 
     if (dest == 0x8356) setInterestingData(DATA_TMS9900_8356, val);
     else if (dest == 0x8370) setInterestingData(DATA_TMS9900_8370, val);

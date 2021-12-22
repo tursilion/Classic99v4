@@ -323,6 +323,7 @@ void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE
 }
 
 bool TIKeyboard::init(int idx) {
+	setIndex("TIKeyboard", idx);
 	al_install_joystick();
 	al_install_keyboard();
     return true;

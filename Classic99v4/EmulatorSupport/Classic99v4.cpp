@@ -128,8 +128,15 @@ int main(int argc, char **argv) {
             elapsedUs -= (int)elapsedUs;
         }
 
+        // update audio
+        if (nullptr != pSys->getSpeaker()) {
+            pSys->getSpeaker()->runSpeakerLoop();
+        }
+
         // update the display
-        if (pSys->getTV()->runWindowLoop()) break;  // TODO: maybe this comes out of runSystem instead.
+        if (nullptr != pSys->getTV()) {
+            if (pSys->getTV()->runWindowLoop()) break;  // TODO: maybe this comes out of runSystem instead.
+        }
     }
 
     // ... shutdown

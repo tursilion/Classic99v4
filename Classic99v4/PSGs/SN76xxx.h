@@ -4,19 +4,23 @@
 #ifndef SN76XXX_H
 #define SN76XXX_H
 
-#if 0
+#if 1
 // TODO: this file should be ready to go, the cpp needs work
 // Also, we probably need to build a speaker system to manage audio streams
 // so that the core system can respond to events and fill the audio buffers
 // (similar to the television system)
 
 #include "../EmulatorSupport/peripheral.h"
+#include "../EmulatorSupport/audioSrc.h"
 
-class SN76xxx : public Classic99Peripheral {
+class SN76xxx : public Classic99Peripheral, Classic99AudioSrc {
 public:
     SN76xxx(Classic99System *core); 
     virtual ~SN76xxx();
     SN76xxx() = delete;
+
+    // == Classic99AudioSrc interface ==
+    void fillAudioBuffer(void *buf, int bufSize, int samples) override;
 
     // == Classic99Peripheral interface ==
 
@@ -57,6 +61,56 @@ public:
     // addresses are from the system point of view
     //virtual void testBreakpoint(bool isRead, int addr, bool isIO, int data);              // default class will do unless the device needs to be paging or such (calls system breakpoint function if set)
 
+protected:
+    // hack for now - a little DAC buffer for cassette ticks and CPU modulation
+    // fixed size for now
+    bool enableBackgroundHum;    // TODO: used to be external - enable hum emulation
+    double CRU_TOGGLES;          // TODO: used to be external - count CRU keyboard toggles to generate hum - interestingdata?
+    double nDACLevel;            // TODO: used to be external - tape input or audio gate emulation for samples
+    unsigned char dac_buffer[1024*1024];
+    int dac_pos;
+    double dacupdatedistance;
+    double dacramp;        // a little slider to ramp in the DAC volume so it doesn't click so loudly at reset
+
+    // value to fade every clock/16
+    // init value (0.001/9.0) compares with the recordings I made of the noise generator back in the day
+    // This is good, but why doesn't this match the math above, though?
+    double FADECLKTICK;
+
+    int nClock;				// NTSC, PAL may be at 3546893? - this is divided by 16 to tick
+    int nCounter[4];		// 10 bit countdown timer
+    int nNoisePos;			// whether noise is positive or negative (white noise only)
+    unsigned short LFSR;	// noise shifter (only 15 bit)
+    int nRegister[4];		// frequency registers
+    int nVolume[4];			// volume attenuation
+    double nFade[4];        // emulates the voltage drift back to 0 with FADECLKTICK (TODO: what does this mean with a non-zero center?)
+							// we should test this against an external chip with a clean circuit.
+    int max_volume;
+
+    // audio
+    int AudioSampleRate;    // in hz
+
+    // The tapped bits are XORd together for the white noise
+    // generator feedback.
+    // These are the BBC micro version/Coleco? Need to check
+    // against a real TI noise generator. 
+    // Init value 0x0003 matches what MAME uses (although MAME shifts the other way ;) )
+    int nTappedBits;
+    int latch_byte;         // latched byte
+
+    double nOutput[4];      // output scale
+    double nVolumeTable[16];
+
+private:
+    void resetNoise();
+    int parity(int val);
+    void sound_init(int freq);
+    void SetSoundVolumes();
+    void MuteAudio();
+    void resetDAC();
+
+    ALLEGRO_MUTEX *csAudioBuf;
+    std::shared_ptr<autoStream> stream;
 };
 
 #endif

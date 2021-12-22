@@ -10,6 +10,7 @@ Classic99System *theActiveCore = NULL;
 // base class implementation
 Classic99System::Classic99System() 
     : theTV(nullptr)
+    , theSpeaker(nullptr)
 {
     coreLock = al_create_mutex_recursive();
 
@@ -36,27 +37,27 @@ Classic99System::~Classic99System() {
 }
 
 // handle allocating memory space in the general flat case
-bool Classic99System::claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
+bool Classic99System::claimRead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
     if (sysAdr >= memorySize) return false;
-    memorySpaceRead[sysAdr].updateMap(periph, periphAdr, waitStates);
+    memorySpaceRead[sysAdr].updateMap(periph, periphAdr, -1);
     return true;
 }
 
-bool Classic99System::claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
+bool Classic99System::claimWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
     if (sysAdr >= memorySize) return false;
-    memorySpaceWrite[sysAdr].updateMap(periph, periphAdr, waitStates);
+    memorySpaceWrite[sysAdr].updateMap(periph, periphAdr, -1);
     return true;
 }
 
-bool Classic99System::claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
+bool Classic99System::claimIORead(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
     if (sysAdr >= ioSize) return false;
-    ioSpaceRead[sysAdr].updateMap(periph, periphAdr, waitStates);
+    ioSpaceRead[sysAdr].updateMap(periph, periphAdr, -1);
     return true;
 }
 
-bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr, int waitStates) {
+bool Classic99System::claimIOWrite(int sysAdr, Classic99Peripheral *periph, int periphAdr) {
     if (sysAdr >= ioSize) return false;
-    ioSpaceWrite[sysAdr].updateMap(periph, periphAdr, waitStates);
+    ioSpaceWrite[sysAdr].updateMap(periph, periphAdr, -1);
     return true;
 }
 
@@ -70,10 +71,9 @@ uint8_t Classic99System::readMemoryByte(int address, volatile long &cycles, MEMA
     if (address >= memorySize) {
         address &= memorySize;
     }
-    if ((rmw&ACCESS_SYSTEM) == 0) {
-        cycles+=memorySpaceRead[address].waitStates;
-    }
-    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
+
+    cycles+=memorySpaceRead[address].waitStates;
+
     return memorySpaceRead[address].who->read(memorySpaceRead[address].addr, false, cycles, rmw);
 }
 
@@ -85,10 +85,9 @@ void Classic99System::writeMemoryByte(int address, volatile long &cycles, MEMACC
     if (address >= memorySize) {
         address &= memorySize;
     }
-    if ((rmw&ACCESS_SYSTEM) == 0) {
-        cycles+=memorySpaceRead[address].waitStates;
-    }
-    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
+
+    cycles+=memorySpaceRead[address].waitStates;
+    
     memorySpaceWrite[address].who->write(memorySpaceWrite[address].addr, false, cycles, rmw, data);
 }
 
@@ -99,10 +98,9 @@ uint8_t Classic99System::readIOByte(int address, volatile long &cycles, MEMACCES
     if (address >= ioSize) {
         address &= ioSize;
     }
-    if ((rmw&ACCESS_SYSTEM) == 0) {
-        cycles+=memorySpaceRead[address].waitStates;
-    }
-    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
+
+    cycles+=memorySpaceRead[address].waitStates;
+    
     return ioSpaceRead[address].who->read(ioSpaceRead[address].addr, true, cycles, rmw);
 }
 
@@ -114,10 +112,9 @@ void Classic99System::writeIOByte(int address, volatile long &cycles, MEMACCESST
     if (address >= ioSize) {
         address &= ioSize;
     }
-    if ((rmw&ACCESS_SYSTEM) == 0) {
-        cycles+=memorySpaceRead[address].waitStates;
-    }
-    rmw = static_cast<MEMACCESSTYPE>(((int)rmw)&(ACCESS_SYSTEM-1));
+
+    cycles+=memorySpaceRead[address].waitStates;
+
     ioSpaceWrite[address].who->write(ioSpaceWrite[address].addr, true, cycles, rmw, data);
 }
 

@@ -127,6 +127,15 @@
     <ClInclude Include="PSGs\SN76xxx.h">
       <Filter>PSGs</Filter>
     </ClInclude>
+    <ClInclude Include="EmulatorSupport\speaker.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\autostream.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
+    <ClInclude Include="EmulatorSupport\audioSrc.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">
@@ -249,6 +258,9 @@
     </ClCompile>
     <ClCompile Include="PSGs\SN76xxx.cpp">
       <Filter>PSGs</Filter>
+    </ClCompile>
+    <ClCompile Include="EmulatorSupport\speaker.cpp">
+      <Filter>Emulator Support</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

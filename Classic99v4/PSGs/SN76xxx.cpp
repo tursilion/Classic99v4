@@ -1,6 +1,6 @@
-// TODO: NOTHING has been done to this file yet
-
-#if 0
+// Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
+// See License.txt, but the answer is "just ask me first". ;)
+// Tursi's own from-scratch TMS9919/SN76xxx emulation
 
 /*
 From Matt - check this decrement:
@@ -16,7 +16,6 @@ From Matt - check this decrement:
 [2:26 PM] dnotq: It is done in the real IC via the asynchronous nature of the transistors, and the way any signal transition can be a clock, set, or reset signal.  But I reproduced the functionality in synchronous HDL and the counters just work as they should.  No special tests, edge cases, loading or comparing period-1, etc.
 [2:27 PM] tursilion: ah, I see. That makes sense :) I should check if Classic99 does that right
 */
-
 
 // Testing on a real TI:
 // The sound chip itself outputs an always positive sound wave peaking roughly at 2.8v.
@@ -46,47 +45,6 @@ From Matt - check this decrement:
 // so it may be worth leaving it that way. It should still sound the same.
 //
 
-//
-// (C) 2009 Mike Brent aka Tursi aka HarmlessLion.com
-// This software is provided AS-IS. No warranty
-// express or implied is provided.
-//
-// This notice defines the entire license for this code.
-// All rights not explicity granted here are reserved by the
-// author.
-//
-// You may redistribute this software provided the original
-// archive is UNCHANGED and a link back to my web page,
-// http://harmlesslion.com, is provided as the author's site.
-// It is acceptable to link directly to a subpage at harmlesslion.com
-// provided that page offers a URL for that purpose
-//
-// Source code, if available, is provided for educational purposes
-// only. You are welcome to read it, learn from it, mock
-// it, and hack it up - for your own use only.
-//
-// Please contact me before distributing derived works or
-// ports so that we may work out terms. I don't mind people
-// using my code but it's been outright stolen before. In all
-// cases the code must maintain credit to the original author(s).
-//
-// -COMMERCIAL USE- Contact me first. I didn't make
-// any money off it - why should you? ;) If you just learned
-// something from this, then go ahead. If you just pinched
-// a routine or two, let me know, I'll probably just ask
-// for credit. If you want to derive a commercial tool
-// or use large portions, we need to talk. ;)
-//
-// If this, itself, is a derived work from someone else's code,
-// then their original copyrights and licenses are left intact
-// and in full force.
-//
-// http://harmlesslion.com - visit the web page for contact info
-//
-//****************************************************
-// Tursi's own from-scratch TMS9919 emulation
-// Because everyone uses the MAME source.
-//
 // Based on documentation on the SN76489 from SMSPOWER
 // and datasheets for the SN79489/SN79486/SN79484,
 // and recordings from an actual TI99 console (gasp!)
@@ -135,178 +93,66 @@ From Matt - check this decrement:
 // the timing counters -- your ear can hear when they are added in, and
 // you get periodic noise, depending on the frequency being played!
 //
+// Nice notes at http://www.smspower.org/maxim/docs/SN76489.txt
 
-#include <windows.h>
-#include <dsound.h>
-#include <stdio.h>
-#include "sound.h"
-#include "tiemul.h"
+// TODO: Speech and SID need to be implemented as separate objects
 
-// some Classic99 stuff
-extern LPDIRECTSOUNDBUFFER soundbuf;						// sound chip audio buffer
-extern LPDIRECTSOUNDBUFFER sidbuf;							// sid blaster audio buffer
-extern LPDIRECTSOUNDBUFFER speechbuf;						// speech audio buffer
-extern int hzRate;		// 50 or 60 fps (HZ50 or HZ60)
-extern int Recording;
-extern int max_cpf;
-extern void WriteAudioFrame(void *pData, int nLen);
-void rampVolume(LPDIRECTSOUNDBUFFER ds, long newVol);       // to reduce up/down clicks
+#include "SN76xxx.h"
+#include "..\EmulatorSupport\automutex.h"
 
-// hack for now - a little DAC buffer for cassette ticks and CPU modulation
-// fixed size for now
-extern bool enableBackgroundHum;
-extern double CRU_TOGGLES;
-extern double nDACLevel;
-unsigned char dac_buffer[1024*1024];
-int dac_pos = 0;
-double dacupdatedistance = 0.0;
-double dacramp = 0.0;       // a little slider to ramp in the DAC volume so it doesn't click so loudly at reset
-
-// more hack for speech to use the sound jitter buffer
-extern INT16 SpeechTmp[SPEECHRATE*2];				// two seconds worth of buffer
-extern int nSpeechTmpPos;
-extern CRITICAL_SECTION csSpeechBuf;
-
-// external debug helper
-void debug_write(char *s, ...);
-
-// SID support
-void (*InitSid)() = NULL;
-void (*sid_update)(short *buf, double nAudioIn, int nSamples) = NULL;
-void (*write_sid)(Word ad, Byte dat) = NULL;
-void (*SetSidFrequency)(int) = NULL;
-void (*SetSidEnable)(bool) = NULL;
-void (*SetSidBanked)(bool) = NULL;
-bool (*GetSidEnable)(void) = NULL;
-SID* (*GetSidPointer)(void) = NULL;
-HMODULE hSIDDll = NULL;
-void PrepareSID();
-
-// helper for audio buffers
-CRITICAL_SECTION csAudioBuf;
-
-// value to fade every clock/16
-// this value compares with the recordings I made of the noise generator back in the day
-// This is good, but why doesn't this match the math above, though?
-#define FADECLKTICK (0.001/9.0)
-
-int nClock = 3579545;					// NTSC, PAL may be at 3546893? - this is divided by 16 to tick
-int nCounter[4]= {0,0,0,1};				// 10 bit countdown timer
-int nNoisePos=1;						// whether noise is positive or negative (white noise only)
-unsigned short LFSR=0x4000;				// noise shifter (only 15 bit)
-int nRegister[4]={0,0,0,0};				// frequency registers
-int nVolume[4]={0,0,0,0};				// volume attenuation
-double nFade[4]={1.0,1.0,1.0,1.0};		// emulates the voltage drift back to 0 with FADECLKTICK (TODO: what does this mean with a non-zero center?)
-										// we should test this against an external chip with a clean circuit.
-int max_volume;
-
-// audio
-int AudioSampleRate=22050;				// in hz
-unsigned int CalculatedAudioBufferSize=22080*2;	// round audiosample rate up to a multiple of 60 (later hzRate is used)
-
-// The tapped bits are XORd together for the white noise
-// generator feedback.
-// These are the BBC micro version/Coleco? Need to check
-// against a real TI noise generator. 
-// This matches what MAME uses (although MAME shifts the other way ;) )
-int nTappedBits=0x0003;
-
-double nOutput[4]={1.0,1.0,1.0,1.0};	// output scale
 // logarithmic scale (linear isn't right!)
 // the SMS Power example, (I convert below to percentages)
-int sms_volume_table[16]={
-   32767, 26028, 20675, 16422, 13045, 10362,  8231,  6538,
-    5193,  4125,  3277,  2603,  2067,  1642,  1304,     0
-};
-double nVolumeTable[16];
-
-// return 1 or 0 depending on odd parity of set bits
-// function by Dave aka finaldave. Input value should
-// be no more than 16 bits.
-int parity(int val) {
-	val^=val>>8;
-	val^=val>>4;
-	val^=val>>2;
-	val^=val>>1;
-	return val&1;
+static int sms_volume_table[16]={
+       32767, 26028, 20675, 16422, 13045, 10362,  8231,  6538,
+        5193,  4125,  3277,  2603,  2067,  1642,  1304,     0
 };
 
-// prepare the sound emulation. 
-// freq - output sound frequency in hz
-void sound_init(int freq) {
-	// I don't want max to clip, so I bias it slightly low
-#if 0
-	double nVol=0.9375;
-	// linear scale - may not be correct
-	for (int idx=0; idx<16; idx++) {
-		nVolumeTable[idx]=nVol;
-		nVol-=0.0625;
-	}
-#else
-	// use the SMS power Logarithmic table
-	for (int idx=0; idx<16; idx++) {
-		// this magic number makes maximum volume (32767) become about 0.9375
-		nVolumeTable[idx]=(double)(sms_volume_table[idx])/34949.3333;	
-	}
-#endif
+// (15 bit)
+static const int LFSRReset = 0x4000;
 
-    resetDAC();
-
-    // and set up the audio rate
-	AudioSampleRate=freq;
-
-    // and finally tell the SID plugin
-	if (NULL != SetSidFrequency) {
-		SetSidFrequency(freq);
+SN76xxx::SN76xxx(Classic99System *theCore)
+	: Classic99Peripheral(theCore)
+	, Classic99AudioSrc()
+	, enableBackgroundHum(false)
+    , CRU_TOGGLES(0.0)
+    , nDACLevel(0.0)
+    , dac_pos(0)
+    , dacupdatedistance(0.0)
+    , dacramp(0.0)
+    , FADECLKTICK(0.001/9.0)
+    , nClock(3579545)	// NTSC, PAL may be at 3546893? - this is divided by 16 to tick
+	, nCounter()
+    , nNoisePos(1)
+    , LFSR(LFSRReset)
+    , nRegister()
+    , nVolume()
+    , max_volume(0)
+    , AudioSampleRate(44100)
+    , nTappedBits(0x0003)
+	, latch_byte(0)
+	, nVolumeTable()
+{
+	// special init for noise counter
+	nCounter[3] = 1;
+	// set outputs to maximum
+	for (int idx=0; idx<4; ++idx) {
+		nFade[idx] = 1.0;
+		nOutput[idx] = 1.0;
 	}
+
+	csAudioBuf = al_create_mutex_recursive();
 }
 
-// change the frequency counter on a channel
-// chan - channel 0-3 (3 is noise)
-// freq - frequency counter (0-1023) or noise code (0-7)
-void setfreq(int chan, int freq) {
-	if ((chan < 0)||(chan > 3)) return;
-
-	if (chan==3) {
-		// limit noise 
-		freq&=0x07;
-		nRegister[3]=freq;
-
-		// reset shift register
-		LFSR=0x4000;	//	(15 bit)
-		switch (nRegister[3]&0x03) {
-			// these values work but check the datasheet dividers
-			case 0: nCounter[3]=0x10; break;
-			case 1: nCounter[3]=0x20; break;
-			case 2: nCounter[3]=0x40; break;
-			// even when the count is zero, the noise shift still counts
-			// down, so counting down from 0 is the same as wrapping up to 0x400
-			case 3: nCounter[3]=(nRegister[2]?nRegister[2]:0x400); break;		// is never zero!
-		}
-	} else {
-		// limit freq
-		freq&=0x3ff;
-		nRegister[chan]=freq;
-		// don't update the counters, let them run out on their own
-	}
+SN76xxx::~SN76xxx() {
+	cleanup();
 }
 
-// change the volume on a channel
-// chan - channel 0-3
-// vol - 0 (loudest) to 15 (silent)
-void setvol(int chan, int vol) {
-	if ((chan < 0)||(chan > 3)) return;
-
-	nVolume[chan]=vol&0xf;
-}
-
-// this #if is here for the Apple2 experiment... use #if 1 for the TI code
-#if 1
-// fill the output audio buffer with signed 16-bit values
-// nAudioIn contains a fixed value to add to all samples (used to mix in the casette audio)
-// (this emu doesn't run speech through there, though, speech gets its own buffer for now)
-// TODO: I don't use this anymore and I think it needs to be removed.... (what did I mean by this??)
-void sound_update(short *buf, double nAudioIn, int nSamples) {
+// we receive a pointer to a buffer to fill with current audio data
+// buf - pointer to data - we expect 16-bit mono
+// bufSize - size of buf in bytes (for sanity checking)
+// samples - number of samples to generate
+void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
+	// fill the output audio buffer with signed 16-bit values
 	// nClock is the input clock frequency, which runs through a divide by 16 counter
 	// The frequency does not divide exactly by 16
 	// AudioSampleRate is the frequency at which we actually output bytes
@@ -316,8 +162,13 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 	int nClocksPerSample = (int)(nTimePerSample / nTimePerClock + 0.5);		// +0.5 to round up if needed
 	int newdacpos = 0;
 	int inSamples = nSamples;
-	double nSpeechOut = 0;
-	double nSpeechCnt = (double)SPEECHRATE / (double)AudioSampleRate;		// ratio of speech samples to output samples
+	short *buf = (short*)inBuf;
+
+	// sanity check the buffer
+	if (nSamples*2 != bufSize) {
+		debug_write("Improper buffer size - fail audio");
+		return;
+	}
 
 	while (nSamples) {
 		// emulate drift to zero
@@ -363,8 +214,6 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 				// creating artifacts with the lower frequency output rate, and you don't
 				// get an inaudible tone but awful noise
 				nFade[idx]=0.0;
-				//nAudioIn += nVolumeTable[nVolume[idx]];	// not strictly right, the high frequency output adds some distortion. But close enough.
-				//if (nAudioIn >= 1.0) nAudioIn = 1.0;	// clip
 			}
 		}
 
@@ -393,13 +242,14 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 					// a known rate and study the pattern.
 					if (parity(LFSR&nTappedBits)) in=0x4000;
 					if (LFSR&0x01) {
-#if 1
 						// the SMSPower documentation says it never goes negative,
 						// but (my very old) recordings say white noise does goes negative,
 						// and periodic noise doesn't. Need to sit down and record these
 						// noises properly and see what they really do. 
 						// For now I am going to swing negative to play nicely with
 						// the tone channels. 
+						// It's possible the chip does not go negative but the TI's audio
+						// amp causes an offset?
 						// TODO: I need to verify noise vs tone on a clean system.
 						// need to test for 0 because periodic noise sets it
 						if (nOutput[3] == 0.0) {
@@ -407,11 +257,6 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 						} else {
 							nOutput[3]*=-1.0;
 						}
-#else
-						nOutput[3]=1.0;
-					} else {
-						nOutput[3]=0.0;
-#endif
 					}
 				} else {
 					// periodic noise - tap bit 0 (again, BBC Micro)
@@ -442,32 +287,24 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 		output = nOutput[0]*nVolumeTable[nVolume[0]]*nFade[0] +
 				nOutput[1]*nVolumeTable[nVolume[1]]*nFade[1] +
 				nOutput[2]*nVolumeTable[nVolume[2]]*nFade[2] +
-				nOutput[3]*nVolumeTable[nVolume[3]]*nFade[3] +
-				((dac_buffer[newdacpos++] / 255.0)*dacramp) +
-				(SpeechTmp[(int)nSpeechOut] / 32767.0);
-		// output is now between 0.0 and 6.0, may be positive or negative
-		output/=6.0;	// you aren't supposed to do this when mixing. Sorry. :)
+				nOutput[3]*nVolumeTable[nVolume[3]]*nFade[3];
+//				+ ((dac_buffer[newdacpos++] / 255.0)*dacramp);
+		// output is now between 0.0 and 4.0, may be positive or negative
+		// would be 5.0 with the DAC active
+		output/=4.0;	// you aren't supposed to do this when mixing. Sorry. :)
+#if 0
+		// TODO: DAC needs to be tied to the CPU to work
 		if (newdacpos >= dac_pos) {
 			// not enough DAC samples!
 			newdacpos--;
 		}
-		nSpeechOut += nSpeechCnt;
-		if ((int)nSpeechOut >= nSpeechTmpPos) {
-			nSpeechOut--;
-		}
+#endif
 
 		short nSample=(short)((double)0x7fff*output); 
 		*(buf++)=nSample; 
+	}
 
 #if 0
-		static FILE *fp=NULL;
-		if (NULL == fp) {
-			fp=fopen("C:\\new\\audio.raw", "wb");
-		}
-		fwrite(&nSample, 2, 1, fp);
-#endif
-
-	}
 	// roll the dac output buffer
 	EnterCriticalSection(&csAudioBuf);
 	if (inSamples < dac_pos) {
@@ -481,354 +318,291 @@ void sound_update(short *buf, double nAudioIn, int nSamples) {
 		dac_pos = 0;
 	}
 	LeaveCriticalSection(&csAudioBuf);
-	// same with speech
-	EnterCriticalSection(&csSpeechBuf);
-	if ((int)nSpeechOut < nSpeechTmpPos) {
-		memmove(SpeechTmp, &SpeechTmp[(int)nSpeechOut], (nSpeechTmpPos-(int)nSpeechOut)*2);
-		nSpeechTmpPos -= (int)nSpeechOut;
-	} else {
-		nSpeechTmpPos = 0;
-	}
-	LeaveCriticalSection(&csSpeechBuf);
+#endif
 }
 
-#else
-// Apple testing...
-// Overall, I think this is fairly decent. Yeah, it gets crappy with really
-// complex music, but I don't know how much we can expect out of the 1-bit speaker.
-// It's good enough that I almost shipped a release of Classic99 with it turned on ;)
-unsigned char nOutputApp[4]={1,1,1,1};		// output scale
+void SN76xxx::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
+	(void)addr;
+	(void)isIO;
 
-#if 0
-unsigned char app_volume_table[16] = {
-   31, 25, 20, 16, 13, 10,  8,  6,
-   5,  4,  3,  3,  2,  2,  1,  0
-}; 
-#else
-// ignore volume - better this way
-// still not 100% sure the cutoff is in the right place, but seems okay
-unsigned char app_volume_table[16] = {
-   31, 31, 31, 31, 31, 31, 31, 31,
-   31, 31, 31, 31, 31,  0,  0,  0
-}; 
-#endif
-void sound_update(short *buf, double nAudioIn, int nSamples) {
-	// nClock is the input clock frequency, which runs through a divide by 16 counter
-	// The frequency does not divide exactly by 16
-	// AudioSampleRate is the frequency at which we actually output bytes
-	double nTimePerClock=1.0/(nClock/16.0);
-	double nTimePerSample=1.0/(double)AudioSampleRate;
-	int nClocksPerSample = (int)(nTimePerSample / nTimePerClock + 0.5);		// +0.5 to round up if needed
+	// 'data' contains the byte currently being written to the sound chip
+	// all functions are 1 or 2 bytes long, as follows					
+	//
+	// BYTE		BIT		PURPOSE											
+	//	1		0		always '1' (latch bit)							
+	//			1-3		Operation:	000 - tone 1 frequency				
+	//								001 - tone 1 volume					
+	//								010 - tone 2 frequency				
+	//								011 - tone 2 volume					
+	//								100 - tone 3 frequency				
+	//								101 - tone 3 volume					
+	//								110 - noise control					
+	//								111 - noise volume					
+	//			4-7		Least sig. frequency bits for tone, or volume	
+	//					setting (0-F), or type of noise.				
+	//					(volume F is off)								
+	//					Noise set:	4 - always 0						
+	//								5 - 0=periodic noise, 1=white noise 
+	//								6-7 - shift rate from table, or 11	
+	//									to get rate from voice 3.		
+	//	2		0-1		Always '0'. This byte only used for frequency	
+	//			2-7		Most sig. frequency bits						
+	//
+	// Commands are instantaneous
 
-	unsigned char idx;
-	static unsigned char oldout=0x80;
-	static unsigned char olddelta = 0;
-	static unsigned char noisedir=1;
+	if (rmw != ACCESS_FREE) {
+        // sound chip writes eat ~28 additional cycles (verified hardware, reads do not)
+		cycles += 28;
+	}
 
-	while (nSamples) {
-        /**/
-        bool signchanged = false;   // only used in one output mode idea, which does not work
-        int loudest = 15;
-        for (int idx=0; idx<4; ++idx) {
-            if (nVolume[idx] < loudest) loudest=nVolume[idx];
-        }
-        loudest*=2;
-        if (loudest > 14) loudest=14;
-        /**/
+	// Latch anytime the high bit is set
+	// This byte still immediately changes the channel
+	if (data&0x80) {
+		latch_byte=data;
+	}
 
-		// tone channels
-		for (idx=0; idx<3; idx++) {
-			// on the TI/Coleco, a freq of 0 is really 0x400,
-			// not a flat line like on the SMS
-			nCounter[idx]-=nClocksPerSample;
-			while (nCounter[idx] <= 0) {
-				nCounter[idx]+=(nRegister[idx]?nRegister[idx]:0x400);
-				nOutputApp[idx]=!nOutputApp[idx];
-                if (nVolume[idx] <= loudest) {
-                    signchanged = true;
-                }
-			}
-		}
+	switch (data&0xf0)									// check command
+	{	
+	case 0x90:											// Voice 1 vol
+	case 0xb0:											// Voice 2 vol
+	case 0xd0:											// Voice 3 vol
+	case 0xf0:											// Noise volume
+		nVolume[(data&0x60)>>5]=data&0xf;
+		break;
 
-		// noise channel 
-		nCounter[3]-=nClocksPerSample;
-		while (nCounter[3] <= 0) {
-            if (nVolume[3] < loudest) {
-                signchanged = true;
-            }
+	case 0xe0:
+		nRegister[3]=data&0x07;							// update noise
+		resetNoise();
+		break;
 
-			switch (nRegister[3]&0x03) {
-				case 0: nCounter[3]+=0x10; break;
-				case 1: nCounter[3]+=0x20; break;
-				case 2: nCounter[3]+=0x40; break;
-				// even when the count is zero, the noise shift still counts
-				// down, so counting down from 0 is the same as wrapping up to 0x400
-				// same is with the tone above :)
-				case 3: nCounter[3]+=(nRegister[2]?nRegister[2]:0x400); break;		// is never zero!
-			}
-			nNoisePos= !nNoisePos;
-			// Shift register is only kicked when the 
-			// Noise output sign goes from negative to positive
-			if (nNoisePos) {
-				unsigned int in=0;
-				if (nRegister[3]&0x4) {
-					// white noise - actual tapped bits uncertain?
-					// tapped bits are 0x03 - if they are
-					// different, then inject a new 0x4000 bit
-					if ((LFSR&0x0001) != ((LFSR&0x0002)>>1)) {
-						in = 0x4000;
-					}
-					if (LFSR&0x01) {
-						nOutputApp[3]=1;
-					} else {
-						if (nOutputApp[3]) {
-							noisedir=!noisedir;
-						}
-						nOutputApp[3]=0;
-					}
-				} else {
-					// periodic noise - tap bit 0 (again, BBC Micro)
-					// Compared against TI samples, this looks right
-					if (LFSR&0x0001) {
-						in=0x4000;	// (15 bit shift)
-						nOutputApp[3]=1;
-					} else {
-						if (nOutputApp[3]) {
-							noisedir=!noisedir;
-						}
-						nOutputApp[3]=0;
-					}
-				}
-				LFSR>>=1;
-				LFSR|=in;
-			}
-		}
-
-		// write sample
-		nSamples--;
-
-		// Calculate this tick
-		int cnt = 0;
-		if (nOutputApp[0]) {
-			cnt+=app_volume_table[nVolume[0]];
+//	case 0x80:											// Voice 1 frequency
+//	case 0xa0:											// Voice 2 frequency
+//	case 0xc0:											// Voice 3 frequency
+	default:											// Any other byte
+		int nChan=(latch_byte&0x60)>>5;
+		if (data&0x80) {
+			// latch write - least significant bits of a tone register
+			// (definately not noise, noise was broken out earlier)
+			nRegister[nChan] &= 0xfff0;
+			nRegister[nChan] |= data&0x0f;
+			// don't update the counters, let them run out on their own
 		} else {
-			cnt-=app_volume_table[nVolume[0]];
-		}
-        if (nRegister[1]!=nRegister[0]) {
-            // don't add if the frequency was already playing on an earlier channel
-		    if (nOutputApp[1]) {
-			    cnt+=app_volume_table[nVolume[1]];
-		    } else {
-			    cnt-=app_volume_table[nVolume[1]];
-		    }
-        }
-        if ((nRegister[2]!=nRegister[0])&&(nRegister[2]!=nRegister[1])) {
-            // don't add if the frequency was already playing on an earlier channel
-		    if (nOutputApp[2]) {
-			    cnt+=app_volume_table[nVolume[2]];
-		    } else {
-			    cnt-=app_volume_table[nVolume[2]];
-		    }
-        }
-		if (nOutputApp[3]) {
-			if (noisedir) {
-				cnt+=app_volume_table[nVolume[3]];
+			// latch bit clear - data to whatever is latched
+			// TODO: re-verify this on hardware, it doesn't agree with the SMS Power doc
+			// as far as the volume and noise goes!
+			if (latch_byte&0x10) {
+				// volume register
+				nVolume[nChan]=data&0xf;
+			} else if (nChan==3) {
+				// noise register
+				nRegister[3]=data&0x07;
+				resetNoise();
 			} else {
-				cnt-=app_volume_table[nVolume[3]];
+				// tone generator - most significant bits
+				nRegister[nChan] &= 0xf;
+				nRegister[nChan] |= (data&0x3f)<<4;
+				// don't update the counters, let them run out on their own
 			}
 		}
-		// now, we have in idx a value from -64 to +64
-static int sampleCnt = 0;
-
-        // These are both awful on complex sounds and both
-        // work pretty well on simple ones (including chords)
-#if 0
-		// we are only concerned with its sign
-		// if the sign of the output has changed, 'tick' the speaker
-        // very noisey - basically the cassette without a dead zone
-		if (oldout != (idx&0x80)) {
-			oldout = idx&0x80;
-//			idx=SPKR;
-            olddelta = oldout;
-		}
-#elif 1
-		// if the sign of the output delta has changed, 'tick' the speaker
-        // require a minimum delta before we react - this helps a bit
-
-        // This sounds the cleanest of them so far, but it does not cope well
-        // when the same frequency is played on multiple channels, adds noise.
-        // But it handles chords the best
-
-        idx = (unsigned char)(cnt&0xff);
-        int delta = idx-oldout;
-        if (delta < 0) delta=-delta;
-        if (delta > 8) {
-		    if (((idx-oldout)&0x80) != olddelta) {
-			    olddelta=(idx-oldout)&0x80;
-		    }
-		    oldout = idx;
-        }
-#elif 0
-        // how about delta with a drift to zero?
-        // this works, but not sure if it's better than
-        // the other delta. It still sometimes drops voices.
-       
-        int delta = cnt-sampleCnt;
-        if (delta < 0) {
-            delta=-delta;
-            sampleCnt--;
-        } else if (delta > 0) {
-            sampleCnt++;
-        }
-        if (delta > 8) {
-            // ticking instead of setting makes the sound very muddied and wrong
-		    oldout = (unsigned char)cnt;
-        }
-#elif 0
-        // try to copy the cassette circuit which looks at zero crossings with a ~10% dead zone
-        
-        // tick for change - this is better then the delta was...
-        // need to tick on every change else the frequency is wrong
-        // We need the dead zone else it's pretty awful sounding
-        // (Actually with the correct scaling this is really bad... muffled)
-#define DEADZONE 4
-        if (cnt > DEADZONE) {
-            if (olddelta < 0) {
-                oldout = ~oldout;
-                olddelta = 1;
-            }
-        } else if (cnt < -DEADZONE) {
-            if (olddelta >= 0) {
-                oldout = ~oldout;
-                olddelta = -1;
-            }
-        }
-#elif 0
-        // if /any/ channel transitioned, then tick
-        // this does NOT work, sounds more like a modem than harmony...
-        if (signchanged) {
-            if (oldout&0x80) {
-                oldout = 0;
-            } else {
-                oldout = 0x80;
-            }
-	    }
-#else
-        // play out the four voices statically with arpeggio
-        // I doubt the Apple can do that much...
-        // 800 at 44100 samples/second is about 55hz cycling
-        // frankly this isn't too bad... it sounds the most
-        // correct, but the stuttering is kind of annoying
-#define TONELEN 800
-        switch (((++sampleCnt)/TONELEN)%4) {
-        case 0: if ((nOutputApp[0])&&(nVolume[0] < 12)) oldout=0x80; else oldout=0x00; break;
-        case 1: if ((nOutputApp[1])&&(nVolume[1] < 12)) oldout=0x80; else oldout=0x00; break;
-        case 2: if ((nOutputApp[2])&&(nVolume[2] < 12)) oldout=0x80; else oldout=0x00; break;
-        case 3:
-		    if ((nOutputApp[3])&&(nVolume[3] < 12)) {
-			    if (noisedir) {
-				    oldout=0x80;
-			    } else {
-			        oldout=0;
-			    }
-		    }
-        }
-#endif
-
-		double output = (oldout&0x80)?0.5:-0.5;
-
-		short nSample=(short)((double)0x7fff*output); 
-			*(buf++)=nSample; 
+		break;
 	}
-
 }
 
-#endif
+bool SN76xxx::init(int idx) {
+	setIndex("SN76xxx", idx);
 
+	stream = theCore->getSpeaker()->requestStream(this);
+	sound_init(AudioSampleRate);	// TODO: need configuration input
+	return true;
+}
 
-void SetSoundVolumes() {
+bool SN76xxx::operate(double timestamp) {
+	// There's actually nothing to do here - we'll operate based on samples instead
+	return true;
+}
+
+bool SN76xxx::cleanup() {
+	// nothing to cleanup, I think
+	return true;
+}
+
+void SN76xxx::getDebugSize(int &x, int &y) {
+	// TODO: it might be nice to make the debug option a bitmap instead of text - then we just render
+	// it. This would allow graphics as well as text - for instance the sound could actually display
+	// a recent waveform, VDP could show graphical tables... to the same, multiple bitmaps per object
+	// would also make sense. But then the user just selects the bitmaps they want, and can move
+	// them around as needed.
+
+	// for now, just the registers
+	x=11;
+	y=2;
+}
+void SN76xxx::getDebugWindow(char *buffer) {
+	// buffer should be sized to (x+2)*y (to allow \r\n endings)
+	sprintf(buffer, "%03X %03X %03X %01X\r\n %1X  %1X  %1X  %1X", 
+		nRegister[0], nRegister[1], nRegister[2], nRegister[3],
+		nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
+}
+
+// save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
+int SN76xxx::saveStateSize() {
+	return 1+8+8+1024*1024+4+8+8+8+4+4*4+4+2+4*4+4*4+8*4+4+4+4+4+8*4;
+}
+bool SN76xxx::saveState(unsigned char *buffer) {
+    saveStateVal(buffer, enableBackgroundHum);
+    saveStateVal(buffer, CRU_TOGGLES);
+    saveStateVal(buffer, nDACLevel);
+
+	memcpy(buffer, dac_buffer, 1024*1024);
+
+    saveStateVal(buffer, dac_pos);
+    saveStateVal(buffer, dacupdatedistance);
+    saveStateVal(buffer, dacramp);
+    saveStateVal(buffer, FADECLKTICK);
+    saveStateVal(buffer, nClock);
+
+	for (int idx=0; idx<4; ++idx) {
+		saveStateVal(buffer, nCounter[idx]);
+	}
+    
+	saveStateVal(buffer, nNoisePos);
+    saveStateVal(buffer, LFSR);
+
+	for (int idx=0; idx<4; ++idx) {
+		saveStateVal(buffer, nRegister[4]);
+	}
+	for (int idx=0; idx<4; ++idx) {
+		saveStateVal(buffer, nVolume[4]);
+	}
+	for (int idx=0; idx<4; ++idx) {
+		saveStateVal(buffer, nFade[4]);
+	}
+
+	saveStateVal(buffer, max_volume);
+    saveStateVal(buffer, AudioSampleRate);
+    saveStateVal(buffer, nTappedBits);
+    saveStateVal(buffer, latch_byte);
+
+	for (int idx=0; idx<4; ++idx) {
+		saveStateVal(buffer, nOutput[4]);
+	}
+
+	return true;
+}
+bool SN76xxx::restoreState(unsigned char *buffer) {
+    loadStateVal(buffer, enableBackgroundHum);
+    loadStateVal(buffer, CRU_TOGGLES);
+    loadStateVal(buffer, nDACLevel);
+
+	memcpy(dac_buffer, buffer, 1024*1024);
+
+    loadStateVal(buffer, dac_pos);
+    loadStateVal(buffer, dacupdatedistance);
+    loadStateVal(buffer, dacramp);
+    loadStateVal(buffer, FADECLKTICK);
+    loadStateVal(buffer, nClock);
+
+	for (int idx=0; idx<4; ++idx) {
+		loadStateVal(buffer, nCounter[idx]);
+	}
+    
+	loadStateVal(buffer, nNoisePos);
+    loadStateVal(buffer, LFSR);
+
+	for (int idx=0; idx<4; ++idx) {
+		loadStateVal(buffer, nRegister[4]);
+	}
+	for (int idx=0; idx<4; ++idx) {
+		loadStateVal(buffer, nVolume[4]);
+	}
+	for (int idx=0; idx<4; ++idx) {
+		loadStateVal(buffer, nFade[4]);
+	}
+
+	loadStateVal(buffer, max_volume);
+    loadStateVal(buffer, AudioSampleRate);
+    loadStateVal(buffer, nTappedBits);
+    loadStateVal(buffer, latch_byte);
+
+	for (int idx=0; idx<4; ++idx) {
+		loadStateVal(buffer, nOutput[4]);
+	}
+
+	return true;
+}
+
+void SN76xxx::resetNoise() {
+	// reset shift register
+	LFSR=LFSRReset;
+	switch (nRegister[3]&0x03) {
+		// these values work but check the datasheet dividers
+		case 0: nCounter[3]=0x10; break;
+		case 1: nCounter[3]=0x20; break;
+		case 2: nCounter[3]=0x40; break;
+		// even when the count is zero, the noise shift still counts
+		// down, so counting down from 0 is the same as wrapping up to 0x400
+		case 3: nCounter[3]=(nRegister[2]?nRegister[2]:0x400); break;		// is never zero!
+	}
+}
+
+// return 1 or 0 depending on odd parity of set bits
+// function by Dave aka finaldave. Input value should
+// be no more than 16 bits.
+int SN76xxx::parity(int val) {
+	val^=val>>8;
+	val^=val>>4;
+	val^=val>>2;
+	val^=val>>1;
+	return val&1;
+};
+
+// prepare the sound emulation. 
+// freq - output sound frequency in hz
+void SN76xxx::sound_init(int freq) {
+	// I don't want max to clip, so I bias it slightly low
+	// use the SMS power Logarithmic table
+	for (int idx=0; idx<16; idx++) {
+		// this magic number makes maximum volume (32767) become about 0.9375
+		nVolumeTable[idx]=(double)(sms_volume_table[idx])/34949.3333;	
+	}
+
+    resetDAC();
+
+    // and set up the audio rate
+	AudioSampleRate=freq;
+}
+
+// TODO: how shall we do volume?
+void SN76xxx::SetSoundVolumes() {
 	// set overall volume (this is not a sound chip effect, it's directly related to DirectSound)
 	// it sets the maximum volume of all channels
-	EnterCriticalSection(&csAudioBuf);
-
-	int nRange=(MIN_VOLUME*max_volume)/100;	// negative
-	if (NULL != soundbuf) {
-		rampVolume(soundbuf, MIN_VOLUME - nRange);
-	}
-	if (NULL != sidbuf) {
-		rampVolume(sidbuf, MIN_VOLUME - nRange);
-	}
-	if (NULL != speechbuf) {
-		rampVolume(speechbuf, MIN_VOLUME - nRange);
-	}
-
-	LeaveCriticalSection(&csAudioBuf);
+	// this uses max_volume
 }
 
-void MuteAudio() {
-	// set overall volume to muted (this is not a sound chip effect, it's directly related to DirectSound)
-	// it sets the maximum volume of all channels
-	EnterCriticalSection(&csAudioBuf);
-
-	if (NULL != soundbuf) {
-		rampVolume(soundbuf, DSBVOLUME_MIN);
-	}
-	if (NULL != sidbuf) {
-		rampVolume(sidbuf, DSBVOLUME_MIN);
-	}
-	if (NULL != speechbuf) {
-		rampVolume(speechbuf, DSBVOLUME_MIN);
-	}
-
-	LeaveCriticalSection(&csAudioBuf);
+// TODO: same as SetSoundVolumes, but mute it (don't change max_volume)
+void SN76xxx::MuteAudio() {
 }
 
-void rampVolume(LPDIRECTSOUNDBUFFER ds, long newVol) {
-    // want to finish in this many steps, as few as possible
-    // There is probably no harm to this, but it does NOT affect the startup click...
-    // It makes some impact on reset (but the click on finishing reset still happens)
-    // and seems to resolve the shutdown click. It does slow things a bit.
-    // The main click is caused by the DAC, so, I've got to do a little extra ramp
-    // when the system first starts up just for that. That one we'll do live.
-    // TODO: still not convinced of this, causes a flutter when it fades out.
-    // Also causes a delay in processing, times every channel involved...
-    const long step = (DSBVOLUME_MAX-DSBVOLUME_MIN);    // todo: normally divide this by number of steps, with it set to one step it's doing pretty much nothing
-    long vol = newVol;
-    
-    if (NULL == ds) return;
-    if (newVol > DSBVOLUME_MAX) newVol = DSBVOLUME_MAX;
-    if (newVol < DSBVOLUME_MIN) newVol = DSBVOLUME_MIN;
 
-    ds->GetVolume(&vol);
-
-    // only one of these loops should run
-    while (vol > newVol) {
-        vol -= step;
-        if (vol < newVol) vol=newVol;
-        ds->SetVolume(vol);
-        Sleep(10);
-    }
-    while (vol < newVol) {
-        vol += step;
-        if (vol > newVol) vol=newVol;
-        ds->SetVolume(vol);
-        Sleep(10);
-    }
-}
-
-void resetDAC() { 
+void SN76xxx::resetDAC() { 
 	// empty the buffer and reset the pointers
     MuteAudio();
-	EnterCriticalSection(&csAudioBuf);
+
+	{
+		autoMutex lock(csAudioBuf);
 		memset(&dac_buffer[0], (unsigned char)(nDACLevel*255), sizeof(dac_buffer));
 		dac_pos=0;
 		dacupdatedistance=0.0;
         dacramp=0.0;
-	LeaveCriticalSection(&csAudioBuf);
-    SetSoundVolumes();
+	}
+
+	SetSoundVolumes();
 }
 
 void updateDACBuffer(int nCPUCycles) {
+	// TODO: implement DAC based on CPU time
+	// Maybe we can put nCPUCycles into InterestingData and reset it here, same with the CRU stuff
+#if 0
 	static int totalCycles = 0;
 
 	if (max_cpf < DEFAULT_60HZ_CPF) {
@@ -884,159 +658,5 @@ void updateDACBuffer(int nCPUCycles) {
 		memset(&dac_buffer[dac_pos], out, distance);
 		dac_pos+=distance;
 	LeaveCriticalSection(&csAudioBuf);
+#endif
 }
-
-void UpdateSoundBuf(LPDIRECTSOUNDBUFFER soundbuf, void (*sound_update)(short *,double,int), StreamData *pDat) {
-	DWORD iRead, iWrite;
-	short *ptr1, *ptr2;
-	DWORD len1, len2;
-	static char *pRecordBuffer = NULL;
-	static int nRecordBufferSize = 0;
-
-	EnterCriticalSection(&csAudioBuf);
-
-	// DirectSound iWrite pointer just points a 'safe distance' ahead of iRead, usually about 15ms
-	// so we need to maintain our own count of where we are writing
-	soundbuf->GetCurrentPosition(&iRead, &iWrite);
-//	debug_write("Read/Write sound buf: %5d/%5d", iRead, iWrite);
-	if (pDat->nLastWrite == 0xffffffff) {
-		pDat->nLastWrite=iWrite;
-	}
-	
-	// arbitrary - try to use a dynamic jitter buffer
-	int nWriteAhead;
-	if (pDat->nLastWrite<iRead) {
-		nWriteAhead=pDat->nLastWrite+CalculatedAudioBufferSize-iRead;
-	} else {
-		nWriteAhead=pDat->nLastWrite-iRead;
-	}
-	nWriteAhead/=CalculatedAudioBufferSize/(hzRate);
-	
-	if (nWriteAhead > 29) {
-		// this more likely means we actually fell behind!
-		if (pDat->nMinJitterFrames < 10) {
-#ifdef _DEBUG
-			debug_write("Fell behind, increasing minimum jitter to %d", pDat->nMinJitterFrames);
-#endif
-			pDat->nMinJitterFrames++;
-		} 
-		if (pDat->nJitterFrames < pDat->nMinJitterFrames) {
-			pDat->nJitterFrames=pDat->nMinJitterFrames;
-		}
-		nWriteAhead=0;
-		pDat->nLastWrite=iWrite;
-	}
-
-//	debug_write("WriteAhead at %d - lastwrite %5d, iread %5d", nWriteAhead, pDat->nLastWrite, iRead);
-
-	// update jitter buffer if we fall behind, but no more than 15 frames (that would only be 4 updates a second!)
-	if ((nWriteAhead < 1) && (pDat->nJitterFrames < 15)) {
-		pDat->nJitterFrames++;
-#ifdef _DEBUG
-		debug_write("Grow jitter buffer to %d frames (writeahead %d)", pDat->nJitterFrames, nWriteAhead);
-#endif
-	} else if ((nWriteAhead > pDat->nJitterFrames+1) && (pDat->nJitterFrames > pDat->nMinJitterFrames)) {
-		// maybe we can shrink the buffer?
-		pDat->nJitterFrames--;
-#ifdef _DEBUG
-		debug_write("Shrink jitter buffer to %d frames (writeahead %d)", pDat->nJitterFrames, nWriteAhead);
-#endif
-	} else if ((nWriteAhead > pDat->nMinJitterFrames/2+1) && (pDat->nMinJitterFrames > 2)) {
-		pDat->nMinJitterFrames--;
-#ifdef _DEBUG
-		debug_write("Shrink min jitter frames to %d (writeahead %d)", pDat->nMinJitterFrames, nWriteAhead);
-#endif
-	}
-
-	// check AVI buffer size is sufficient
-	if (Recording) {
-		if ((unsigned)nRecordBufferSize < CalculatedAudioBufferSize/(hzRate)) {
-			if (NULL != pRecordBuffer) free(pRecordBuffer);
-			pRecordBuffer = (char*)malloc(CalculatedAudioBufferSize/(hzRate));
-			nRecordBufferSize=CalculatedAudioBufferSize/(hzRate);
-		}
-	}
-
-	// doing it all right here limits the CPU's ability to interact
-	// but luckily we should NORMALLY only do one frame at a time
-	// as noted, the goal is to get it on a per-scanline basis
-	while (nWriteAhead < pDat->nJitterFrames) {
-		if (SUCCEEDED(soundbuf->Lock(pDat->nLastWrite, CalculatedAudioBufferSize/(hzRate), (void**)&ptr1, &len1, (void**)&ptr2, &len2, 0))) {
-			if (len1 > 0) {
-				sound_update(ptr1, nDACLevel, len1/2);		// divide by 2 for 16 bit samples
-			}
-			if (len2 > 0) {
-				sound_update(ptr2, nDACLevel, len2/2);		// divide by 2 for 16 bit samples
-			}
-
-			if ((Recording)&&(pRecordBuffer)) {
-				if (len1>0) {
-					memcpy(pRecordBuffer, ptr1, len1);
-				}
-				if (len2>0) {
-					memcpy(pRecordBuffer+len1, ptr2, len2);
-				}
-                
-                // TODO: not sure what's wrong.. if I write a fake buffer full of audio samples, it works fine.
-				// but this audio is jittery and full of gaps!
-				WriteAudioFrame(pRecordBuffer, len1+len2);
-			}
-
-			// carry on
-			soundbuf->Unlock(ptr1, len1, ptr2, len2);
-
-//			debug_write("Wrote %d bytes to nLastWrite %d (%x)", len1, pDat->nLastWrite, ptr1);
-
-			// update write pointer
-			pDat->nLastWrite += CalculatedAudioBufferSize/(hzRate);
-			if (pDat->nLastWrite >= CalculatedAudioBufferSize) {
-				pDat->nLastWrite-=CalculatedAudioBufferSize;
-			}
-		} else {
-			debug_write("Failed to lock sound buffer!");
-			break;
-		}
-		nWriteAhead++;
-		
-#if 0
-		if (nWriteAhead < pDat->nJitterFrames) {
-			soundbuf->GetCurrentPosition(&iRead, &iWrite);
-//			debug_write("Read/Write sound buf: %5d/%5d", iRead, iWrite);
-		}
-#endif
-	}
-
-	LeaveCriticalSection(&csAudioBuf);
-}
-
-////////////////////////////////////////////////////////////
-// SID Interface
-
-// TODO: this pulls in a Windows 'SID' structure, not the actual SID chip
-//SID *g_mySid = NULL;
-
-// try to load the SID DLL
-void PrepareSID() {
-	// load the Speech DLL
-	hSIDDll=LoadLibrary("SIDDll.dll");
-	if (NULL == hSIDDll) {
-		debug_write("Failed to load SID library.");
-	} else {
-		InitSid=(void (*)(void))GetProcAddress(hSIDDll, "InitSid");
-		sid_update=(void (*)(short*,double,int))GetProcAddress(hSIDDll, "sid_update");
-		write_sid=(void (*)(Word,Byte))GetProcAddress(hSIDDll, "write_sid");
-		SetSidFrequency=(void (*)(int))GetProcAddress(hSIDDll, "SetSidFrequency");
-		SetSidEnable=(void (*)(bool))GetProcAddress(hSIDDll, "SetSidEnable");
-		SetSidBanked=(void (*)(bool))GetProcAddress(hSIDDll, "SetSidBanked");
-		GetSidEnable=(bool (*)(void))GetProcAddress(hSIDDll, "GetSidEnable");
-        // not available in all versions of the DLL, optional
-        GetSidPointer=(SID* (*)(void))GetProcAddress(hSIDDll, "GetSidPointer");
-
-		if ((NULL == InitSid) || (NULL == sid_update) || (NULL == write_sid) || (NULL == SetSidFrequency) || (NULL == SetSidEnable) || (NULL == SetSidBanked) || (NULL == GetSidEnable)) {
-			debug_write("Failed to find all functions, skipping SID DLL");
-			hSIDDll = NULL;
-		}
-	}
-}
-
-#endif

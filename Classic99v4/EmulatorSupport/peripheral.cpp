@@ -95,3 +95,60 @@ void Classic99Peripheral::setIndex(const char *name, int in) {
     }
 }
 
+// TODO: the function that calls the save/restore state function should
+// verify the assertions, and refuse to save/load state if they are untrue:
+// double = 8 bytes
+// int = 4 bytes
+// short = 2 bytes
+// unsigned int = 4 bytes
+// unsigned short = 2 bytes
+// bool is handled manually, so that one is okay
+
+// save state helpers
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, bool n) {
+    *(buffer++) = n?1:0;
+}
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, double n) {
+    memcpy(buffer, &n, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, int n) {
+    memcpy(buffer, &n, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, short n) {
+    memcpy(buffer, &n, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, unsigned int n) {
+    memcpy(buffer, &n, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::saveStateVal(unsigned char *&buffer, unsigned short n) {
+    memcpy(buffer, &n, sizeof(n));
+    buffer+=sizeof(n);
+}
+
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, bool &n) {
+   n = *(buffer++) ? true : false;
+}
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, double &n) {
+    memcpy(&n, buffer, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, int &n) {
+    memcpy(&n, buffer, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, short &n) {
+    memcpy(&n, buffer, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, unsigned int &n) {
+    memcpy(&n, buffer, sizeof(n));
+    buffer+=sizeof(n);
+}
+void Classic99Peripheral::loadStateVal(unsigned char *&buffer, unsigned short &n) {
+    memcpy(&n, buffer, sizeof(n));
+    buffer+=sizeof(n);
+}

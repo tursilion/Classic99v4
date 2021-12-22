@@ -174,6 +174,8 @@ public:
     virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
+    // TODO: make all saveState functions versioned (separate version per object, as well as a master version)
+    // The system decides the order of the objects and initializes/restores the save file
     virtual int saveStateSize() { return 0; }       // number of bytes needed to save state
     virtual bool saveState(unsigned char *buffer) { (void)buffer; return true; }    // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
     virtual bool restoreState(unsigned char *buffer) { (void)buffer; return true; } // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
@@ -197,6 +199,26 @@ public:
     const char *getName() { return formattedName; }
 
 protected:
+    void saveStateVal(unsigned char *&buffer, bool n);
+    void saveStateVal(unsigned char *&buffer, double n);
+    void saveStateVal(unsigned char *&buffer, int n);
+    void saveStateVal(unsigned char *&buffer, short n);
+    void saveStateVal(unsigned char *&buffer, unsigned int n);
+    void saveStateVal(unsigned char *&buffer, unsigned short n);
+    // prevent any implicit conversion, I want to know about it since we're
+    // working with binary data
+    template <class T> void saveStateVal(unsigned char *&buffer, T) = delete;
+
+    void loadStateVal(unsigned char *&buffer, bool &n);
+    void loadStateVal(unsigned char *&buffer, double &n);
+    void loadStateVal(unsigned char *&buffer, int &n);
+    void loadStateVal(unsigned char *&buffer, short &n);
+    void loadStateVal(unsigned char *&buffer, unsigned int &n);
+    void loadStateVal(unsigned char *&buffer, unsigned short &n);
+    // prevent any implicit conversion, I want to know about it since we're
+    // working with binary data
+    template <class T> void loadStateVal(unsigned char *&buffer, T) = delete;
+
     ALLEGRO_MUTEX *periphLock;          // our object lock
     Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
     double lastTimestamp;               // last time we ran to
