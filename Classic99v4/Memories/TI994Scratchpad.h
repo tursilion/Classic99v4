@@ -6,7 +6,7 @@
 #ifndef TI994SCRATCH_H
 #define TI994SCRATCH_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 
 // CPU ROM memory
 class TI994Scratchpad : public Classic99Peripheral {

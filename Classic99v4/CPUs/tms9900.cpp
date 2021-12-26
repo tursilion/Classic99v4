@@ -25,10 +25,10 @@
 // TODO implement the Classic99 debug opcodes 0x0110 through 0x0113
 
 #include <stdio.h>
-#include "..\EmulatorSupport\peripheral.h"
-#include "..\EmulatorSupport\debuglog.h"
-#include "..\EmulatorSupport\System.h"
-#include "..\EmulatorSupport\interestingData.h"
+#include "../EmulatorSupport/peripheral.h"
+#include "../EmulatorSupport/debuglog.h"
+#include "../EmulatorSupport/System.h"
+#include "../EmulatorSupport/interestingData.h"
 #include "tms9900.h"
 
 #ifndef BUILD_CPU

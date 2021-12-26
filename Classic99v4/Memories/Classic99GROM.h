@@ -6,7 +6,7 @@
 #ifndef CLASSIC99GROM_H
 #define CLASSIC99GROM_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 
 // memory-mapped GROM memory emulation
 // GROM is accessed via just a couple of access ports

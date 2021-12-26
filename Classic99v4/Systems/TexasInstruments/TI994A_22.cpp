@@ -5,11 +5,11 @@
 // TODO: Technically we should also disallow CRU to the cartridge port...
 
 #include "TI994A_22.h"
-#include "..\..\EmulatorSupport\interestingData.h"
-#include "..\..\Memories\TI994A22GROM.h"
-#include "..\..\Memories\TI994AROM.h"
-#include "..\..\VDPs\TMS9918A.h"
-#include "..\..\Keyboard\kb_994A.h"
+#include "../../EmulatorSupport/interestingData.h"
+#include "../../Memories/TI994A22GROM.h"
+#include "../../Memories/TI994AROM.h"
+#include "../../VDPs/TMS9918A.h"
+#include "../../Keyboard/kb_994A.h"
 
 TI994A22::TI994A22()
     : TI994()

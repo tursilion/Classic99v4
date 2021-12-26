@@ -9,7 +9,7 @@
 #ifndef KB994_H
 #define KB994_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 #include "TIKeyboard.h"
 
 // CPU ROM memory

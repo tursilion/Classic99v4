@@ -98,7 +98,7 @@ From Matt - check this decrement:
 // TODO: Speech and SID need to be implemented as separate objects
 
 #include "SN76xxx.h"
-#include "..\EmulatorSupport\automutex.h"
+#include "../EmulatorSupport/automutex.h"
 
 // logarithmic scale (linear isn't right!)
 // the SMS Power example, (I convert below to percentages)

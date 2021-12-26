@@ -51,11 +51,11 @@ The reset also changes VR54 and VR55, but they are *not* loaded to the GPU PC (p
 
 #include "TMS9918.h"
 #include <ctype.h>
-#include "..\EmulatorSupport\peripheral.h"
-#include "..\EmulatorSupport\debuglog.h"
-#include "..\EmulatorSupport\System.h"
-#include "..\EmulatorSupport\interestingData.h"
-#include "..\EmulatorSupport\tv.h"
+#include "../EmulatorSupport/peripheral.h"
+#include "../EmulatorSupport/debuglog.h"
+#include "../EmulatorSupport/System.h"
+#include "../EmulatorSupport/interestingData.h"
+#include "../EmulatorSupport/tv.h"
 
 // 12-bit 0RGB colors (we shift up to 32 bit when we load it). 12 bit is the correct palette for the F18A.
 const int F18APaletteReset[64] = {

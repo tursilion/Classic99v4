@@ -9,14 +9,14 @@
 // as they are all very, very similar - only the keyboard, VDP
 // and ROMs differ.
 
-#include "..\..\EmulatorSupport\System.h"
-#include "..\..\CPUs\tms9900.h"
-#include "..\..\Memories\TI994Scratchpad.h"
-#include "..\..\Memories\Classic99GROM.h"
-#include "..\..\Memories\Classic99ROM.h"
-#include "..\..\Keyboard\TIKeyboard.h"
-#include "..\..\VDPs\TMS9918.h"
-#include "..\..\PSGs\SN76xxx.h"
+#include "../../EmulatorSupport/System.h"
+#include "../../CPUs/tms9900.h"
+#include "../../Memories/TI994Scratchpad.h"
+#include "../../Memories/Classic99GROM.h"
+#include "../../Memories/Classic99ROM.h"
+#include "../../Keyboard/TIKeyboard.h"
+#include "../../VDPs/TMS9918.h"
+#include "../../PSGs/SN76xxx.h"
 
 // define the actual system class
 class TI994 : public Classic99System {

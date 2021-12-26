@@ -5,11 +5,11 @@
 // and VDP and ROMs, otherwise it's the same.
 
 #include "TI994A.h"
-#include "..\..\EmulatorSupport\interestingData.h"
-#include "..\..\Memories\TI994AGROM.h"
-#include "..\..\Memories\TI994AROM.h"
-#include "..\..\VDPs\TMS9918A.h"
-#include "..\..\Keyboard\kb_994A.h"
+#include "../../EmulatorSupport/interestingData.h"
+#include "../../Memories/TI994AGROM.h"
+#include "../../Memories/TI994AROM.h"
+#include "../../VDPs/TMS9918A.h"
+#include "../../Keyboard/kb_994A.h"
 
 TI994A::TI994A()
     : TI994()

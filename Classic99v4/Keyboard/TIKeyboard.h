@@ -9,7 +9,7 @@
 #ifndef TIKEYBOARD_H
 #define TIKEYBOARD_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 
 // used to define the key array, and make it easier to get a pointer to it ;)
 typedef int Array8x8[8][8];

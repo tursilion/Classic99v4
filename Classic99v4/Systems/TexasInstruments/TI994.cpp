@@ -7,10 +7,10 @@
 // and ROMs differ.
 
 #include "TI994.h"
-#include "..\..\EmulatorSupport\interestingData.h"
-#include "..\..\Memories\TI994GROM.h"
-#include "..\..\Memories\TI994ROM.h"
-#include "..\..\Keyboard\kb_994.h"
+#include "../../EmulatorSupport/interestingData.h"
+#include "../../Memories/TI994GROM.h"
+#include "../../Memories/TI994ROM.h"
+#include "../../Keyboard/kb_994.h"
 
 TI994::TI994()
     : Classic99System()

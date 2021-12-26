@@ -6,7 +6,7 @@
 #ifndef CLASSIC99ROM_H
 #define CLASSIC99ROM_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 
 // CPU ROM memory
 class Classic99ROM : public Classic99Peripheral {

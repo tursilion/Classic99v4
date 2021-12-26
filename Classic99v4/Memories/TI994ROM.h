@@ -6,7 +6,7 @@
 #ifndef TI994ROM_H
 #define TI994ROM_H
 
-#include "..\EmulatorSupport\peripheral.h"
+#include "../EmulatorSupport/peripheral.h"
 #include "Classic99ROM.h"
 
 // CPU ROM memory
