@@ -459,7 +459,7 @@ bool SN76xxx::saveState(unsigned char *buffer) {
     saveStateVal(buffer, CRU_TOGGLES);
     saveStateVal(buffer, nDACLevel);
 
-	memcpy(buffer, dac_buffer, 1024*1024);
+    memcpy(buffer, dac_buffer, 1024*1024);
 
     saveStateVal(buffer, dac_pos);
     saveStateVal(buffer, dacupdatedistance);
@@ -467,40 +467,40 @@ bool SN76xxx::saveState(unsigned char *buffer) {
     saveStateVal(buffer, FADECLKTICK);
     saveStateVal(buffer, nClock);
 
-	for (int idx=0; idx<4; ++idx) {
-		saveStateVal(buffer, nCounter[idx]);
-	}
-    
-	saveStateVal(buffer, nNoisePos);
+    for (int idx=0; idx<4; ++idx) {
+	saveStateVal(buffer, nCounter[idx]);
+    }
+
+    saveStateVal(buffer, nNoisePos);
     saveStateVal(buffer, LFSR);
 
-	for (int idx=0; idx<4; ++idx) {
-		saveStateVal(buffer, nRegister[4]);
-	}
-	for (int idx=0; idx<4; ++idx) {
-		saveStateVal(buffer, nVolume[4]);
-	}
-	for (int idx=0; idx<4; ++idx) {
-		saveStateVal(buffer, nFade[4]);
-	}
+    for (int idx=0; idx<4; ++idx) {
+	saveStateVal(buffer, nRegister[idx]);
+    }
+    for (int idx=0; idx<4; ++idx) {
+	saveStateVal(buffer, nVolume[idx]);
+    }
+    for (int idx=0; idx<4; ++idx) {
+	saveStateVal(buffer, nFade[idx]);
+    }
 
-	saveStateVal(buffer, max_volume);
+    saveStateVal(buffer, max_volume);
     saveStateVal(buffer, AudioSampleRate);
     saveStateVal(buffer, nTappedBits);
     saveStateVal(buffer, latch_byte);
 
-	for (int idx=0; idx<4; ++idx) {
-		saveStateVal(buffer, nOutput[4]);
-	}
+    for (int idx=0; idx<4; ++idx) {
+	saveStateVal(buffer, nOutput[idx]);
+    }
 
-	return true;
+    return true;
 }
 bool SN76xxx::restoreState(unsigned char *buffer) {
     loadStateVal(buffer, enableBackgroundHum);
     loadStateVal(buffer, CRU_TOGGLES);
     loadStateVal(buffer, nDACLevel);
 
-	memcpy(dac_buffer, buffer, 1024*1024);
+    memcpy(dac_buffer, buffer, 1024*1024);
 
     loadStateVal(buffer, dac_pos);
     loadStateVal(buffer, dacupdatedistance);
@@ -508,33 +508,33 @@ bool SN76xxx::restoreState(unsigned char *buffer) {
     loadStateVal(buffer, FADECLKTICK);
     loadStateVal(buffer, nClock);
 
-	for (int idx=0; idx<4; ++idx) {
-		loadStateVal(buffer, nCounter[idx]);
-	}
-    
-	loadStateVal(buffer, nNoisePos);
+    for (int idx=0; idx<4; ++idx) {
+	loadStateVal(buffer, nCounter[idx]);
+    }
+
+    loadStateVal(buffer, nNoisePos);
     loadStateVal(buffer, LFSR);
 
-	for (int idx=0; idx<4; ++idx) {
-		loadStateVal(buffer, nRegister[4]);
-	}
-	for (int idx=0; idx<4; ++idx) {
-		loadStateVal(buffer, nVolume[4]);
-	}
-	for (int idx=0; idx<4; ++idx) {
-		loadStateVal(buffer, nFade[4]);
-	}
+    for (int idx=0; idx<4; ++idx) {
+ 	loadStateVal(buffer, nRegister[idx]);
+    }
+    for (int idx=0; idx<4; ++idx) {
+ 	loadStateVal(buffer, nVolume[idx]);
+    }
+    for (int idx=0; idx<4; ++idx) {
+	loadStateVal(buffer, nFade[idx]);
+    }
 
-	loadStateVal(buffer, max_volume);
+    loadStateVal(buffer, max_volume);
     loadStateVal(buffer, AudioSampleRate);
     loadStateVal(buffer, nTappedBits);
     loadStateVal(buffer, latch_byte);
 
-	for (int idx=0; idx<4; ++idx) {
-		loadStateVal(buffer, nOutput[4]);
-	}
+    for (int idx=0; idx<4; ++idx) {
+   	loadStateVal(buffer, nOutput[idx]);
+    }
 
-	return true;
+    return true;
 }
 
 void SN76xxx::resetNoise() {

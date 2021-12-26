@@ -35,8 +35,8 @@ class TMS9918 : public Classic99Peripheral {
 public:
     TMS9918(Classic99System *core) 
         : Classic99Peripheral(core)
-        , pDisplay(nullptr)
         , bUse5SpriteLimit(true)
+        , pDisplay(nullptr)
     {
     }
     virtual ~TMS9918() 

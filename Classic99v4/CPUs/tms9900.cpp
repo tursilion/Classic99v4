@@ -416,6 +416,7 @@ bool TMS9900::restoreState(unsigned char *buffer) {
     Word x1,x3;                 \
     AddCycleCount(10);          \
     x1 = ROMWORD(S);            \
+    (void)x1;                   \
     theOp;                      \
     WRWORD(S, x3);
 
@@ -2293,6 +2294,7 @@ void TMS9900::op_src()
     //  Write source
     Word x2,x4;
 
+    x4 = 0;
     FormatV;
 
     for (x2=0; x2<D; x2++)

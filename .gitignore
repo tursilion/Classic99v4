@@ -277,3 +277,8 @@ __pycache__/
 # tools/**
 # !tools/packages.config
 
+# Debian
+*.o
+core
+Classic99v4/classic99v4
+

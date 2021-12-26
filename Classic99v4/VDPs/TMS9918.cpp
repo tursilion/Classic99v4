@@ -863,7 +863,7 @@ bool TMS9918::restoreState(unsigned char *buffer) {
 // Increment VDP Address
 void TMS9918::increment_vdpadd() 
 {
-	VDPADD=(++VDPADD) & 0x3fff;
+	VDPADD=(VDPADD+1) & 0x3fff;
 }
 
 // Return the actual 16k address taking the 4k mode bit
@@ -1366,7 +1366,7 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
 	int p_add;
 	uint32_t fgc, bgc, c;
 	unsigned char ch=0xff;
-	const int i1 = scanline&0xf8;
+//	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
 
 	if (pLine == NULL) return;
@@ -1542,7 +1542,7 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
 	int i2;
 	int fgc, bgc, p_add;
 	unsigned char ch=0xff;
-	const int i1 = scanline&0xf8;
+//	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
 
 	if (pLine == NULL) return;
@@ -1659,7 +1659,8 @@ void TMS9918::VDPtextII(int scanline, int isLayer2)
 //	for (i1=0; i1<192; i1+=8)					// y loop
 	{ 
 //		if ((i1==64)||(i1==128)) {
-//			table++;
+//		
+	table++;
 //			Poffset=table*0x800;
 //		}
 		table = i1/64;
@@ -1723,7 +1724,7 @@ void TMS9918::VDPtext80(int scanline, int isLayer2)
 	int i2;
 	int fgc,bgc, p_add;
 	unsigned char ch=0xff;
-	const int i1 = scanline&0xf8;
+//	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x07;
 
 	if (pLine == NULL) return;
@@ -1818,8 +1819,8 @@ void TMS9918::VDPillegal(int scanline, int isLayer2)
 	int t;
 	int i2;
 	int fgc,bgc;
-	const int i1 = scanline&0xf8;
-	const int i3 = scanline&0x07;
+//	const int i1 = scanline&0xf8;
+//	const int i3 = scanline&0x07;
 	(void)scanline;		// scanline is irrelevant
 
 	if (pLine == NULL) return;
@@ -1888,9 +1889,9 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
 	int fgc, bgc;
 	int off;
 	unsigned char ch=0xff;
-	const int i1 = scanline&0xf8;
+//	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x04;
-	const int i4 = scanline&0x03;
+//	const int i4 = scanline&0x03;
 
 	if (pLine == NULL) return;
 	uint32_t *plong = pLine;	// get base line address
@@ -1978,18 +1979,18 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
 	int i2;						// temp variables
 	int p_add;
 	int fgc, bgc;
-	int off;
+//	int off;
 	int table, Poffset;
 	unsigned char ch=0xff;
 	const int i1 = scanline&0xf8;
 	const int i3 = scanline&0x04;
-	const int i4 = scanline&0x03;
+//	const int i4 = scanline&0x03;
 
 	if (pLine == NULL) return;
 	uint32_t *plong = pLine;	// get base line address
 
 	o=(scanline/8)*32;			// offset in SIT
-	off=(scanline>>2)&0x06;		// offset in pattern
+//	off=(scanline>>2)&0x06;		// offset in pattern
 
 	table=0; Poffset=0;
 

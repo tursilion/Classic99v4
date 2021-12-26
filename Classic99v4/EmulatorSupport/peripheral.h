@@ -145,8 +145,8 @@ public:
     Classic99Peripheral &operator=(Classic99Peripheral const &other) = delete;
 
     // dummy read and write - IO flag is unused on most, but just in case they need to know
-    virtual uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) { (void)addr; (void)cycles; (void)rmw; return 0; }
-    virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
+    virtual uint8_t read(int addr, bool isIO, volatile long &, MEMACCESSTYPE rmw) { (void)addr; (void)rmw; return 0; }
+    virtual void write(int addr, bool isIO, volatile long &, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)rmw; (void)data; }
 
     // interface code
     virtual int hasAvailablePorts() { return 0; }    // number of pluggable ports (for serial, parallel, etc)

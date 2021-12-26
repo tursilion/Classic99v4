@@ -15,6 +15,10 @@ bool bDebugDirty = false;
 int currentDebugLine;
 ALLEGRO_MUTEX *debugLock;      // our object lock
 
+#ifdef ALLEGRO_WINDOWS
+    #define vsnprintf _vsnprintf
+#endif
+
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
@@ -31,27 +35,29 @@ void debug_shutdown() {
 void debug_write(const char *s, ...)
 {
     const int bufSize = 1024;
-	char buf[bufSize];
+    char buf[bufSize];
 
     // full length debug output
-	_vsnprintf(buf, bufSize-1, s, (va_list)((wchar_t*)((&s)+1)));
-	buf[bufSize-1]='\0';
+    va_list argptr;
+    va_start(argptr, s);
+    vsnprintf(buf, bufSize-1, s, argptr);
+    buf[bufSize-1]='\0';
 
 #ifdef ALLEGRO_WINDOWS
     // output to Windows debug listing...
-	OutputDebugString(buf);
-	OutputDebugString("\n");
+    OutputDebugString(buf);
+    OutputDebugString("\n");
 #endif
 
     // truncate to rolling array size
-	buf[DEBUGLEN-1]='\0';
+    buf[DEBUGLEN-1]='\0';
 
     {
         autoMutex lock(debugLock);
-	
-	    memset(&lines[currentDebugLine][0], ' ', DEBUGLEN);	    // clear line
-	    strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN);    // copy in new line
-	    lines[currentDebugLine][DEBUGLEN-1]='\0';               // zero terminate
+
+        memset(&lines[currentDebugLine][0], ' ', DEBUGLEN);	// clear line
+        strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN);    // copy in new line
+        lines[currentDebugLine][DEBUGLEN-1]='\0';               // zero terminate
         if (++currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
 
     	bDebugDirty=true;									    // flag redraw

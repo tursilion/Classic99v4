@@ -61,7 +61,7 @@ void Classic99GROM::LoadAdditionalData(const uint8_t *pDat, unsigned int datSize
 // increment the GROM address and handle wraparound
 void Classic99GROM::IncrementGROMAddress(int &adrRef) {
     int base = adrRef&0xe000;
-    adrRef = ((++adrRef)&0x1fff) | base;
+    adrRef = ((adrRef+1)&0x1fff) | base;
 }
 
 uint8_t Classic99GROM::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {

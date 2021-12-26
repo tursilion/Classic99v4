@@ -102,7 +102,7 @@ public:
     // but that is definitely system-specific. So these default cases assume
     // one hold bus, one interrupt bus, one NMI line.
     virtual void requestHold(int device) {
-        if (device < sizeof(int)) {
+        if ((unsigned)device < sizeof(int)) {
             hold |= 1<<device;
         } else {
             debug_write("Invalid peripheral index for hold %d", device);
@@ -116,7 +116,7 @@ public:
         }
     }
     virtual bool releaseHold(int device) {
-        if (device < sizeof(int)) {
+        if ((unsigned)device < sizeof(int)) {
             hold &= ~( 1<<device );
         } else {
             debug_write("Invalid peripheral index for hold release %d", device);

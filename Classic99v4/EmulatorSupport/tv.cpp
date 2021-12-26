@@ -20,7 +20,9 @@ static const int wndFlags =  ALLEGRO_WINDOWED        // or ALLEGRO_FULLSCREEN_WI
                           |  ALLEGRO_GENERATE_EXPOSE_EVENTS;    // maybe?
 
 // constructor and destructor
-Classic99TV::Classic99TV() {
+Classic99TV::Classic99TV()
+	: evtQ(nullptr)
+{
     windowLock = al_create_mutex_recursive();
     bgColor = al_map_rgba(0,0,0,255);
     init();

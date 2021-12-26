@@ -11,6 +11,10 @@ Classic99Peripheral dummyPeripheral(NULL);
 // singleton dummy breakpoint object with nothing set
 BREAKPOINT dummyBreakpoint;
 
+#ifdef ALLEGRO_WINDOWS
+#define snprintf _snprintf
+#endif
+
 // called from the main code to request a breakpoint be added
 void Classic99Peripheral::addBreakpoint(BREAKPOINT &inBreak) {
     autoMutex lock(periphLock);
@@ -83,14 +87,14 @@ void Classic99Peripheral::setIndex(const char *name, int in) {
     autoMutex lock(periphLock);
 
     if (NULL != name) {
-        _snprintf(formattedName, sizeof(formattedName), "%s_%d", name, in);
+        snprintf(formattedName, sizeof(formattedName), "%s_%d", name, in);
     } else {
         char *p = strchr(formattedName, '_');
         if (NULL == p) {
             debug_write("Name format invalid");
         } else {
             *(++p) = '\0';
-            _snprintf(p, sizeof(formattedName)-(p-formattedName), "%d", in);
+            snprintf(p, sizeof(formattedName)-(p-formattedName), "%d", in);
         }
     }
 }

@@ -29,7 +29,7 @@ BIT	HW	C99	Purpose						Status
 19	0	0	keyboard select bit 1		Implemented as loopback
 20	0	0	keyboard select bit 0		Implemented as loopback
 
-21	1	0	alpha lock					Implemented, but wrong? (ignored here as the 99/4 doesn't have one!)
+21	1	0	alpha lock					Implemented, but wrong? (ignored here as the 99/4 doesn''t have one!)
 
 #endif
 
