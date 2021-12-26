@@ -28,6 +28,11 @@
 // for timers
 #include <Windows.h>
 #endif
+#ifdef ALLEGRO_LINUX
+// for timers
+#include <time.h>
+#include <errno.h>
+#endif
 
 // Cleanup - shared function to release resources
 void Cleanup() {
@@ -110,9 +115,13 @@ int main(int argc, char **argv) {
     double elapsedUs = 0;
 
 #ifdef ALLEGRO_WINDOWS
-    // TODO: how to do this for Linux, Mac, Android?
+    // TODO: how to do this for Mac, Android?
     LARGE_INTEGER nStart, nEnd, nFreq;
     QueryPerformanceCounter(&nStart);
+#endif
+#ifdef ALLEGRO_LINUX
+    timespec nStart, nEnd;
+    clock_gettime(CLOCK_REALTIME, &nStart);
 #endif
 
     for (;;) {
@@ -122,7 +131,7 @@ int main(int argc, char **argv) {
         al_rest(0.01);
 
 #ifdef ALLEGRO_WINDOWS
-        // TODO: how to do this for Linux, Mac, Android?
+        // TODO: how to do this for Mac, Android?
         QueryPerformanceCounter(&nEnd);
         QueryPerformanceFrequency(&nFreq);
 
@@ -132,10 +141,22 @@ int main(int argc, char **argv) {
         }
 
         // start timing for the next loop
-        QueryPerformanceCounter(&nStart);
+        nStart.QuadPart = nEnd.QuadPart;
 #else
+#ifdef ALLEGRO_LINUX
+        if (0 == clock_gettime(CLOCK_REALTIME, &nEnd)) {
+            long long int diff = ((long long)nEnd.tv_sec*1000000 + nEnd.tv_nsec/1000) - 
+				 ((long long)nStart.tv_sec*1000000 + nStart.tv_nsec/1000);
+            if (diff > 0) elapsedUs += diff;
+            nStart = nEnd;
+        } else {
+            elapsedUs += 10000;
+        }
+#else
+
         // it wil be more than this thanks to WindowLoop/etc
         elapsedUs += 10000;
+#endif
 #endif
 
         // to try for rough scanline accuracy, we'll run 64uS slices up to the desired time

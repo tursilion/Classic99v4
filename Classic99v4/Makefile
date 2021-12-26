@@ -5,7 +5,7 @@
 # I hate to admit it, but I almost want to use cmake on this one...
 
 CC=g++
-CFLAGS=-O3 -Wall -Wno-stringop-truncation -g
+CFLAGS=-O3 -Wall -Wno-stringop-truncation -g -DALLEGRO_LINUX -DALLEGRO_WITH_XWINDOWS
 INC=-I.
 LIB=-lallegro -lallegro_main -lallegro_dialog -lallegro_audio
 

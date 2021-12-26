@@ -2,6 +2,7 @@
 // See License.txt, but the answer is "just ask me first". ;)
 
 #include "Classic99v4.h"
+#include <allegro5/allegro_native_dialog.h>
 #include "debuglog.h"
 #include "tv.h"
 #include "automutex.h"
