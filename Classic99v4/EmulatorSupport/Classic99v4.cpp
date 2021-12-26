@@ -34,6 +34,10 @@
 #include <errno.h>
 #endif
 
+// we expect time steps of 15-20 milliseconds, so we'll set an upper limit of 100ms
+// Any more than that, and we discard the lost time. This is in microseconds.
+#define MAX_TIME_SKIP 100000
+
 // Cleanup - shared function to release resources
 void Cleanup() {
     debug_write("Cleaning up...");
@@ -117,6 +121,7 @@ int main(int argc, char **argv) {
 #ifdef ALLEGRO_WINDOWS
     // TODO: how to do this for Mac, Android?
     LARGE_INTEGER nStart, nEnd, nFreq;
+    QueryPerformanceFrequency(&nFreq);
     QueryPerformanceCounter(&nStart);
 #endif
 #ifdef ALLEGRO_LINUX
@@ -133,11 +138,14 @@ int main(int argc, char **argv) {
 #ifdef ALLEGRO_WINDOWS
         // TODO: how to do this for Mac, Android?
         QueryPerformanceCounter(&nEnd);
-        QueryPerformanceFrequency(&nFreq);
 
         if (nEnd.QuadPart > nStart.QuadPart) {
-            nEnd.QuadPart -= nStart.QuadPart;
-            elapsedUs += ((double)nEnd.QuadPart / nFreq.QuadPart) * 1000000;
+            nStart.QuadPart = nEnd.QuadPart - nStart.QuadPart;
+            double delta = ((double)nStart.QuadPart / nFreq.QuadPart) * 1000000;
+            if (delta > MAX_TIME_SKIP) delta = MAX_TIME_SKIP;
+            if (delta > 0) {
+                elapsedUs += delta;
+            }
         }
 
         // start timing for the next loop
@@ -147,7 +155,10 @@ int main(int argc, char **argv) {
         if (0 == clock_gettime(CLOCK_REALTIME, &nEnd)) {
             long long int diff = ((long long)nEnd.tv_sec*1000000 + nEnd.tv_nsec/1000) - 
 				 ((long long)nStart.tv_sec*1000000 + nStart.tv_nsec/1000);
-            if (diff > 0) elapsedUs += diff;
+            if (diff > MAX_TIME_SKIP) diff = MAX_TIME_SKIP;
+            if (diff > 0) {
+                elapsedUs += diff;
+            }
             nStart = nEnd;
         } else {
             elapsedUs += 10000;
