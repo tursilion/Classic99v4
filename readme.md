@@ -33,8 +33,8 @@ set up and have not attempted this. If you do, let me know what happened. I can 
 timing system is only implemented for Windows, and the temp hack for anything else will run a little slower.
 
 Download the latest release here:
-(Windows) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip] (https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip)
-(Linux (raw, not a package)) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/classic99v4.tgz] (https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/classic99v4.tgz)
+(Windows) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip] 
+(Linux (raw, not a package)) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/classic99v4.tgz] 
 
 
 Want to donate?
