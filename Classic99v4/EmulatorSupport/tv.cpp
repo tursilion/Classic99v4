@@ -155,7 +155,14 @@ bool Classic99TV::runWindowLoop() {
     if ((!dontDraw) && (drawReady)) {
         // clear the backdrop
         al_clear_to_color(bgColor);
+
+        // TODO: the blender operates differently between Windows and Linux...
+        // It's affecting how the bgColor above is preserved or not...
+        // Linux:
         al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_ZERO);
+        // Windows:
+        //al_set_blender(ALLEGRO_ADD, ALLEGRO_ONE, ALLEGRO_INVERSE_ALPHA);
+        // Can we find a setting that works with both? Else need to ifdef it...
 
         // render the layers
         for (unsigned int idx=0; idx<layers.size(); ++idx) {
