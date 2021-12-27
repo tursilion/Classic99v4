@@ -1,0 +1,26 @@
+target_sources(classic99v4 PUBLIC
+    Classic99GROM.cpp
+    Classic99GROM.h
+    Classic99ROM.cpp
+    Classic99ROM.h
+    ColecoVisionROM.cpp
+    Demonstration.cpp
+    PhoenixROM.cpp
+    TI994A22GROM.cpp
+    TI994A22GROM.h
+    TI994A22GROMData.cpp
+    TI994AGROM.cpp
+    TI994AGROM.h
+    TI994AGROMData.cpp
+    TI994AROM.cpp
+    TI994AROM.h
+    TI994AROMData.cpp
+    TI994GROM.cpp
+    TI994GROM.h
+    TI994GROMData.cpp
+    TI994ROM.cpp
+    TI994ROM.h
+    TI994ROMData.cpp
+    TI994Scratchpad.cpp
+    TI994Scratchpad.h
+)

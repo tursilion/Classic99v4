@@ -14,7 +14,7 @@
 // and a smart pointered list of loaded peripheral devices
 
 // absolute maximums so I can have a set of arrays
-#define MAX_CPUS 16
+#define MAX_CPUS 4
 
 // a dummy peripheral to respond where nothing is mapped
 class Classic99Peripheral;

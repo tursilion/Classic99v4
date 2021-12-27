@@ -48,6 +48,7 @@ void debug_write(const char *s, ...)
     OutputDebugString(buf);
     OutputDebugString("\n");
 #endif
+    fprintf(stderr, "%s\n", buf);
 
     // truncate to rolling array size
     buf[DEBUGLEN-1]='\0';

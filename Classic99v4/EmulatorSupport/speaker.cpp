@@ -11,7 +11,7 @@
 
 // constructor and destructor
 Classic99Speaker::Classic99Speaker()
-    : delay(50)
+    : delay(80)
     , bufsize(10)
     , freq(44100)
     , depth(ALLEGRO_AUDIO_DEPTH_INT16)

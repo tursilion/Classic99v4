@@ -117,17 +117,8 @@ int main(int argc, char **argv) {
 
     // This tracks elapsed time
     double elapsedUs = 0;
-
-#ifdef ALLEGRO_WINDOWS
-    // TODO: how to do this for Mac, Android?
-    LARGE_INTEGER nStart, nEnd, nFreq;
-    QueryPerformanceFrequency(&nFreq);
-    QueryPerformanceCounter(&nStart);
-#endif
-#ifdef ALLEGRO_LINUX
-    timespec nStart, nEnd;
-    clock_gettime(CLOCK_REALTIME, &nStart);
-#endif
+    double nStart, nEnd;
+    nStart = al_get_time();
 
     for (;;) {
         // TODO: We could have a new high precision mode that doesn't sleep, just
@@ -135,40 +126,13 @@ int main(int argc, char **argv) {
         // tight as the system we're on allows for.
         al_rest(0.01);
 
-#ifdef ALLEGRO_WINDOWS
-        // TODO: how to do this for Mac, Android?
-        QueryPerformanceCounter(&nEnd);
-
-        if (nEnd.QuadPart > nStart.QuadPart) {
-            nStart.QuadPart = nEnd.QuadPart - nStart.QuadPart;
-            double delta = ((double)nStart.QuadPart / nFreq.QuadPart) * 1000000;
-            if (delta > MAX_TIME_SKIP) delta = MAX_TIME_SKIP;
-            if (delta > 0) {
-                elapsedUs += delta;
-            }
-        }
-
-        // start timing for the next loop
-        nStart.QuadPart = nEnd.QuadPart;
-#else
-#ifdef ALLEGRO_LINUX
-        if (0 == clock_gettime(CLOCK_REALTIME, &nEnd)) {
-            long long int diff = ((long long)nEnd.tv_sec*1000000 + nEnd.tv_nsec/1000) - 
-				 ((long long)nStart.tv_sec*1000000 + nStart.tv_nsec/1000);
-            if (diff > MAX_TIME_SKIP) diff = MAX_TIME_SKIP;
-            if (diff > 0) {
-                elapsedUs += diff;
-            }
-            nStart = nEnd;
-        } else {
-            elapsedUs += 10000;
-        }
-#else
-
         // it wil be more than this thanks to WindowLoop/etc
-        elapsedUs += 10000;
-#endif
-#endif
+        //elapsedUs += 10000;
+        nEnd = al_get_time();
+        double diff = (nEnd - nStart) * 1000000;
+        if (diff > MAX_TIME_SKIP) diff = MAX_TIME_SKIP;
+        if (diff > 0) elapsedUs += diff;
+        nStart = nEnd;
 
         // to try for rough scanline accuracy, we'll run 64uS slices up to the desired time
         // TODO: this is working, but it's running fast on the CPU (? just fast)

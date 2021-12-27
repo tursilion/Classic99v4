@@ -1231,7 +1231,7 @@ void TMS9918::VDPdisplay(int scanline)
 #endif
 		{
 			// all other modes
-			nMax = TMS_WIDTH/4;
+			nMax = TMS_WIDTH/4;	// because we plot 4 pixels per loop
 		}
 
 		pLine = ((uint32_t*)pImg->data);
