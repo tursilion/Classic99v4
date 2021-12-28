@@ -54,8 +54,8 @@ public:
     // ========== Classic99Peripheral interface ============
 
     // read needed, but no need for write. No IO mode here
-    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw);
-    void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data);
+    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) override;
+    void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) override;
 
     // interface code
     // there are no devices attached to the GROM
@@ -81,7 +81,7 @@ public:
     // debug interface
     void getDebugSize(int &x, int &y) override;             // dimensions of a text mode output screen - either being 0 means none
     void getDebugWindow(char *buffer) override;             // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
-	//virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
+    //virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
     int saveStateSize() override;                           // number of bytes needed to save state
@@ -92,7 +92,7 @@ public:
     // While the CPU does not get any memory or IO breakpoints,
     // it does breakpoint on PC, ST and WP settings. Or should. ;)
     // So does that mean implementing this interface?
-    void testBreakpoint(bool isRead, int addr, bool isIO, int data);
+    void testBreakpoint(bool isRead, int addr, bool isIO, int data) override;
 
     // configuration interface... not fully sussed out yet - could be in the debug system if that becomes doable
     void setWritable(int grom, bool isWrite) { bWritable[grom&7] = isWrite; }

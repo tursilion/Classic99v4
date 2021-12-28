@@ -55,9 +55,9 @@ bool Classic99TV::init() {
         al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);  // require a 32-bit display buffer, assume RGBA?
         al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 0, ALLEGRO_SUGGEST);  // suggest no multisampling
         // al_set_new_window_position(x, y);                // TODO: actual position
-        myWnd = al_create_display(256, 192);                // TODO: actual size
-        windowXSize = 256;
-        windowYSize = 192;
+        myWnd = al_create_display(284*4, 243*4);                // TODO: actual size
+        windowXSize = 284*4;
+        windowYSize = 243*4;
 
         if (nullptr == myWnd) {
             printf("Failed to create display\n");

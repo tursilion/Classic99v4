@@ -19,8 +19,8 @@ public:
     // ========== Classic99Peripheral interface ============
 
     // read and write needed. No IO mode here
-    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw);
-    void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data);
+    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) override;
+    void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) override;
 
     // interface code
     // there are no devices attached to the RAM

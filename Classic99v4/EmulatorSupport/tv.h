@@ -57,7 +57,7 @@ public:
     ALLEGRO_DISPLAY *myWnd;
 
 private:
-    std::vector<std::shared_ptr<autoBitmap>> layers;
+    std::vector< std::shared_ptr<autoBitmap> > layers;
     ALLEGRO_COLOR bgColor;
     ALLEGRO_MUTEX *windowLock;
     int windowXSize, windowYSize;

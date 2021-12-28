@@ -18,7 +18,7 @@ public:
     // ========== Classic99Peripheral interface ============
 
     // read needed, but no need for write. No IO mode here
-    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw);
+    uint8_t read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) override;
     //virtual void write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) { (void)addr; (void)cycles; (void)rmw; (void)data; }
 
     // interface code
