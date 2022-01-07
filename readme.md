@@ -36,6 +36,15 @@ Download the latest release here:
 (Windows) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip] 
 (Linux (raw, not a package)) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/classic99v4.tgz] 
 
+Tested Platforms
+================
+
+Platform    Version     Status      Date        Notes
+Windows     10          working     1/6/2022
+Linux       Debian 10   working     12/27/2021
+Linux       WSL 2       working     1/6/2022    VcXsrv, audio not tested
+Mac OSX     ?           unstable    12/27/2021  If it boots, it works, but window creation/resize causes crash
+
 
 Want to donate?
 ---------------

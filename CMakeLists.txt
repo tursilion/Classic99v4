@@ -1,3 +1,5 @@
+# this is /not/ intended for use with Windows - use the sln
+
 cmake_minimum_required(VERSION 3.13.0)
 project(classic99v4 VERSION 400.0.0)
 
@@ -26,5 +28,4 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-#TARGET_LINK_LIBRARIES(classic99v4 allegro allegro_main allegro_dialog allegro_audio)
 TARGET_LINK_LIBRARIES(classic99v4 ${ALLEGRO_LIBRARIES} )
