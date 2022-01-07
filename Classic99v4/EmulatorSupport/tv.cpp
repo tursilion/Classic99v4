@@ -26,7 +26,6 @@ Classic99TV::Classic99TV()
 {
     windowLock = al_create_mutex_recursive();
     bgColor = al_map_rgba(0,0,0,255);
-    init();
 }
 Classic99TV::~Classic99TV() {
     debug_write("Cleaning up TV...");

@@ -17,7 +17,6 @@ Classic99Speaker::Classic99Speaker()
     , depth(ALLEGRO_AUDIO_DEPTH_INT16)
     , conf(ALLEGRO_CHANNEL_CONF_1)
 {
-    init();
 }
 Classic99Speaker::~Classic99Speaker() {
     debug_write("Cleaning up Speaker...");
@@ -45,6 +44,10 @@ bool Classic99Speaker::init() {
 }
 
 std::shared_ptr<autoStream> Classic99Speaker::requestStream(Classic99AudioSrc *pSrc) {
+    if (!al_is_audio_installed()) {
+        return nullptr;
+    }
+
     std::shared_ptr<autoStream> ptr(new autoStream(pSrc, delay, bufsize, freq, depth, conf));
     layers.push_back(ptr);
     return ptr;

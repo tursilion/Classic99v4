@@ -413,7 +413,7 @@ bool SN76xxx::init(int idx) {
 
 	// get a stream running
 	stream = theCore->getSpeaker()->requestStream(this);
-	if (nullptr != stream->stream) {
+	if ((nullptr != stream) && (nullptr != stream->stream)) {
 		al_attach_audio_stream_to_mixer(stream->stream, al_get_default_mixer());
 	}
 
