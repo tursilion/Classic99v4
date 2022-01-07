@@ -65,9 +65,13 @@ bool Classic99TV::init() {
         }
 
         al_register_event_source(evtQ, al_get_display_event_source(myWnd));
-        //al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_RGBA_8888);   // let's see how well forcing it works...
         al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_ARGB_8888);   // let's see how well forcing it works...
+        // TODO: shouldn't need to use separate flags, I'm probably missing something - why are they different?
+#ifdef ALLEGRO_WINDOWS
+        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
+#else
         al_set_new_bitmap_flags(ALLEGRO_MEMORY_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
+#endif
         al_set_render_state(ALLEGRO_ALPHA_TEST, 1);
         al_set_render_state(ALLEGRO_ALPHA_FUNCTION, ALLEGRO_RENDER_EQUAL);
         al_set_render_state(ALLEGRO_ALPHA_TEST_VALUE, 255);
@@ -155,14 +159,9 @@ bool Classic99TV::runWindowLoop() {
     if ((!dontDraw) && (drawReady)) {
         // clear the backdrop
         al_clear_to_color(bgColor);
-
-        // TODO: the blender operates differently between Windows and Linux...
-        // It's affecting how the bgColor above is preserved or not...
-        // Linux:
+        
+        // confirmed okay on Linux and Windows
         al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_ZERO);
-        // Windows:
-        //al_set_blender(ALLEGRO_ADD, ALLEGRO_ONE, ALLEGRO_INVERSE_ALPHA);
-        // Can we find a setting that works with both? Else need to ifdef it...
 
         // render the layers
         for (unsigned int idx=0; idx<layers.size(); ++idx) {

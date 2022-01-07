@@ -14,6 +14,13 @@
 
 TI994::TI994()
     : Classic99System()
+    , pPSG(nullptr)
+    , pVDP(nullptr)
+    , pRom(nullptr)
+    , pGrom(nullptr)
+    , pCPU(nullptr)
+    , pKey(nullptr)
+    , pScratch(nullptr)
 {
 }
 
@@ -24,13 +31,13 @@ TI994::~TI994() {
 // loaded and initialized in here.
 bool TI994::initSpecificSystem() {
     pGrom = new TI994GROM(this);
-    pGrom->init(0);
+    if (!pGrom->init(0)) return false;
     pRom = new TI994ROM(this);
-    pRom->init(0);
+    if (!pRom->init(0)) return false;
     pVDP = new TMS9918(this);
-    pVDP->init(0);
+    if (!pVDP->init(0)) return false;
     pKey = new KB994(this);
-    pKey->init(0);
+    if (!pKey->init(0)) return false;
 
     return true;
 }
@@ -61,16 +68,16 @@ bool TI994::initSystem() {
 
     // now create the peripherals we need
     theTV = new Classic99TV();
-    theTV->init();
+    if (!theTV->init()) return false;
     theSpeaker = new Classic99Speaker();
-    theSpeaker->init();
+    theSpeaker->init();                 // no audio is acceptable
     pScratch = new TI994Scratchpad(this);
-    pScratch->init(0);
+    if (!pScratch->init(0)) return false;
     pPSG = new SN76xxx(this);
-    pPSG->init(0);
+    if (!pPSG->init(0)) return false;
 
     // call the virtual handler for the variants
-    initSpecificSystem();
+    if (!initSpecificSystem()) return false;
 
     // now we can claim resources
 
@@ -154,7 +161,7 @@ bool TI994::initSystem() {
 
     // last, build and init the CPU (needs the memory map active!)
     pCPU = new TMS9900(this);
-    pCPU->init(0);
+    if (!pCPU->init(0)) return false;
 
     return true;
 }

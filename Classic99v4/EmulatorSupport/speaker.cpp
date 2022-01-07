@@ -30,7 +30,7 @@ bool Classic99Speaker::init() {
 
     if (!al_is_audio_installed()) {
         if (!al_install_audio()) {
-            debug_write("Failed to install allegro audio");
+            debug_write("** Failed to install allegro audio **");
             return false;
         }
     }

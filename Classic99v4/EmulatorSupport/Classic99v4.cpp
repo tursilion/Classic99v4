@@ -113,7 +113,10 @@ int main(int argc, char **argv) {
         pSys = new TI994A();
     }
 
-    pSys->initSystem();
+    if (!pSys->initSystem()) {
+        debug_write("** System failed to initialize **");
+        return 99;
+    }
 
     // This tracks elapsed time
     double elapsedUs = 0;

@@ -23,13 +23,13 @@ TI994A22::~TI994A22() {
 // loaded and initialized in here.
 bool TI994A22::initSpecificSystem() {
     pGrom = new TI994A22GROM(this);     // this is the only difference compared to regular 99/4A right now
-    pGrom->init(0);
+    if (!pGrom->init(0)) return false;
     pRom = new TI994AROM(this);
-    pRom->init(0);
+    if (!pRom->init(0)) return false;
     pVDP = new TMS9918A(this);
-    pVDP->init(0);
+    if (!pVDP->init(0)) return false;
     pKey = new KB994A(this);
-    pKey->init(0);
+    if (!pKey->init(0)) return false;
 
     // map in the alpha lock key output on bit 21
     for (int idx=0; idx<0x800; idx+=20) {
