@@ -23,6 +23,10 @@ static const int wndFlags =  ALLEGRO_WINDOWED        // or ALLEGRO_FULLSCREEN_WI
 // constructor and destructor
 Classic99TV::Classic99TV()
 	: evtQ(nullptr)
+        , myWnd(nullptr)
+        , windowXSize(0)
+        , windowYSize(0)
+        , drawReady(false)
 {
     windowLock = al_create_mutex_recursive();
     bgColor = al_map_rgba(0,0,0,255);
@@ -51,10 +55,11 @@ bool Classic99TV::init() {
         debug_write("Creating window...");
 
         al_set_new_display_flags(wndFlags);                 // some flags are user-configurable
-        al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);  // require a 32-bit display buffer, assume RGBA?
+        al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);  // require a 32-bit display buffer
         al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 0, ALLEGRO_SUGGEST);  // suggest no multisampling
         // al_set_new_window_position(x, y);                // TODO: actual position
         myWnd = al_create_display(284*4, 243*4);                // TODO: actual size
+        
         windowXSize = 284*4;
         windowYSize = 243*4;
 
@@ -84,8 +89,6 @@ bool Classic99TV::init() {
 }
 
 std::shared_ptr<autoBitmap> Classic99TV::requestLayer(int w, int h) {
-    // Create the bitmaps with ALLEGRO_NO_PRESERVE_TEXTURE, since we don't need Allegro to restore textures on loss, we keep
-    // redrawing them anyway.
     std::shared_ptr<autoBitmap> ptr(new autoBitmap(w, h));
     layers.push_back(ptr);
     return ptr;
@@ -158,7 +161,7 @@ bool Classic99TV::runWindowLoop() {
     if ((!dontDraw) && (drawReady)) {
         // clear the backdrop
         al_clear_to_color(bgColor);
-        
+
         // confirmed okay on Linux and Windows
         al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_ZERO);
 
