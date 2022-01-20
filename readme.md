@@ -23,9 +23,9 @@ Note there is NO WAY TO LOAD OR SAVE SOFTWARE. So it's not useful yet. But it ru
 You can run any of the three console variants by passing a year at the command line. This is NOT
 a permanent interface and will go away when menus appear someday...
 
-classic99v4.exe 1979 - runs the 99/4
-classic99v4.exe 1981 - runs the 99/4A
-classic99v4.exe 1983 - runs the 99/4A v2.2
+- classic99v4.exe 1979 - runs the 99/4
+- classic99v4.exe 1981 - runs the 99/4A
+- classic99v4.exe 1983 - runs the 99/4A v2.2
 
 The code is based on Allegro 5.x, so in theory, it should build cross-platform. If you try it, let me know 
 what happened.
@@ -33,11 +33,11 @@ what happened.
 Tested Platforms
 ================
 
-Platform    Version     Status      Date        Notes
----------------------------------------------------------------------------------------------------------------
-Windows     10          working     1/6/2022
-Linux       Debian 10   working     12/27/2021
-Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
-Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
+- Platform    Version     Status      Date        Notes
+- -------------------------------------------------------------------------------------------------------------
+- Windows     10          working     1/6/2022
+- Linux       Debian 10   working     12/27/2021
+- Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
+- Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
 
 
