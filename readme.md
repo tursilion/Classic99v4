@@ -1,5 +1,4 @@
-Classic99 v400.000
-==================
+v400.000
 
 This depot is not guaranteed to build at any given time - it's my bleeding edge repository.
 
@@ -31,10 +30,6 @@ classic99v4.exe 1983 - runs the 99/4A v2.2
 The code is based on Allegro 5.x, so in theory, it should build cross-platform. If you try it, let me know 
 what happened.
 
-Download the latest release here:
-(Windows) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip] 
-(Linux (raw, not a package)) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/classic99v4.tgz] 
-
 Tested Platforms
 ================
 
@@ -43,12 +38,5 @@ Platform    Version     Status      Date        Notes
 Windows     10          working     1/6/2022
 Linux       Debian 10   working     12/27/2021
 Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
-Mac OSX     ?           unstable    12/27/2021  If it boots, it works, but window creation/resize causes crash
-
-
-Want to donate?
----------------
-
-- Click here for [Ko-Fi](https://ko-fi.com/tursilion)...
-- Alternately, there's my [Amazon Wishlist](http://www.amazon.com/gp/registry/2AFCOAM5DD1L6/ref=cm_aya_wl/103-5991996-6483001)
+Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
 
