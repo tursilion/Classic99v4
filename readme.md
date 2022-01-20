@@ -28,9 +28,8 @@ classic99v4.exe 1979 - runs the 99/4
 classic99v4.exe 1981 - runs the 99/4A
 classic99v4.exe 1983 - runs the 99/4A v2.2
 
-The code is based on Allegro 5.x, so in theory, it should build cross-platform. I don't have the toolchains
-set up and have not attempted this. If you do, let me know what happened. I can say for sure that the
-timing system is only implemented for Windows, and the temp hack for anything else will run a little slower.
+The code is based on Allegro 5.x, so in theory, it should build cross-platform. If you try it, let me know 
+what happened.
 
 Download the latest release here:
 (Windows) [https://raw.githubusercontent.com/tursilion/Classic99v4/master/dist/Classic99v4.zip] 
@@ -40,9 +39,10 @@ Tested Platforms
 ================
 
 Platform    Version     Status      Date        Notes
+---------------------------------------------------------------------------------------------------------------
 Windows     10          working     1/6/2022
 Linux       Debian 10   working     12/27/2021
-Linux       WSL 2       working     1/6/2022    VcXsrv, audio not tested
+Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
 Mac OSX     ?           unstable    12/27/2021  If it boots, it works, but window creation/resize causes crash
 
 

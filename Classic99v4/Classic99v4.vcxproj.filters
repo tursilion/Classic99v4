@@ -265,5 +265,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="License.txt" />
+    <Text Include="..\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\readme.md" />
   </ItemGroup>
 </Project>
