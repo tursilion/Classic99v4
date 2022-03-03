@@ -22,6 +22,9 @@ Classic99System::Classic99System()
     ioSpaceWrite = new PeripheralMap(&dummyPeripheral, 0, 0);
     memorySize = 0;
     ioSize = 0;
+    hold=0;
+    holdack=0;
+    intReqLevel=0;
     currentTimestamp = 0.0;
 }
 
