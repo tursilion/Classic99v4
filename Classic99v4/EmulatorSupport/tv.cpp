@@ -58,8 +58,8 @@ bool Classic99TV::init() {
         al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);  // require a 32-bit display buffer
         al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 0, ALLEGRO_SUGGEST);  // suggest no multisampling
         // al_set_new_window_position(x, y);                // TODO: actual position
-        myWnd = al_create_display(284*4, 243*4);                // TODO: actual size
-        
+        myWnd = al_create_display(284*4, 243*4);            // TODO: actual size
+
         windowXSize = 284*4;
         windowYSize = 243*4;
 
@@ -70,12 +70,11 @@ bool Classic99TV::init() {
 
         al_register_event_source(evtQ, al_get_display_event_source(myWnd));
         al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_ARGB_8888);   // let's see how well forcing it works...
-        // TODO: shouldn't need to use separate flags, I'm probably missing something - why are they different?
-#ifdef ALLEGRO_WINDOWS
-        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
-#else
-        al_set_new_bitmap_flags(ALLEGRO_MEMORY_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
-#endif
+
+        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
+//      al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);    // old win
+//      al_set_new_bitmap_flags(ALLEGRO_MEMORY_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);           // old everyone else
+
         al_set_render_state(ALLEGRO_ALPHA_TEST, 1);
         al_set_render_state(ALLEGRO_ALPHA_FUNCTION, ALLEGRO_RENDER_EQUAL);
         al_set_render_state(ALLEGRO_ALPHA_TEST_VALUE, 255);
