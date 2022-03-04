@@ -72,13 +72,14 @@ bool Classic99TV::init() {
         al_register_event_source(evtQ, al_get_display_event_source(myWnd));
         al_set_new_bitmap_format(ALLEGRO_PIXEL_FORMAT_ARGB_8888);   // let's see how well forcing it works...
 
-        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);
-//      al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);    // old win
-//      al_set_new_bitmap_flags(ALLEGRO_MEMORY_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);           // old everyone else
-
-        al_set_render_state(ALLEGRO_ALPHA_TEST, 1);
-        al_set_render_state(ALLEGRO_ALPHA_FUNCTION, ALLEGRO_RENDER_EQUAL);
-        al_set_render_state(ALLEGRO_ALPHA_TEST_VALUE, 255);
+        // Windows needs to be a video bitmap, or the background color is not properly alpha'd (border goes black)
+        // Mac needs a memory bitmap, or the image is lost immediately after it's displayed (blank screen except during updates, lots of stretching and corruption)
+        // Linux appears to be similar, but Raspbian needs still something else...
+#ifdef ALLEGRO_WINDOWS
+        al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);    // old win
+#else
+        al_set_new_bitmap_flags(ALLEGRO_MEMORY_BITMAP|ALLEGRO_FORCE_LOCKING|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);           // old everyone else
+#endif
 
         debug_write("Bitmap format is %d", al_get_new_bitmap_format());
     }
@@ -159,11 +160,15 @@ bool Classic99TV::runWindowLoop() {
     }
 
     if ((!dontDraw) && (drawReady)) {
+        // confirmed okay on Linux and Windows
+        // TODO: can we do these outside the loop?
+        al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_ZERO);
+        al_set_render_state(ALLEGRO_ALPHA_TEST, 1);
+        al_set_render_state(ALLEGRO_ALPHA_FUNCTION, ALLEGRO_RENDER_EQUAL);
+        al_set_render_state(ALLEGRO_ALPHA_TEST_VALUE, 255);
+
         // clear the backdrop
         al_clear_to_color(bgColor);
-
-        // confirmed okay on Linux and Windows
-        al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_ZERO);
 
         // render the layers
         for (unsigned int idx=0; idx<layers.size(); ++idx) {
