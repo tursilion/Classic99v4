@@ -74,7 +74,8 @@ bool Classic99TV::init() {
 
         // Windows needs to be a video bitmap, or the background color is not properly alpha'd (border goes black)
         // Mac needs a memory bitmap, or the image is lost immediately after it's displayed (blank screen except during updates, lots of stretching and corruption)
-        // Linux appears to be similar, but Raspbian needs still something else...
+        // Linux appears to be similar
+        // Raspberry PI 4 requires memory bitmap, but has black borders suggesting the alpha isn't working. Framerate is also very dependent on window size suggesting no acceleration
 #ifdef ALLEGRO_WINDOWS
         al_set_new_bitmap_flags(ALLEGRO_CONVERT_BITMAP|ALLEGRO_NO_PRESERVE_TEXTURE|ALLEGRO_ALPHA_TEST|ALLEGRO_MIN_LINEAR);    // old win
 #else
