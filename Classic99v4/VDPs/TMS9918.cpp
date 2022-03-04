@@ -43,6 +43,7 @@ The reset also changes VR54 and VR55, but they are *not* loaded to the GPU PC (p
 
 
 #include "TMS9918.h"
+#include <cstdio>
 #include <ctype.h>
 #include "../EmulatorSupport/peripheral.h"
 #include "../EmulatorSupport/debuglog.h"

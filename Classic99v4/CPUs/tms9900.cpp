@@ -24,7 +24,7 @@
 
 // TODO implement the Classic99 debug opcodes 0x0110 through 0x0113
 
-#include <stdio.h>
+#include <cstdio>
 #include "../EmulatorSupport/peripheral.h"
 #include "../EmulatorSupport/debuglog.h"
 #include "../EmulatorSupport/System.h"

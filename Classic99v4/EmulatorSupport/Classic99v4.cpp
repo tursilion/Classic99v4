@@ -15,7 +15,7 @@
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_native_dialog.h>
-#include <stdio.h>
+#include <cstdio>
 #include "Classic99v4.h"
 #include "tv.h"
 #include "debuglog.h"

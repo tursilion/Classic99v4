@@ -97,6 +97,7 @@ From Matt - check this decrement:
 
 // TODO: Speech and SID need to be implemented as separate objects
 
+#include <cstdio>
 #include "SN76xxx.h"
 #include "../EmulatorSupport/automutex.h"
 

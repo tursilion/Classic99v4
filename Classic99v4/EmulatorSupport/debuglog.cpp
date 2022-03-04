@@ -5,7 +5,7 @@
 #ifdef ALLEGRO_WINDOWS
 #include <Windows.h>
 #endif
-#include <stdio.h>
+#include <cstdio>
 #include "automutex.h"
 
 #define DEBUGLEN 120
