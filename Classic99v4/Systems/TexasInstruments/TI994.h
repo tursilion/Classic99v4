@@ -35,13 +35,13 @@ public:
 
 protected:
     // the hardware we need to create
-    TMS9900 *pCPU;
+    SN76xxx *pPSG;
+    TI994Scratchpad *pScratch;
     Classic99GROM *pGrom;
     Classic99ROM *pRom;
-    TI994Scratchpad *pScratch;
     TMS9918 *pVDP;                      // will be a 9918A on the 99/4A variant, could also be an F18A eventually
-    SN76xxx *pPSG;
     TIKeyboard *pKey;
+    TMS9900 *pCPU;
 };
 
 #endif

@@ -15,12 +15,12 @@
 TI994::TI994()
     : Classic99System()
     , pPSG(nullptr)
-    , pVDP(nullptr)
-    , pRom(nullptr)
-    , pGrom(nullptr)
-    , pCPU(nullptr)
-    , pKey(nullptr)
     , pScratch(nullptr)
+    , pGrom(nullptr)
+    , pRom(nullptr) 
+    , pVDP(nullptr)
+    , pKey(nullptr)
+    , pCPU(nullptr)
 {
 }
 
