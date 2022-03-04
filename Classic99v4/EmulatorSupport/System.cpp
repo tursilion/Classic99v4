@@ -24,6 +24,7 @@ Classic99System::Classic99System()
     ioSize = 0;
     hold=0;
     holdack=0;
+    nmiReq=false;
     intReqLevel=0;
     currentTimestamp = 0.0;
 }
