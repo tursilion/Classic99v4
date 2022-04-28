@@ -2,7 +2,7 @@ v400.000
 
 This depot is not guaranteed to build at any given time - it's my bleeding edge repository.
 
-Open source (but restrictive license) emulator including ROMs licensed by Texas Instruments - see [older documentation](https://github.com/tursilion/classic99/raw/master/dist/Classic99%20Manual.pdf) for license and restrictions.
+Open source (but restrictive license) emulator including ROMs licensed by Texas Instruments - see [older documentation](https://github.com/tursilion/classic99/raw/main/dist/Classic99%20Manual.pdf) for license and restrictions.
 
 This repository is not yet useful - however, it does boot and incldues the Demonstration cart.
 
@@ -39,5 +39,6 @@ Tested Platforms
 - Linux       Debian 10   working     12/27/2021
 - Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
 - Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
+- PI 4		Raspbian	   almost                  Graphics layering is not correct, otherwise runs. Slow when scaled.
 
 
