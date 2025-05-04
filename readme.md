@@ -39,6 +39,6 @@ Tested Platforms
 - Linux       Debian 10   working     12/27/2021
 - Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
 - Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
-- PI 4		Raspbian	   almost                  Graphics layering is not correct, otherwise runs. Slow when scaled.
+- PI 4		  Raspbian	  almost                  Graphics layering is not correct, otherwise runs. Slow when scaled.
 
 

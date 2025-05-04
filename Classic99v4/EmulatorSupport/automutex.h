@@ -4,22 +4,22 @@
 #ifndef AUTOMUTEX_H
 #define AUTOMUTEX_H
 
-#include <allegro5/allegro.h>
+#include <mutex>
 
-// Just a simple class that wraps the allegro mutex for that fancy RAI the kids all love these days
+// Just a simple class that wraps the C++ mutex for that fancy RAI the kids all love these days
 class autoMutex {
 public:
-    autoMutex(ALLEGRO_MUTEX *m) : mutex(m) {
-        al_lock_mutex(mutex);
+    autoMutex(std::mutex *m) : mymutex(m) {
+        mymutex->lock();
     }
     autoMutex() = delete;
 
     ~autoMutex() {
-        al_unlock_mutex(mutex);
+        mymutex->unlock();
     }
 
 private:
-    ALLEGRO_MUTEX *mutex;
+    std::mutex *mymutex;
 };
 
 #endif

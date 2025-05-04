@@ -38,7 +38,8 @@ extern const Word BStatusLookup[256];               // byte statuses
 #endif
 
 // protect the disassembly backtrace
-ALLEGRO_MUTEX *csDisasm;
+// TODO: this is never initialized
+std::mutex *csDisasm;
 
 // System interface
 
@@ -690,7 +691,8 @@ void TMS9900::TriggerInterrupt(int level) {
     // TODO: the debug disassembly log needs to be integrated into the debug system
     // we can just make the function call and let it decide whether to log or discard it
 #if 0
-    EnterCriticalSection(&csDisasm);
+    // todo: use automutex? WARNING: csDisasm is never 'new'd, need to fix when enabling
+    csDisasm->lock();
         if (NULL != fpDisasm) {
             if ((disasmLogType == 0) || (pCurrentCPU->GetPC() > 0x2000)) {
                 fprintf(fpDisasm, "**** Interrupt Trigger, vector >%04X (%s), level %d\n",
@@ -699,7 +701,7 @@ void TMS9900::TriggerInterrupt(int level) {
                     level);
             }
         }
-    LeaveCriticalSection(&csDisasm);
+    csDisasm->unlock();
 #endif
 
     // no more idling!

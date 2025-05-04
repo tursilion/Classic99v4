@@ -7,9 +7,10 @@
 #ifndef TV_H
 #define TV_H
 
-#include <allegro5/allegro.h>
+#include <raylib.h>
 #include <memory>
 #include <vector>
+#include "automutex.h"
 #include "autobitmap.h"
 
 // ... but I think I will build it so that each layer can have its own resolution and be scaled
@@ -42,7 +43,7 @@ public:
     std::shared_ptr<autoBitmap> requestLayer(int w, int h);
 
     // change the background color
-    void setBgColor(ALLEGRO_COLOR col);
+    void setBgColor(Color col);
 
     // tell the window loop it's okay to draw
     void setDrawReady(bool isReady) { drawReady = isReady; }
@@ -52,14 +53,10 @@ public:
     // if it returns true, we must exit the application
     bool runWindowLoop();
 
-    // allow systems to find these...
-    ALLEGRO_EVENT_QUEUE *evtQ;
-    ALLEGRO_DISPLAY *myWnd;
-
 private:
     std::vector< std::shared_ptr<autoBitmap> > layers;
-    ALLEGRO_COLOR bgColor;
-    ALLEGRO_MUTEX *windowLock;
+    Color bgColor;
+    std::mutex *windowLock;
     int windowXSize, windowYSize;
     bool drawReady;
 };

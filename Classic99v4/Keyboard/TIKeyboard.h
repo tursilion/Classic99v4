@@ -69,7 +69,7 @@ protected:
     virtual Array8x8 &getKeyArray() = 0; 
 
 private:
-    uint8_t CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE *pState);
+    uint8_t CheckJoysticks(int addr, int scanCol);
 
     bool bJoy;
     int fJoystickActiveOnKeys;

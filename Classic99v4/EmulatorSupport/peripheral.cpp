@@ -11,10 +11,6 @@ Classic99Peripheral dummyPeripheral(NULL);
 // singleton dummy breakpoint object with nothing set
 BREAKPOINT dummyBreakpoint;
 
-#ifdef ALLEGRO_WINDOWS
-#define snprintf _snprintf
-#endif
-
 // called from the main code to request a breakpoint be added
 void Classic99Peripheral::addBreakpoint(BREAKPOINT &inBreak) {
     autoMutex lock(periphLock);

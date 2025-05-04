@@ -12,7 +12,7 @@ Classic99System::Classic99System()
     : theTV(nullptr)
     , theSpeaker(nullptr)
 {
-    coreLock = al_create_mutex_recursive();
+    coreLock = new std::mutex();
 
     // derived class MUST allocate these objects!
     // the single dummies at least prevent crashes
@@ -31,7 +31,7 @@ Classic99System::Classic99System()
 
 Classic99System::~Classic99System() {
     // release the lock object
-    al_destroy_mutex(coreLock);
+    delete coreLock;
     
     // delete the dummy objects
     if (nullptr != memorySpaceRead) delete memorySpaceRead;

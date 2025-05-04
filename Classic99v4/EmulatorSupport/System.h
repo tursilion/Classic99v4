@@ -143,7 +143,7 @@ public:
     virtual bool getNMI() { return nmiReq; }
 
 protected:
-    ALLEGRO_MUTEX *coreLock;      // our object lock
+    std::mutex *coreLock;      // our object lock
 
     // derived classes are expected to allocate these
     // read and write are separate because some systems are clever...

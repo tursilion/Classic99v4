@@ -13,9 +13,10 @@
 // Funny to come back to Allegro after so many years...
 // Today is 11/7/2020, 2/2/2021
 
-#include <allegro5/allegro.h>
-#include <allegro5/allegro_native_dialog.h>
+#include <raylib.h>
 #include <cstdio>
+#include <chrono>
+#include <thread>
 #include "Classic99v4.h"
 #include "tv.h"
 #include "debuglog.h"
@@ -23,16 +24,6 @@
 #include "../Systems/TexasInstruments/TI994.h"
 #include "../Systems/TexasInstruments/TI994A.h"
 #include "../Systems/TexasInstruments/TI994A_22.h"
-
-#ifdef ALLEGRO_WINDOWS
-// for timers
-#include <Windows.h>
-#endif
-#ifdef ALLEGRO_LINUX
-// for timers
-#include <time.h>
-#include <errno.h>
-#endif
 
 // we expect time steps of 15-20 milliseconds, so we'll set an upper limit of 100ms
 // Any more than that, and we discard the lost time. This is in microseconds.
@@ -47,7 +38,8 @@ void Cleanup() {
 // fatal error - write to log and message box, then exit
 void fail(const char *str) {
     debug_write("Exitting: %s", str);
-    al_show_native_message_box(NULL, "Classic99", "Fatal error", str, nullptr, ALLEGRO_MESSAGEBOX_ERROR);
+    // TODO: some kind of popup?
+    //al_show_native_message_box(NULL, "Classic99", "Fatal error", str, nullptr, ALLEGRO_MESSAGEBOX_ERROR);
     Cleanup();
     exit(99);
 }
@@ -76,26 +68,7 @@ int main(int argc, char **argv) {
     // everyone relies on debug
     debug_init();
 
-    // set up Allegro
-    if (!al_init()) {
-        // we have no system and cannot start...
-        // hope for stdout?
-        fail("Unable to initialize Allegro system\n");
-        return 99;
-    }
-
-    // Prepare addons...
-    if (!al_init_native_dialog_addon()) {
-        // we'll try to keep going anyway - file dialogs may not work
-        debug_write("Warning: failed to initialize dialog add-on");
-    }
-
     // Platform specific init goes here
-#ifdef ALLEGRO_ANDROID
-    // TODO: these are from the sample code - do I need them? Want them?
-    al_install_touch_input();
-    al_android_set_apk_file_interface();
-#endif
 
     // now we can start starting
     debug_write("Starting Classic99 version " VERSION);
@@ -120,19 +93,20 @@ int main(int argc, char **argv) {
 
     // This tracks elapsed time
     double elapsedUs = 0;
-    double nStart, nEnd;
-    nStart = al_get_time();
+    std::chrono::high_resolution_clock::time_point nStart, nEnd;
+    nStart = std::chrono::high_resolution_clock::now();
 
-    for (;;) {
+    // TODO: block ESC from closing the window
+    while (!WindowShouldClose()) {
         // TODO: We could have a new high precision mode that doesn't sleep, just
         // yields, and with the time measurement the quantum then becomes as
         // tight as the system we're on allows for.
-        al_rest(0.01);
+        // But right now, sleeps are happening in the TV class, so we need to sort that out
+        // However, to avoid spinning we'll put some kind of sleep here for now...
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        // it wil be more than this thanks to WindowLoop/etc
-        //elapsedUs += 10000;
-        nEnd = al_get_time();
-        double diff = (nEnd - nStart) * 1000000;
+        nEnd = std::chrono::high_resolution_clock::now();
+        long long diff = (std::chrono::duration_cast<std::chrono::microseconds>(nEnd - nStart)).count();
         if (diff > MAX_TIME_SKIP) diff = MAX_TIME_SKIP;
         if (diff > 0) elapsedUs += diff;
         nStart = nEnd;

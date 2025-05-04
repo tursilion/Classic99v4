@@ -149,7 +149,7 @@ SN76xxx::SN76xxx(Classic99System *theCore)
 		nOutput[idx] = 1.0;
 	}
 
-	csAudioBuf = al_create_mutex_recursive();
+	csAudioBuf = new std::mutex();
 }
 
 SN76xxx::~SN76xxx() {
@@ -315,7 +315,8 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 
 #if 0
 	// roll the dac output buffer
-	EnterCriticalSection(&csAudioBuf);
+	// todo: use automutex?
+	csAudioBuf.lock();
 	if (inSamples < dac_pos) {
 		memmove(dac_buffer, &dac_buffer[newdacpos], dac_pos-newdacpos);
 		dac_pos-=newdacpos;
@@ -326,7 +327,7 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 	} else {
 		dac_pos = 0;
 	}
-	LeaveCriticalSection(&csAudioBuf);
+	csAudioBuf.unlock();
 #endif
 }
 
@@ -420,14 +421,15 @@ void SN76xxx::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rm
 bool SN76xxx::init(int idx) {
 	setIndex("SN76xxx", idx);
 
-	// get a stream running
-	stream = theCore->getSpeaker()->requestStream(this);
-	if ((nullptr != stream) && (nullptr != stream->stream)) {
-		al_attach_audio_stream_to_mixer(stream->stream, al_get_default_mixer());
-	}
-
 	// init the emulation
 	sound_init(AudioSampleRate);	// TODO: need configuration input
+
+	// get a stream running
+	stream = theCore->getSpeaker()->requestStream(this);
+	if ((nullptr != stream) && (nullptr != stream->buffer)) {
+		PlayAudioStream(stream->stream);
+	}
+
 	return true;
 }
 
@@ -669,9 +671,10 @@ void updateDACBuffer(int nCPUCycles) {
 	}
 	value /= average;
 	unsigned char out = (unsigned char)(value * 255);
-	EnterCriticalSection(&csAudioBuf);
+	// todo: use automutex?
+	csAudioBuf.lock();
 		memset(&dac_buffer[dac_pos], out, distance);
 		dac_pos+=distance;
-	LeaveCriticalSection(&csAudioBuf);
+	csAudioBuf.unlock();
 #endif
 }

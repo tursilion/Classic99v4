@@ -4,8 +4,7 @@
 #ifndef EMULATOR_SUPPORT_PERIPHERAL_H
 #define EMULATOR_SUPPORT_PERIPHERAL_H
 
-#include <allegro5/allegro.h>
-#include <allegro5/threads.h>
+#include <raylib.h>
 #include <atomic>
 #include "System.h"
 
@@ -126,7 +125,7 @@ public:
     {
         // create the lock object - we can't be certain that
         // we don't need a recursive mutex since others can use it
-        periphLock = al_create_mutex_recursive();
+        periphLock = new std::mutex();
         trackIsActive = false;
         page = 0;
         lastTimestamp = 0;
@@ -136,7 +135,7 @@ public:
         // have the derived class clean up
         cleanup();
         // release the lock object
-        al_destroy_mutex(periphLock);
+        delete periphLock;
     };
     Classic99Peripheral() = delete;
 
@@ -219,7 +218,7 @@ protected:
     // working with binary data
     template <class T> void loadStateVal(unsigned char *&buffer, T) = delete;
 
-    ALLEGRO_MUTEX *periphLock;          // our object lock
+    std::mutex *periphLock;          // our object lock
     Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
     double lastTimestamp;               // last time we ran to
     int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints

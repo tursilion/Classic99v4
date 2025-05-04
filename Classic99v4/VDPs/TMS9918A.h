@@ -9,8 +9,7 @@
 #ifndef TMS9918A_H
 #define TMS9918A_H
 
-#include <allegro5/allegro.h>
-#include <allegro5/threads.h>
+#include <raylib.h>
 #include <atomic>
 #include "../EmulatorSupport/System.h"
 #include "../EmulatorSupport/peripheral.h"

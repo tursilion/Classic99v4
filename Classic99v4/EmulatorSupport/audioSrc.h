@@ -4,9 +4,6 @@
 #ifndef AUDIOSRC_H
 #define AUDIOSRC_H
 
-#include <allegro5/allegro.h>
-#include <allegro5/allegro_audio.h>
-
 // Just a simple interface class that defines a method by which to fetch audio from a source
 class Classic99AudioSrc {
 public:

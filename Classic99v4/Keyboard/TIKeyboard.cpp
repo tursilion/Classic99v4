@@ -35,11 +35,6 @@ BIT	HW	C99	Purpose						Status
 
 #include "kb_994.h"
 
-#ifdef ALLEGRO_WINDOWS
-	// needed for caps lock
-	#include <Windows.h>
-#endif
-
 // not much needed for construction
 TIKeyboard::TIKeyboard(Classic99System *core) 
     : Classic99Peripheral(core)
@@ -53,7 +48,7 @@ TIKeyboard::TIKeyboard(Classic99System *core)
 TIKeyboard::~TIKeyboard() {
 }
 
-uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE *pState) {
+uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 	int joyX, joyY, joyFire;
 	int ret=1;
 
@@ -179,14 +174,14 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE
 				// just forcibly turn them off! Should only need to do this once
 				// TODO: decode is only needed for my PS/2 emulation
 
-				if (al_key_down(pState, ALLEGRO_KEY_TAB)) {
+				if (IsKeyDown(KEY_TAB)) {
 					joyFire=1;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xf0);	// key up
 					//	decode(VK_TAB);
 					//}
 				}
-				if (al_key_down(pState, ALLEGRO_KEY_LEFT)) {
+				if (IsKeyDown(KEY_LEFT)) {
 					joyX=-4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -194,7 +189,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE
 					//	decode(VK_LEFT);
 					//}
 				}
-				if (al_key_down(pState, ALLEGRO_KEY_RIGHT)) {
+				if (IsKeyDown(KEY_RIGHT)) {
 					joyX=4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -202,7 +197,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE
 					//	decode(VK_RIGHT);
 					//}
 				}
-				if (al_key_down(pState, ALLEGRO_KEY_UP)) {
+				if (IsKeyDown(KEY_UP)) {
 					joyY=4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -210,7 +205,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol, ALLEGRO_KEYBOARD_STATE
 					//	decode(VK_UP);
 					//}
 				}
-				if (al_key_down(pState, ALLEGRO_KEY_DOWN)) {
+				if (IsKeyDown(KEY_DOWN)) {
 					joyY=-4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -250,21 +245,13 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
     (void)cycles;
     (void)rmw;
 
-    ALLEGRO_KEYBOARD_STATE state;
-    al_get_keyboard_state(&state);
-
     // First check if we are reading alpha lock - we do the inversion of caps lock
 	if ((addr == 0x07) && (alphaActive)) {
 		uint8_t ret = 0;
 
-#ifdef ALLEGRO_WINDOWS
-		// TODO: currently, this only works in Windows as Allegro doesn't seem to provide an API
-		// to read the current state of caps lock...???
-		// adds a link dependency of user32.lib
-		if (GetKeyState(VK_CAPITAL) & 0x01)	{		// check CAPS LOCK (on)
+		if (IsKeyDown(KEY_CAPS_LOCK))	{		// check CAPS LOCK (on)
 			ret = 1;
 		}
-#endif
 
 		return ret;
 	}
@@ -275,16 +262,17 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
 		// TODO: Classic99 3xx does NOT have this problem...
 		// This could be related to the missing 9901 timer mode, perhaps
 		// Can usually reproduce the issue by entering TI BASIC and pressing 6. Yes, just that. No, it doesn't make sense.
+		// TODO: what the heck am I talking about here??
 		bit17 = !bit17;
 		return bit17 ? true : false;
 	}
 
     // try joysticks... 
-    uint8_t ret = CheckJoysticks(addr, scanCol, &state);
+    uint8_t ret = CheckJoysticks(addr, scanCol);
     if (1 == ret) {
 		Array8x8 &KEYS = getKeyArray();
         // nothing else matched, so check the keyboard array
-        if (al_key_down(&state, KEYS[scanCol][addr-3])) {
+        if (IsKeyDown(KEYS[scanCol][addr-3])) {
             ret = 0;
         }
     }
@@ -324,8 +312,6 @@ void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE
 
 bool TIKeyboard::init(int idx) {
 	setIndex("TIKeyboard", idx);
-	al_install_joystick();
-	al_install_keyboard();
     return true;
 }
 
@@ -335,8 +321,6 @@ bool TIKeyboard::operate(double timestamp) {
 }
 
 bool TIKeyboard::cleanup() {
-    al_uninstall_keyboard();
-	al_uninstall_joystick();
     return true;
 }
 

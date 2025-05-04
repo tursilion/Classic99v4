@@ -109,7 +109,7 @@ private:
     void MuteAudio();
     void resetDAC();
 
-    ALLEGRO_MUTEX *csAudioBuf;
+    std::mutex *csAudioBuf;
     std::shared_ptr<autoStream> stream;
 };
 

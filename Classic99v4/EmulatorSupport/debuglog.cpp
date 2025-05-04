@@ -1,10 +1,26 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#include <allegro5/allegro.h>
-#ifdef ALLEGRO_WINDOWS
+#ifdef _WINDOWS
+// need for outputdebugstring
+#define Rectangle WinRectangle
+#define CloseWindow WinCloseWindow
+#define ShowCursor WinShowCursor
+#define LoadImageA WinLoadImageA
+#define DrawTextA WinDrawTextA
+#define DrawTextExA WinDrawTextExA
+#define PlaySoundA WinPlaySoundA
 #include <Windows.h>
+#undef Rectangle
+#undef CloseWindow
+#undef ShowCursor
+#undef LoadImageA
+#undef DrawTextA
+#undef DrawTextExA
+#undef PlaySoundA
 #endif
+
+#include <raylib.h>
 #include <cstdio>
 #include "automutex.h"
 
@@ -13,22 +29,18 @@
 static char lines[DEBUGLINES][DEBUGLEN];
 bool bDebugDirty = false;
 int currentDebugLine;
-ALLEGRO_MUTEX *debugLock;      // our object lock
-
-#ifdef ALLEGRO_WINDOWS
-    #define vsnprintf _vsnprintf
-#endif
+std::mutex *debugLock;      // our object lock
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
 void debug_init() {
-    debugLock = al_create_mutex_recursive();
+    debugLock = new std::mutex();
     memset(lines, 0, sizeof(lines));
     bDebugDirty = true;
 }
 void debug_shutdown() {
-    al_destroy_mutex(debugLock);
+    delete debugLock;
 }
 
 // Write a line to the debug buffer displayed on the debug screen
@@ -43,7 +55,7 @@ void debug_write(const char *s, ...)
     vsnprintf(buf, bufSize-1, s, argptr);
     buf[bufSize-1]='\0';
 
-#ifdef ALLEGRO_WINDOWS
+#ifdef _WINDOWS
     // output to Windows debug listing...
     OutputDebugString(buf);
     OutputDebugString("\n");

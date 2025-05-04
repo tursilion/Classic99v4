@@ -8,8 +8,7 @@
 #ifndef SPEAKER_H
 #define SPEAKER_H
 
-#include <allegro5/allegro.h>
-#include <allegro5/allegro_audio.h>
+#include <raylib.h>
 #include <memory>
 #include <vector>
 #include "autostream.h"
@@ -38,11 +37,10 @@ public:
     bool runSpeakerLoop();
 
     // TODO: these are all hard-coded for now, eventually we need to export for the sake of config
-    int delay;
-    int bufsize;
-    int freq;
-    ALLEGRO_AUDIO_DEPTH depth;
-    ALLEGRO_CHANNEL_CONF conf;
+    unsigned int bufsize;
+    unsigned int freq;
+    unsigned int depth;
+    unsigned int conf;
 
 private:
     std::vector<std::shared_ptr<autoStream>> layers;

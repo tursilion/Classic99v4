@@ -219,8 +219,8 @@ const char *digpat[10][5] = {
 // some local defines
 #define REDRAW_LINES 262
 
-// ARGB format
-#define HOT_PINK_TRANS 0x00ff00ff
+// RGBA format
+#define HOT_PINK_TRANS 0xff00ff00
 
 // So the TMS9918 only has two addresses - zero for data and 1 for registers
 
@@ -947,12 +947,12 @@ void TMS9918::wVDPreg(uint8_t r, uint8_t v) {
 	if (r==7)
 	{	/* color of screen, set TV background color to match */
 		t=v&0xf;
-		ALLEGRO_COLOR bg;
-		// pixel format ARGB
-		bg.r = ((F18APalette[t]>>16)&0xff)/(double)255.0;
-		bg.g = ((F18APalette[t]>>8)&0xff)/(double)255.0;
-		bg.b = ((F18APalette[t])&0xff)/(double)255.0;
-		bg.a = 1.0;
+		Color bg;
+		// palette is RGBA
+		bg.r = ((F18APalette[t]>>24)&0xff);
+		bg.g = ((F18APalette[t]>>16)&0xff);
+		bg.b = ((F18APalette[t]>>8)&0xff);
+		bg.a = 255;
 		theCore->getTV()->setBgColor(bg);
 		redraw_needed=REDRAW_LINES;
 	}
@@ -1068,12 +1068,12 @@ void TMS9918::vdpReset(bool isCold) {
     if (isCold) {
 	    // todo: move the other system-level init (what does the VDP do?) into here
 	    // convert from 12-bit to float and load F18APalette
-		// ARGB palette
+		// ARGB palette, RGBA screen
 	    for (int idx=0; idx<64; idx++) {
 		    int r = (F18APaletteReset[idx]&0xf00)>>8;
 		    int g = (F18APaletteReset[idx]&0xf0)>>4;
 		    int b = (F18APaletteReset[idx]&0xf);
-		    F18APalette[idx] = (r<<20)|(r<<16)|(g<<12)|(g<<8)|(b<<4)|(b)|0xff000000;	// double up each palette gun, suggestion by Sometimes99er
+		    F18APalette[idx] = (r<<28)|(r<<24)|(g<<20)|(g<<16)|(b<<12)|(b<<8)|0x000000ff;	// double up each palette gun, suggestion by Sometimes99er
 	    }
 
 		memset(VDPREG, 0, sizeof(VDPREG));
@@ -1209,7 +1209,6 @@ void TMS9918::VDPdisplay(int scanline)
 
 	// if no display, can not draw
 	if (NULL == pDisplay) return;
-	if (NULL == pDisplay->bmp) return;
 
 	int reg0 = gettables(0);
 	int gfxline = scanline - TMS_FIRST_DISPLAY_LINE;
@@ -1217,14 +1216,9 @@ void TMS9918::VDPdisplay(int scanline)
 		return;
 	}
 
-	// the mode is a 32-bit format with alpha, but I guess it might vary
-	// format should be ARGB
-	// Do not early RETURN after this lock!
-	ALLEGRO_LOCKED_REGION *pImg = al_lock_bitmap_region(pDisplay->bmp, 0, scanline, TMS_WIDTH, 1, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_WRITEONLY);
-	if (NULL == pImg) {
-		debug_write("Could not lock bitmap!");
-		return;
-	}
+	// the mode is a 32-bit format with alpha
+	// format should be RGBA
+	unsigned char *pImg = pDisplay->getPixels() + pDisplay->w*4*scanline;
 	pLine = NULL;	// make sure it's zeroed unless we need it
 
 	// count down scanlines to redraw
@@ -1246,7 +1240,7 @@ void TMS9918::VDPdisplay(int scanline)
 			nMax = TMS_WIDTH/4;	// because we plot 4 pixels per loop
 		}
 
-		pLine = ((uint32_t*)pImg->data);
+		pLine = ((uint32_t*)pImg);
 
 		// blank out the entire line first (unrolled 4 times)
 		uint32_t *plong = pLine;
@@ -1331,7 +1325,7 @@ void TMS9918::VDPdisplay(int scanline)
 	}
 
 bottom:
-	al_unlock_bitmap(pDisplay->bmp);
+	pDisplay->setDirty();
 
 	// TODO: replace with actual bottom of display frame - varies on F18A
 	if (gfxline == 191) {
@@ -1347,15 +1341,12 @@ bottom:
 				time(&lasttime);
 			}
 			// draw digits
-			pImg = al_lock_bitmap_region(pDisplay->bmp, 0, 187, 12, 5, ALLEGRO_PIXEL_FORMAT_ANY, ALLEGRO_LOCK_WRITEONLY);
-			if (NULL == pImg) {
-				debug_write("Could not lock bitmap for FPS!");
-				bShowFPS = 0;
-			} else {
+			pImg = pDisplay->getPixels();
+			{
 				pLine = NULL;	// make sure it's zeroed unless we need it
 
 				for (int i2=0; i2<5; i2++) {
-					uint32_t *pDat = ((uint32_t*)pImg->data) + pImg->pitch*i2/4;
+					uint32_t *pDat = ((uint32_t*)pImg) + pDisplay->w*i2/4;
 					for (int idx = 0; idx<(signed)strlen(buf); idx++) {
 						int digit = buf[idx] - '0';
 						pDat = drawTextLine(pDat, digpat[digit][i2]);
@@ -1363,7 +1354,7 @@ bottom:
 					}
 				}
 
-				al_unlock_bitmap(pDisplay->bmp);
+				pDisplay->setDirty();
 			}
 		}
 	}
