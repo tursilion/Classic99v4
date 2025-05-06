@@ -9,9 +9,8 @@
 // - video output management
 // - input management (keyboard and joysticks)
 
-// Expects to build with the Allegro5 library located in D:\Work\Allegro5\Build
-// Funny to come back to Allegro after so many years...
-// Today is 11/7/2020, 2/2/2021
+// Expects to build with Raylib
+// Today is 11/7/2020, 2/2/2021, 5/5/2025
 
 #include <raylib.h>
 #include <cstdio>
@@ -124,10 +123,10 @@ int main(int argc, char **argv) {
             elapsedUs -= (int)elapsedUs;
         }
 
-        // update audio
-        if (nullptr != pSys->getSpeaker()) {
-            pSys->getSpeaker()->runSpeakerLoop();
-        }
+        // update audio (via callback now)
+        //if (nullptr != pSys->getSpeaker()) {
+        //    pSys->getSpeaker()->runSpeakerLoop();
+        //}
 
         // update the display
         if (nullptr != pSys->getTV()) {

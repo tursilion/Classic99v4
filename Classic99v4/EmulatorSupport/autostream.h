@@ -22,7 +22,6 @@ public:
         memset(buffer, 0, bufferSize);
         SetAudioStreamBufferSizeDefault(sampleCnt);
         stream = LoadAudioStream(freq, depth, conf);
-
     }
     autoStream() = delete;
 
@@ -33,9 +32,6 @@ public:
     }
 
     // return true if the stream needs data
-    // TODO: the callback system would work better, but we'll need to modify the lib to hold a pointer
-    // to the autoStream object. Best to move the lib in as source in that case, as they recommend,
-    // that way all platforms will get the update
     bool checkStreamHungry() {
         return IsAudioStreamProcessed(stream);
     }

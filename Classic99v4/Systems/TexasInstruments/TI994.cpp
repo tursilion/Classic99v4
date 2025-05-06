@@ -69,7 +69,7 @@ bool TI994::initSystem() {
     // now create the peripherals we need
     theTV = new Classic99TV();
     if (!theTV->init()) return false;
-    theSpeaker = new Classic99Speaker();
+    theSpeaker = new Classic99Speaker(this);
     theSpeaker->init();                 // no audio is acceptable
     pScratch = new TI994Scratchpad(this);
     if (!pScratch->init(0)) return false;

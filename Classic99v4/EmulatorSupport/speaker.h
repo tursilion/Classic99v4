@@ -13,11 +13,14 @@
 #include <vector>
 #include "autostream.h"
 
+// forward reference
+class Classic99System;
+
 // there is meant to be only one speaker in a system, here at least
 // nothing is virtual because there is only one kind of speaker.
 class Classic99Speaker {
 public:
-    Classic99Speaker();
+    Classic99Speaker(Classic99System *core);
     ~Classic99Speaker();
 
     // initialize the speaker - this creates the default mixer
@@ -42,7 +45,7 @@ public:
     unsigned int depth;
     unsigned int conf;
 
-private:
+//private:
     std::vector<std::shared_ptr<autoStream>> layers;
 };
 
