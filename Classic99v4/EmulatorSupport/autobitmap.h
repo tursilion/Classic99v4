@@ -12,8 +12,8 @@ public:
     autoBitmap(int width, int height) : w(width), h(height) {
         pixels = (unsigned char*)malloc(w*h*4);
         memset(pixels, 0, w*h*4);
-        Image tmpImg = GenImageColor(w, h, BLACK);
-        ImageFormat(&tmpImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        Image tmpImg = GenImageColor(w, h, BLACK );
+        //ImageFormat(&tmpImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);  // not needed, that is the format
         tex = LoadTextureFromImage(tmpImg);
         dirty = true;
     }

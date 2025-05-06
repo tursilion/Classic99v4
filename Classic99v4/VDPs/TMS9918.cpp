@@ -219,8 +219,8 @@ const char *digpat[10][5] = {
 // some local defines
 #define REDRAW_LINES 262
 
-// RGBA format
-#define HOT_PINK_TRANS 0xff00ff00
+// ABGR format (little endian RGBA)
+#define HOT_PINK_TRANS 0x00ff00ff
 
 // So the TMS9918 only has two addresses - zero for data and 1 for registers
 
@@ -947,13 +947,7 @@ void TMS9918::wVDPreg(uint8_t r, uint8_t v) {
 	if (r==7)
 	{	/* color of screen, set TV background color to match */
 		t=v&0xf;
-		Color bg;
-		// palette is RGBA
-		bg.r = ((F18APalette[t]>>24)&0xff);
-		bg.g = ((F18APalette[t]>>16)&0xff);
-		bg.b = ((F18APalette[t]>>8)&0xff);
-		bg.a = 255;
-		theCore->getTV()->setBgColor(bg);
+		theCore->getTV()->setBgColor(F18APalette[t]);
 		redraw_needed=REDRAW_LINES;
 	}
 
@@ -1068,12 +1062,17 @@ void TMS9918::vdpReset(bool isCold) {
     if (isCold) {
 	    // todo: move the other system-level init (what does the VDP do?) into here
 	    // convert from 12-bit to float and load F18APalette
-		// ARGB palette, RGBA screen
 	    for (int idx=0; idx<64; idx++) {
-		    int r = (F18APaletteReset[idx]&0xf00)>>8;
-		    int g = (F18APaletteReset[idx]&0xf0)>>4;
-		    int b = (F18APaletteReset[idx]&0xf);
-		    F18APalette[idx] = (r<<28)|(r<<24)|(g<<20)|(g<<16)|(b<<12)|(b<<8)|0x000000ff;	// double up each palette gun, suggestion by Sometimes99er
+			Color c;
+			// double up each palette gun, suggestion by Sometimes99er
+			c.r = (F18APaletteReset[idx]&0xf00)>>8;
+			c.r |= c.r<<4;
+		    c.g = (F18APaletteReset[idx]&0xf0)>>4;
+			c.g |= c.g<<4;
+		    c.b = (F18APaletteReset[idx]&0xf);
+			c.b |= c.b<<4;
+			c.a = 255;
+		    F18APalette[idx] = c;
 	    }
 
 		memset(VDPREG, 0, sizeof(VDPREG));
@@ -1346,7 +1345,7 @@ bottom:
 				pLine = NULL;	// make sure it's zeroed unless we need it
 
 				for (int i2=0; i2<5; i2++) {
-					uint32_t *pDat = ((uint32_t*)pImg) + pDisplay->w*i2/4;
+					uint32_t *pDat = ((uint32_t*)pImg) + (pDisplay->w*i2);
 					for (int idx = 0; idx<(signed)strlen(buf); idx++) {
 						int digit = buf[idx] - '0';
 						pDat = drawTextLine(pDat, digpat[digit][i2]);
@@ -1421,7 +1420,7 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
                             //bgc=0;  // not needed, not going to use it
                         }
                         if (fgc != 0) {     // skip if fgc is also transparent
-							fgc = F18APalette[fgc];
+							fgc = InvColorToInt(F18APalette[fgc]);
 
 				            if (t&80) *(plong++) = fgc; else ++plong;
 				            if (t&40) *(plong++) = fgc; else ++plong;
@@ -1436,8 +1435,8 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
 						}
 			        }
                 } else {
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=InvColorToInt(F18APalette[bgc]);
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1518,8 +1517,8 @@ void TMS9918::VDPgraphicsII(int scanline, int isLayer2)
     				fgc>>=4;
                 }
 				{
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=InvColorToInt(F18APalette[bgc]);
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1595,7 +1594,7 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-						fgc = F18APalette[fgc];
+						fgc = InvColorToInt(F18APalette[fgc]);
 
 				        if (t&80) *(plong++) = fgc; else ++plong;
 				        if (t&40) *(plong++) = fgc; else ++plong;
@@ -1611,8 +1610,8 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=InvColorToInt(F18APalette[bgc]);
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1687,7 +1686,7 @@ void TMS9918::VDPtextII(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-						fgc = F18APalette[fgc];
+						fgc = InvColorToInt(F18APalette[fgc]);
 
 				        if (t&80) *(plong++) = fgc; else ++plong;
 				        if (t&40) *(plong++) = fgc; else ++plong;
@@ -1703,8 +1702,8 @@ void TMS9918::VDPtextII(int scanline, int isLayer2)
     //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=InvColorToInt(F18APalette[bgc]);
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1775,7 +1774,7 @@ void TMS9918::VDPtext80(int scanline, int isLayer2)
 			    {	
 				    t=VDP[p_add];
                     if (fgc != 0) {     // skip if fgc is also transparent
-						fgc = F18APalette[fgc];
+						fgc = InvColorToInt(F18APalette[fgc]);
 
 				        if (t&80) *(plong++) = fgc; else ++plong;
 				        if (t&40) *(plong++) = fgc; else ++plong;
@@ -1791,8 +1790,8 @@ void TMS9918::VDPtext80(int scanline, int isLayer2)
                 //			for (i3=0; i3<8; i3++)		// 6 pixels wide
 			    {	
 				    t=VDP[p_add];
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc=InvColorToInt(F18APalette[bgc]);
 
 					if (t&0x80) *(plong++) = fgc; else *(plong++) = bgc;
 					if (t&0x40) *(plong++) = fgc; else *(plong++) = bgc;
@@ -1846,7 +1845,7 @@ void TMS9918::VDPillegal(int scanline, int isLayer2)
 			    {	
                     // fix it so that bgc is transparent, then we only draw on that test
                     if (fgc!=0) {
-						fgc = F18APalette[fgc];
+						fgc = InvColorToInt(F18APalette[fgc]);
 
 						*(plong++) = fgc;
 						*(plong++) = fgc;
@@ -1856,7 +1855,7 @@ void TMS9918::VDPillegal(int scanline, int isLayer2)
 						plong+=4;
 					}
                     if (bgc!=0) {
-						bgc = F18APalette[bgc];
+						bgc = InvColorToInt(F18APalette[bgc]);
 
 						*(plong++) = bgc;
 						*(plong++) = bgc;
@@ -1867,8 +1866,8 @@ void TMS9918::VDPillegal(int scanline, int isLayer2)
             } else {
     //			for (i3=0; i3<8; i3++)				// 6 pixels wide
 			    {	
-					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
-					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
+					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = InvColorToInt(F18APalette[fgc]);
+					if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = InvColorToInt(F18APalette[bgc]);
 
 					*(plong++) = fgc;
 					*(plong++) = fgc;
@@ -1927,7 +1926,7 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
 			        //for (i3=0; i3<8; i3++)
 			        {	
                         if (fgc != 0) {     // skip if fgc is also transparent
-							fgc = F18APalette[fgc];
+							fgc = InvColorToInt(F18APalette[fgc]);
 
 							*(plong++) = fgc;
 							*(plong++) = fgc;
@@ -1937,7 +1936,7 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
 							plong += 4;
 						}
                         if (bgc != 0) {
-							bgc = F18APalette[bgc];
+							bgc = InvColorToInt(F18APalette[bgc]);
 
 							*(plong++) = bgc;
 							*(plong++) = bgc;
@@ -1950,8 +1949,8 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
-						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
+						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = InvColorToInt(F18APalette[fgc]);
+						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = InvColorToInt(F18APalette[bgc]);
 
 						*(plong++) = fgc;
 						*(plong++) = fgc;
@@ -2029,7 +2028,7 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
 			        //for (i3=0; i3<8; i3++)
 			        {	
                         if (fgc != 0) {     // skip if fgc is also transparent
-							fgc = F18APalette[fgc];
+							fgc = InvColorToInt(F18APalette[fgc]);
 
 							*(plong++) = fgc;
 							*(plong++) = fgc;
@@ -2039,7 +2038,7 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
 							plong += 4;
 						}
                         if (bgc != 0) {
-							bgc = F18APalette[bgc];
+							bgc = InvColorToInt(F18APalette[bgc]);
 
 							*(plong++) = bgc;
 							*(plong++) = bgc;
@@ -2052,8 +2051,8 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
                 } else {
     //				for (i4=0; i4<4; i4++) 
 				    {
-						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = F18APalette[fgc];
-						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = F18APalette[bgc];
+						if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc = InvColorToInt(F18APalette[fgc]);
+						if (bgc == 0) bgc = HOT_PINK_TRANS; else bgc = InvColorToInt(F18APalette[bgc]);
 
 						*(plong++) = fgc;
 						*(plong++) = fgc;
@@ -2085,7 +2084,7 @@ unsigned int* TMS9918::drawTextLine(uint32_t *pDat, const char *buf) {
         if (buf[idx] == '1') {
     		*(pDat++)=0xffffffff;
 		} else {
-			*(pDat++)=0;
+			*(pDat++)=0xff000000;
 		}
 	}
     return pDat;
@@ -2209,7 +2208,7 @@ void TMS9918::DrawSprites(int scanline)
 			pat=pat&0xfc;				// if double-sized, it must be a multiple of 4
 		}
 		int col=VDP[curSAL]&0xf;		// sprite color
-		if (col == 0) col = HOT_PINK_TRANS; else col=F18APalette[col];
+		if (col == 0) col = HOT_PINK_TRANS; else col=InvColorToInt(F18APalette[col]);
 	
 		if (VDP[curSAL]&0x80) {			// early clock
 			xx-=32;

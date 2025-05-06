@@ -13,6 +13,19 @@
 //#include "../2xSaI\2xSaI.h"
 //#include "../FilterDLL\sms_ntsc.h"
 
+// Replacement for Raylib color to int so I can write littleendian longs
+int InvColorToInt(Color color)
+{
+    int result = 0;
+
+    result = (int)(((unsigned int)color.r) |
+                   ((unsigned int)color.g << 8) |
+                   ((unsigned int)color.b << 16) |
+                    (unsigned int)color.a << 24);
+
+    return result;
+}
+
 // constructor and destructor
 Classic99TV::Classic99TV()
     : windowXSize(0)
@@ -42,10 +55,16 @@ bool Classic99TV::init() {
         // TODO: read window size and position from the configuration
         debug_write("Creating window...");
 
-        windowXSize = 284*4;
+        windowXSize = 284*4;    // todo: we might not need these anymore... except for load/save - see the draw loop
         windowYSize = 243*4;
 
+        SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_ALWAYS_RUN | FLAG_WINDOW_HIGHDPI);
         InitWindow(windowXSize, windowYSize, "Classic99v4");            // TODO: actual size
+        SetWindowMinSize(284, 243);
+
+        debug_write("Screen is %d x %d", GetScreenWidth(), GetScreenHeight());
+
+
         // SetWindowPosition(x, y);                // TODO: actual position
 
         // TODO: /can/ we fail?
@@ -89,18 +108,18 @@ bool Classic99TV::runWindowLoop() {
             ClearBackground(bgColor);
 
             // need to honor alpha and use with DrawTexture
-            BeginBlendMode(BLEND_ALPHA);
+            //BeginBlendMode(BLEND_ALPHA);
 
                 // render the layers
                 for (unsigned int idx=0; idx<layers.size(); ++idx) {
                     Texture2D texture = layers[idx]->getTexture();
                     Rectangle source = { 0.0f, 0.0f, (float)texture.width, (float)texture.height };
-                    Rectangle dest = { 0, 0, (float)windowXSize, (float)windowYSize };
+                    Rectangle dest = { 0, 0, (float)GetScreenWidth(), (float)GetScreenHeight() };
                     Vector2 origin = { 0.0f, 0.0f };
-                    DrawTexturePro(texture, source, dest, origin, 0.0, WHITE);
+                    DrawTexturePro(texture, source, dest, origin, 0.0f, WHITE);
                 }
 
-            EndBlendMode();
+            //EndBlendMode();
 
         EndDrawing();   // by default, timing handled here - that means this will block!
 

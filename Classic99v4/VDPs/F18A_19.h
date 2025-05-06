@@ -159,7 +159,7 @@ protected:
     int bF18AAutoIncPaletteReg = 0;				// F18A Auto increment palette register
     int F18APaletteRegisterNo = 0;				// F18A Palette register number
     int F18APaletteRegisterData = -1;			// F18A Temporary storage of data written to palette register
-    uint32_t F18APalette[64];
+    Color F18APalette[64];
     // RasmusM added end
 
     int VDPADD;								    // VDP Address counter

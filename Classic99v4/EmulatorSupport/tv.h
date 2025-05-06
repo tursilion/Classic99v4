@@ -17,9 +17,10 @@
 // to whatever the window is, rather than compositing a single bitmap. Then I simply don't care
 // and Allegro can manage the buffers.
 
-// TODO: want to use setPixelFormat with ALLEGRO_PIXEL_FORMAT_ANY_32_WITH_ALPHA 
-
 #define VERSION "400.000"
+
+// Replacement InvColorToInt from RayLib that inverts the byte order for little endian writes
+int InvColorToInt(Color color);
 
 // there is meant to be only one television in a system, here at least
 // nothing is virtual because there is only one kind of display. This works

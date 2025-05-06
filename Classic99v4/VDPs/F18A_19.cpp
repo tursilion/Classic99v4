@@ -1049,10 +1049,16 @@ void TMS9918::vdpReset(bool isCold) {
 	    // convert from 12-bit to float and load F18APalette
 		// ARGB palette
 	    for (int idx=0; idx<64; idx++) {
-		    int r = (F18APaletteReset[idx]&0xf00)>>8;
-		    int g = (F18APaletteReset[idx]&0xf0)>>4;
-		    int b = (F18APaletteReset[idx]&0xf);
-		    F18APalette[idx] = (r<<20)|(r<<16)|(g<<12)|(g<<8)|(b<<4)|(b)|0xff000000;	// double up each palette gun, suggestion by Sometimes99er
+			Color c;
+			// double up each palette gun, suggestion by Sometimes99er
+			c.r = (F18APaletteReset[idx]&0xf00)>>8;
+			c.r |= c.r<<4;
+		    c.g = (F18APaletteReset[idx]&0xf0)>>4;
+			c.g |= c.g<<4;
+		    c.b = (F18APaletteReset[idx]&0xf);
+			c.b |= c.b<<4;
+			c.a = 255;
+		    F18APalette[idx] = c;
 	    }
 
 		memset(VDPREG, 0, sizeof(VDPREG));
