@@ -39,7 +39,7 @@ extern const Word BStatusLookup[256];               // byte statuses
 
 // protect the disassembly backtrace
 // TODO: this is never initialized
-std::mutex *csDisasm;
+std::mutex *csDisasm; 
 
 // System interface
 

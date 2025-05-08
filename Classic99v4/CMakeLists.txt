@@ -1,3 +1,4 @@
+add_subdirectory(Raylib)
 add_subdirectory(CPUs)
 add_subdirectory(EmulatorSupport)
 add_subdirectory(Keyboard)
