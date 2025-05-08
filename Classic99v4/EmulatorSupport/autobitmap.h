@@ -21,8 +21,8 @@ public:
     autoBitmap() = delete;
 
     ~autoBitmap() {
+        //UnloadTexture(tex);   - seems this is unnecessary at this stage
         free(pixels);
-        UnloadTexture(tex);
     }
 
     void setDirty() {

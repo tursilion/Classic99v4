@@ -27,18 +27,35 @@ a permanent interface and will go away when menus appear someday...
 - classic99v4.exe 1981 - runs the 99/4A
 - classic99v4.exe 1983 - runs the 99/4A v2.2
 
-The code is based on Allegro 5.x, so in theory, it should build cross-platform. If you try it, let me know 
-what happened.
+The code is based on Raylib, so in theory, it should build cross-platform. If you try it, let me know 
+what happened. All Raylib code is included, though some external dependencies may be needed. The cmake
+should tell you.
+
+Building
+========
+
+In Windows, open Classic99v4.sln in Visual Studio 2022 (Community is fine), and build as normal.
+
+In Linux and Mac, open a terminal. cd to the Classic99 folder, then:
+
+    md build
+    cd build
+    cmake ..
+    make
+
+Under Debian, I noted I needed to install these additional libraries. There may be others:
+
+    cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
 
 Tested Platforms
 ================
 
 - Platform    Version     Status      Date        Notes
 - -------------------------------------------------------------------------------------------------------------
-- Windows     10          working     1/6/2022
-- Linux       Debian 10   working     12/27/2021
-- Linux       WSL2 Ubuntu working     1/6/2022    VcXsrv, audio not tested
-- Mac OSX     ?           working     1/19/2022   Running stable with Allegro loaded via Brew
-- PI 4		  Raspbian	  almost                  Graphics layering is not correct, otherwise runs. Slow when scaled.
+- Windows     11          working     5/7/2025
+- Linux       Debian 12   working     5/7/2025
+- Linux       WSL2 Debian working     5/7/2025
+- Mac OSX     Sequoia15.2 working     5/7/2022    OpenGL build deprecated, audio not tested
+- PI 4	      Raspbian	  untested
 
 
