@@ -22,6 +22,7 @@
 
 #include <raylib.h>
 #include <cstdio>
+#include <cstring>
 #include "automutex.h"
 
 #define DEBUGLEN 120

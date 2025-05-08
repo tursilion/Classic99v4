@@ -3,20 +3,14 @@
 cmake_minimum_required(VERSION 3.13.0)
 project(classic99v4 VERSION 400.0.0)
 
+set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+
+find_package(OpenGL)
 
 include(CTest)
 enable_testing()
 
-find_package(Allegro REQUIRED)
-
-include_directories( ${ALLEGRO_INCLUDE_DIRS} )
-
-# linux
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wno-stringop-truncation -DALLEGRO_LINUX -DALLEGRO_WITH_XWINDOWS")
-
-# mac... allegro with brew
-# use cmake -DCMAKE_CXX_COMPILER=/usr/bin/g++
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++14")
 
 add_executable(classic99v4)
@@ -28,4 +22,4 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-TARGET_LINK_LIBRARIES(classic99v4 ${ALLEGRO_LIBRARIES} )
+TARGET_LINK_LIBRARIES(classic99v4 raylib )

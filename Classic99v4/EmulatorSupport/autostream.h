@@ -5,6 +5,7 @@
 #define AUTOSTREAM_H
 
 #include <raylib.h>
+#include <cstring>
 #include "../EmulatorSupport/audioSrc.h"
 
 // TODO: hard coded settings for now...
