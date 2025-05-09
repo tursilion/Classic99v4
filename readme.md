@@ -45,7 +45,17 @@ In Linux and Mac, open a terminal. cd to the Classic99 folder, then:
 
 Under Debian, I noted I needed to install these additional libraries. There may be others:
 
-    cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+    apt-get install cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+    
+For Raspberry PI, install these libs, and then run CMAKE with these commands:
+
+    sudo apt-get install --no-install-recommends raspberrypi-ui-mods lxterminal gvfs
+    sudo apt-get install libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libasound2-dev mesa-common-dev libgl1-mesa-dev
+
+    cd build
+    cmake -DPLATFORM=Desktop -DGRAPHICS=GRAPHICS_API_OPENGL_21 ..
+
+(See https://github.com/raysan5/raylib/wiki/Working-on-Raspberry-Pi)
 
 Tested Platforms
 ================
@@ -55,7 +65,7 @@ Tested Platforms
 - Windows     11          working     5/7/2025
 - Linux       Debian 12   working     5/7/2025
 - Linux       WSL2 Debian working     5/7/2025
-- Mac OSX     Sequoia15.2 working     5/7/2022    OpenGL build deprecated, audio not tested
-- PI 4	      Raspbian	  untested
+- Mac OSX     Sequoia15.2 working     5/7/2025    OpenGL build deprecated, audio not tested
+- PI 4	      R-PiOS 6.12 working     5/7/2025    Requires OpenGL 2.1 as noted above
 
 
