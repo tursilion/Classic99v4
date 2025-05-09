@@ -68,4 +68,36 @@ Tested Platforms
 - Mac OSX     Sequoia15.2 working     5/7/2025    OpenGL build deprecated, audio not tested
 - PI 4	      R-PiOS 6.12 working     5/7/2025    Requires OpenGL 2.1 as noted above
 
+Credits
+=======
 
+Raylib is available here: https://www.raylib.com/
+
+Copyright (c) 2013-2024 Ramon Santamaria (@raysan5)
+
+This software is provided "as-is", without any express or implied warranty. In no event 
+will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial 
+applications, and to alter it and redistribute it freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not claim that you 
+  wrote the original software. If you use this software in a product, an acknowledgment 
+  in the product documentation would be appreciated but is not required.
+
+  2. Altered source versions must be plainly marked as such, and must not be misrepresented
+  as being the original software.
+
+  3. This notice may not be removed or altered from any source distribution.
+
+There is a very good chance that Classic99 uses modified source. Any modifications are tagged (mb).
+
+---
+
+PDCurses is used in the Windows port and is available here: https://pdcurses.org/
+
+The core package and most ports are in the public domain, but a few files in the demos and X11 directories are subject to copyright under licenses described there.
+
+This software is provided AS IS with NO WARRANTY whatsoever.
+
+Classic99 does not include demos or X11 directories.

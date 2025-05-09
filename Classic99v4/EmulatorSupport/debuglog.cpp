@@ -2,7 +2,7 @@
 // See License.txt, but the answer is "just ask me first". ;)
 
 #ifdef _WINDOWS
-// need for outputdebugstring
+// need for outputdebugstring - but a few names conflict with Raylib
 #define Rectangle WinRectangle
 #define CloseWindow WinCloseWindow
 #define ShowCursor WinShowCursor
@@ -20,17 +20,31 @@
 #undef PlaySoundA
 #endif
 
+// TODO: someday - also render the emulator window in a pane. Then we can have a startup option
+// to not initialize graphics and audio, and run entirely in an SSH window. That would be pretty fun.
+// TODO: an option to close the console (maybe with a keypress to reopen it?), or at least push it behind the main window
+// TODO: future: multiple consoles for multiple debug windows
+
 #include <raylib.h>
+#ifdef _WINDOWS
+// TODO: Why wouldn't I just rename this?
+#include <curses.h>
+#else
+#include <ncurses.h>
+#endif
 #include <cstdio>
 #include <cstring>
 #include "automutex.h"
 
-#define DEBUGLEN 120
-#define DEBUGLINES 34
+// No larger than 1024! Check debug_write
+#define DEBUGLEN 1024
+#define DEBUGLINES 50
 static char lines[DEBUGLINES][DEBUGLEN];
 bool bDebugDirty = false;
 int currentDebugLine;
 std::mutex *debugLock;      // our object lock
+
+// TODO: push the window outputs to a separate thread so none of it interferes
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 
@@ -39,9 +53,13 @@ void debug_init() {
     debugLock = new std::mutex();
     memset(lines, 0, sizeof(lines));
     bDebugDirty = true;
+
+    // curses setup
+    initscr();
 }
 void debug_shutdown() {
     delete debugLock;
+    endwin();
 }
 
 // Write a line to the debug buffer displayed on the debug screen
@@ -61,7 +79,8 @@ void debug_write(const char *s, ...)
     OutputDebugString(buf);
     OutputDebugString("\n");
 #endif
-    fprintf(stderr, "%s\n", buf);
+    printw("%s\n", buf);
+    refresh();
 
     // truncate to rolling array size
     buf[DEBUGLEN-1]='\0';
