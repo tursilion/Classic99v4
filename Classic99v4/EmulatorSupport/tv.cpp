@@ -48,7 +48,6 @@ bool Classic99TV::init() {
     autoMutex lock(windowLock);
 
     layers.clear();
-    SetExitKey(KEY_NULL);  // don't trap escape
 
     if (!IsWindowReady()) {
         // we need to create a window
@@ -61,6 +60,7 @@ bool Classic99TV::init() {
         SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_ALWAYS_RUN | FLAG_WINDOW_HIGHDPI);
         InitWindow(windowXSize, windowYSize, "Classic99v4");            // TODO: actual size
         SetWindowMinSize(284, 243);
+        SetExitKey(KEY_NULL);  // don't trap escape
 
         debug_write("Screen is %d x %d", GetScreenWidth(), GetScreenHeight());
 

@@ -272,10 +272,18 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
     if (1 == ret) {
 		Array8x8 &KEYS = getKeyArray();
         // nothing else matched, so check the keyboard array
-        if (IsKeyDown(KEYS[scanCol][addr-3])) {
+        // Also manually check right versions of left keys
+        int key = KEYS[scanCol][addr-3];
+        if (IsKeyDown(key)) {
+            ret = 0;
+        } else if ((key == KEY_LEFT_ALT) && (IsKeyDown(KEY_RIGHT_ALT))) {
+            ret = 0;
+        } else if ((key == KEY_LEFT_SHIFT) && (IsKeyDown(KEY_RIGHT_SHIFT))) {
+            ret = 0;
+        } else if ((key == KEY_LEFT_CONTROL) && (IsKeyDown(KEY_RIGHT_CONTROL))) {
             ret = 0;
         }
-    }
+	}
 
     return ret;
 }
