@@ -7,8 +7,9 @@ project(classic99v4 VERSION 400.0.0)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
-find_package(OpenGL)
-find_package(Curses)
+find_package(OpenGL REQUIRED)
+find_package(Curses REQUIRED)
+find_package(Threads REQUIRED)
 
 # todo someday, perhaps
 include(CTest)
@@ -27,4 +28,4 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-TARGET_LINK_LIBRARIES(classic99v4 raylib ${CURSES_LIBRARIES} )
+TARGET_LINK_LIBRARIES(classic99v4 raylib ${CURSES_LIBRARIES} Threads::Threads)
