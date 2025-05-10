@@ -27,8 +27,6 @@ std::thread *debugThread;   // the actual thread object
 
 using namespace std::chrono_literals;
 
-// TODO: push the window outputs to a separate thread so none of it interferes
-
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
