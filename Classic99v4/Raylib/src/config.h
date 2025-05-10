@@ -25,6 +25,8 @@
 *
 **********************************************************************************************/
 
+// NOTE: Default settings editted (mb). Note, code uses #if defined, not checking whether it's 0 or 1.
+
 #ifndef CONFIG_H
 #define CONFIG_H
 
@@ -32,23 +34,23 @@
 // Module selection - Some modules could be avoided
 // Mandatory modules: rcore, rlgl, utils
 //------------------------------------------------------------------------------------
-#define SUPPORT_MODULE_RSHAPES          1
-#define SUPPORT_MODULE_RTEXTURES        1
+//(mb)#define SUPPORT_MODULE_RSHAPES          1       // draw polygons
+#define SUPPORT_MODULE_RTEXTURES        1       // draw bitmaps
 #define SUPPORT_MODULE_RTEXT            1       // WARNING: It requires SUPPORT_MODULE_RTEXTURES to load sprite font textures
-#define SUPPORT_MODULE_RMODELS          1
-#define SUPPORT_MODULE_RAUDIO           1
+//(mb)#define SUPPORT_MODULE_RMODELS          1       // 3D mesh
+#define SUPPORT_MODULE_RAUDIO           1       // sound
 
 //------------------------------------------------------------------------------------
 // Module: rcore - Configuration Flags
 //------------------------------------------------------------------------------------
 // Camera module is included (rcamera.h) and multiple predefined cameras are available: free, 1st/3rd person, orbital
-#define SUPPORT_CAMERA_SYSTEM           1
+//(mb)#define SUPPORT_CAMERA_SYSTEM           1
 // Gestures module is included (rgestures.h) to support gestures detection: tap, hold, swipe, drag
-#define SUPPORT_GESTURES_SYSTEM         1
+//(mb)#define SUPPORT_GESTURES_SYSTEM         1
 // Include pseudo-random numbers generator (rprand.h), based on Xoshiro128** and SplitMix64
-#define SUPPORT_RPRAND_GENERATOR        1
+//(mb)#define SUPPORT_RPRAND_GENERATOR        1
 // Mouse gestures are directly mapped like touches and processed by gestures system
-#define SUPPORT_MOUSE_GESTURES          1
+//(mb)#define SUPPORT_MOUSE_GESTURES          1
 // Reconfigure standard input to receive key inputs, works with SSH connection.
 #define SUPPORT_SSH_KEYBOARD_RPI        1
 // Setting a higher resolution can improve the accuracy of time-out intervals in wait functions.
@@ -59,13 +61,13 @@
 // Use a partial-busy wait loop, in this case frame sleeps for most of the time, but then runs a busy loop at the end for accuracy
 #define SUPPORT_PARTIALBUSY_WAIT_LOOP    1
 // Allow automatic screen capture of current screen pressing F12, defined in KeyCallback()
-#define SUPPORT_SCREEN_CAPTURE          1
+//(mb)#define SUPPORT_SCREEN_CAPTURE          1
 // Allow automatic gif recording of current screen pressing CTRL+F12, defined in KeyCallback()
-#define SUPPORT_GIF_RECORDING           1
+//(mb)#define SUPPORT_GIF_RECORDING           1
 // Support CompressData() and DecompressData() functions
-#define SUPPORT_COMPRESSION_API         1
+//(mb)#define SUPPORT_COMPRESSION_API         1
 // Support automatic generated events, loading and recording of those events when required
-#define SUPPORT_AUTOMATION_EVENTS       1
+//(mb)#define SUPPORT_AUTOMATION_EVENTS       1
 // Support custom frame control, only for advanced users
 // By default EndDrawing() does this job: draws everything + SwapScreenBuffer() + manage frame timing + PollInputEvents()
 // Enabling this flag allows manual control of the frame processes, use at your own risk
@@ -244,12 +246,12 @@
 //------------------------------------------------------------------------------------
 // Desired audio fileformats to be supported for loading
 #define SUPPORT_FILEFORMAT_WAV          1
-#define SUPPORT_FILEFORMAT_OGG          1
-#define SUPPORT_FILEFORMAT_MP3          1
-#define SUPPORT_FILEFORMAT_QOA          1
+//(mb)#define SUPPORT_FILEFORMAT_OGG          1
+//(mb)#define SUPPORT_FILEFORMAT_MP3          1
+//(mb)#define SUPPORT_FILEFORMAT_QOA          1
 //#define SUPPORT_FILEFORMAT_FLAC         1
-#define SUPPORT_FILEFORMAT_XM           1
-#define SUPPORT_FILEFORMAT_MOD          1
+//(mb)#define SUPPORT_FILEFORMAT_XM           1
+//(mb)#define SUPPORT_FILEFORMAT_MOD          1
 
 // raudio: Configuration values
 //------------------------------------------------------------------------------------
@@ -276,7 +278,7 @@
 
 // Enable partial support for clipboard image, only working on SDL3 or
 // being on both Windows OS + GLFW or Windows OS + RGFW
-#define SUPPORT_CLIPBOARD_IMAGE    1
+//(mb)#define SUPPORT_CLIPBOARD_IMAGE    1
 
 #if defined(SUPPORT_CLIPBOARD_IMAGE)
     #ifndef STBI_REQUIRED

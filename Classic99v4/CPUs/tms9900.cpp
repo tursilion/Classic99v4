@@ -25,6 +25,7 @@
 // TODO implement the Classic99 debug opcodes 0x0110 through 0x0113
 
 #include <cstdio>
+#include "../EmulatorSupport/automutex.h"
 #include "../EmulatorSupport/peripheral.h"
 #include "../EmulatorSupport/debuglog.h"
 #include "../EmulatorSupport/System.h"
@@ -39,7 +40,7 @@ extern const Word BStatusLookup[256];               // byte statuses
 
 // protect the disassembly backtrace
 // TODO: this is never initialized
-std::mutex *csDisasm; 
+std::recursive_mutex *csDisasm; 
 
 // System interface
 

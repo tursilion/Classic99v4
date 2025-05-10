@@ -5,7 +5,7 @@
 #define __CURSES_INTERNALS__ 1
 
 #define CURSES_LIBRARY
-#include <curses.h>
+#include <ncurses.h>    // (mb)
 
 #ifdef __cplusplus
 extern "C" {

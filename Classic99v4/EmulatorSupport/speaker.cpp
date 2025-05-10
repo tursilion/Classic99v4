@@ -2,11 +2,9 @@
 // See License.txt, but the answer is "just ask me first". ;)
 
 #include <raylib.h>
-#include "Classic99v4.h"
 #include "System.h"
 #include "debuglog.h"
 #include "speaker.h"
-#include "automutex.h"
 #include "autostream.h"
 
 // wrapper for the Raylib speaker callback

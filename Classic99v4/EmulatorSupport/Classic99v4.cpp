@@ -34,15 +34,6 @@ void Cleanup() {
     debug_shutdown();
 }
 
-// fatal error - write to log and message box, then exit
-void fail(const char *str) {
-    debug_write("Exitting: %s", str);
-    // TODO: some kind of popup?
-    //al_show_native_message_box(NULL, "Classic99", "Fatal error", str, nullptr, ALLEGRO_MESSAGEBOX_ERROR);
-    Cleanup();
-    exit(99);
-}
-
 // MAN I wanted this basic signature in the old Classic99... ;)
 int main(int argc, char **argv) {
     int sys = 1981;
@@ -94,8 +85,7 @@ int main(int argc, char **argv) {
     double elapsedUs = 0;
     std::chrono::high_resolution_clock::time_point nStart, nEnd;
     nStart = std::chrono::high_resolution_clock::now();
-
-    // TODO: block ESC from closing the window
+    
     while (!WindowShouldClose()) {
         // TODO: We could have a new high precision mode that doesn't sleep, just
         // yields, and with the time measurement the quantum then becomes as

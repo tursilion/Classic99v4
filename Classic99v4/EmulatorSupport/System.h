@@ -1,13 +1,16 @@
-// Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
+// Classic99 v4xx - Copyright 2025 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
 #ifndef EMULATOR_SUPPORT_SYSTEM_H
 #define EMULATOR_SUPPORT_SYSTEM_H
 
 #include <atomic>
+#include "automutex.h"
 #include "tv.h"
 #include "speaker.h"
 #include "debuglog.h"
+
+// CODING NOTE: Only std::recursive_mutex() shall be used for locking
 
 // TODO: probably need a smart pointered list of possible systems,
 // the active system (getCore) needs to be a smart pointer (shared_ptr<T>),
@@ -143,7 +146,7 @@ public:
     virtual bool getNMI() { return nmiReq; }
 
 protected:
-    std::mutex *coreLock;      // our object lock
+    std::recursive_mutex *coreLock;      // our object lock
 
     // derived classes are expected to allocate these
     // read and write are separate because some systems are clever...

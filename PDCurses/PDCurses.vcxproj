@@ -187,7 +187,7 @@
     <ClInclude Include="common\acsuni.h" />
     <ClInclude Include="common\font437.h" />
     <ClInclude Include="common\iconbmp.h" />
-    <ClInclude Include="curses.h" />
+    <ClInclude Include="ncurses.h" />
     <ClInclude Include="curspriv.h" />
     <ClInclude Include="panel.h" />
     <ClInclude Include="wincon\pdcwin.h" />

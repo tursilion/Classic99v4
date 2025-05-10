@@ -106,8 +106,8 @@ From Matt - check this decrement:
 // TODO: Speech and SID need to be implemented as separate objects
 
 #include <cstdio>
-#include "SN76xxx.h"
 #include "../EmulatorSupport/automutex.h"
+#include "SN76xxx.h"
 
 // logarithmic scale (linear isn't right!)
 // the SMS Power example, (I convert below to percentages)
@@ -149,7 +149,7 @@ SN76xxx::SN76xxx(Classic99System *theCore)
 		nOutput[idx] = 1.0;
 	}
 
-	csAudioBuf = new std::mutex();
+	csAudioBuf = new std::recursive_mutex();
 }
 
 SN76xxx::~SN76xxx() {

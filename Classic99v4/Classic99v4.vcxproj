@@ -171,6 +171,7 @@
     <ClInclude Include="EmulatorSupport\Classic99v4.h" />
     <ClInclude Include="EmulatorSupport\debuglog.h" />
     <ClInclude Include="EmulatorSupport\interestingData.h" />
+    <ClInclude Include="EmulatorSupport\os.h" />
     <ClInclude Include="EmulatorSupport\peripheral.h" />
     <ClInclude Include="EmulatorSupport\speaker.h" />
     <ClInclude Include="EmulatorSupport\tv.h" />

@@ -6,7 +6,5 @@
 
 #define VERSION "400.000"
 
-#include "automutex.h"
-
 
 #endif

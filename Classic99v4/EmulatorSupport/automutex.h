@@ -9,7 +9,7 @@
 // Just a simple class that wraps the C++ mutex for that fancy RAI the kids all love these days
 class autoMutex {
 public:
-    autoMutex(std::mutex *m) : mymutex(m) {
+    autoMutex(std::recursive_mutex *m) : mymutex(m) {
         mymutex->lock();
     }
     autoMutex() = delete;
@@ -19,7 +19,7 @@ public:
     }
 
 private:
-    std::mutex *mymutex;
+    std::recursive_mutex *mymutex;
 };
 
 #endif

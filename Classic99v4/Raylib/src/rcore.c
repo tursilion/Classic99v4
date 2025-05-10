@@ -276,7 +276,7 @@ typedef struct CoreData {
         unsigned int flags;                 // Configuration flags (bit based), keeps window state
         bool ready;                         // Check if window has been initialized successfully
         bool fullscreen;                    // Check if fullscreen mode is enabled
-        bool shouldClose;                   // Check if window set for closing
+        volatile bool shouldClose;          // Check if window set for closing (mb: mark volatile)
         bool resizedLastFrame;              // Check if window has been resized last frame
         bool eventWaiting;                  // Wait for events before ending frame
         bool usingFbo;                      // Using FBO (RenderTexture) for rendering instead of default framebuffer
@@ -716,6 +716,11 @@ void InitWindow(int width, int height, const char *title)
     SetRandomSeed((unsigned int)time(NULL));
 
     TRACELOG(LOG_INFO, "SYSTEM: Working Directory: %s", GetWorkingDirectory());
+}
+
+// (mb) add a call to request window close
+void RequestClose(void) {
+    CORE.Window.shouldClose = true;
 }
 
 // Close window and unload OpenGL context

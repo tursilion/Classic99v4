@@ -1,6 +1,7 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
+#include "automutex.h"
 #include "System.h"
 #include "peripheral.h"
 
@@ -12,7 +13,7 @@ Classic99System::Classic99System()
     : theTV(nullptr)
     , theSpeaker(nullptr)
 {
-    coreLock = new std::mutex();
+    coreLock = new std::recursive_mutex();
 
     // derived class MUST allocate these objects!
     // the single dummies at least prevent crashes

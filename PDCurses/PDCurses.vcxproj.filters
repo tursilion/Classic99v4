@@ -172,7 +172,7 @@
     <ClInclude Include="common\iconbmp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="curses.h">
+    <ClInclude Include="ncurses.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="curspriv.h">

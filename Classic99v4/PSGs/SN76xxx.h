@@ -12,6 +12,7 @@
 
 #include "../EmulatorSupport/peripheral.h"
 #include "../EmulatorSupport/audioSrc.h"
+#include "../EmulatorSupport/automutex.h"
 
 class SN76xxx : public Classic99Peripheral, Classic99AudioSrc {
 public:
@@ -109,7 +110,7 @@ private:
     void MuteAudio();
     void resetDAC();
 
-    std::mutex *csAudioBuf;
+    std::recursive_mutex *csAudioBuf;
     std::shared_ptr<autoStream> stream;
 };
 

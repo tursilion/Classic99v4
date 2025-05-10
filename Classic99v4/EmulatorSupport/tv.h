@@ -57,7 +57,7 @@ public:
 private:
     std::vector< std::shared_ptr<autoBitmap> > layers;
     Color bgColor;
-    std::mutex *windowLock;
+    std::recursive_mutex *windowLock;
     int windowXSize, windowYSize;
     bool drawReady;
 };

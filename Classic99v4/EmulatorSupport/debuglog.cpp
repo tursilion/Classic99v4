@@ -1,61 +1,98 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#ifdef _WINDOWS
-// need for outputdebugstring - but a few names conflict with Raylib
-#define Rectangle WinRectangle
-#define CloseWindow WinCloseWindow
-#define ShowCursor WinShowCursor
-#define LoadImageA WinLoadImageA
-#define DrawTextA WinDrawTextA
-#define DrawTextExA WinDrawTextExA
-#define PlaySoundA WinPlaySoundA
-#include <Windows.h>
-#undef Rectangle
-#undef CloseWindow
-#undef ShowCursor
-#undef LoadImageA
-#undef DrawTextA
-#undef DrawTextExA
-#undef PlaySoundA
-#endif
-
 // TODO: someday - also render the emulator window in a pane. Then we can have a startup option
 // to not initialize graphics and audio, and run entirely in an SSH window. That would be pretty fun.
 // TODO: an option to close the console (maybe with a keypress to reopen it?), or at least push it behind the main window
 // TODO: future: multiple consoles for multiple debug windows
+// TODO: maybe color someday?
 
+#include "os.h"
 #include <raylib.h>
-#ifdef _WINDOWS
-// TODO: Why wouldn't I just rename this?
-#include <curses.h>
-#else
 #include <ncurses.h>
-#endif
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include "automutex.h"
+#include "debuglog.h"
 
-// No larger than 1024! Check debug_write
+// size of debug log in memory - len is characters, lines is lines
 #define DEBUGLEN 1024
 #define DEBUGLINES 50
 static char lines[DEBUGLINES][DEBUGLEN];
 bool bDebugDirty = false;
 int currentDebugLine;
-std::mutex *debugLock;      // our object lock
+std::recursive_mutex *debugLock;      // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, in case it's not thread safe
+std::thread *debugThread;   // the actual thread object
+
+using namespace std::chrono_literals;
 
 // TODO: push the window outputs to a separate thread so none of it interferes
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
-void debug_init() {
-    debugLock = new std::mutex();
-    memset(lines, 0, sizeof(lines));
-    bDebugDirty = true;
+
+void debug_thread_init() {
+    autoMutex mutex(debugLock);
 
     // curses setup
     initscr();
+    raw();                  // no signal keypresses
+    noecho();               // no character echo
+    keypad(stdscr, TRUE);   // enable extended keys
+    nodelay(stdscr, TRUE);  // non-blocking getch
+
+    // our own setup
+    memset(lines, 0, sizeof(lines));
+    bDebugDirty = true;
+}
+
+// the main loop that manages the debug system - debugLock must be created BEFORE calling
+void debug_thread() {
+    bool quit = false;
+    threadname("debug_thread");
+
+    // initialization
+    debug_thread_init();
+
+    while (!quit) {
+        int ch;
+        {
+            autoMutex mutex(debugLock);
+            ch = getch();
+
+            if (ch != ERR) {
+                debug_write("Got char: %c\n", ch);
+                if (ch =='Q') quit=true;    //TODO: obviously I don't want to quit on 'Q'
+            }
+        }
+
+        // sleep 5ms or whatever quantum is, it's only keypresses
+        std::this_thread::sleep_for(5ms);
+    }
+
+    // If the loop above exits, then tell the emulator to shut down via Raylib
+    RequestClose();
+}
+
+//--- functions above this point are intended to be used by the debug_thread() only
+//--- functions below this point are intended to be called from anywhere in the application
+
+void debug_init() {
+    debugLock = new std::recursive_mutex();
+
+    // Start the debug thread
+    debugThread = new std::thread(debug_thread);
+    // give the thread ample time to start
+    std::this_thread::sleep_for(100ms);
+
+    // try to acquire the lock - that will tell us it's finished
+    {
+        autoMutex mutex(debugLock);
+    }
+
+    debug_write("Debug thread initialized");
 }
 void debug_shutdown() {
     delete debugLock;
@@ -65,22 +102,19 @@ void debug_shutdown() {
 // Write a line to the debug buffer displayed on the debug screen
 void debug_write(const char *s, ...)
 {
-    const int bufSize = 1024;
-    char buf[bufSize];
+    char buf[DEBUGLEN];
 
     // full length debug output
     va_list argptr;
     va_start(argptr, s);
-    vsnprintf(buf, bufSize-1, s, argptr);
-    buf[bufSize-1]='\0';
+    vsnprintf(buf, DEBUGLEN-1, s, argptr);
+    buf[DEBUGLEN-1]='\0';
 
 #ifdef _WINDOWS
     // output to Windows debug listing...
     OutputDebugString(buf);
     OutputDebugString("\n");
 #endif
-    printw("%s\n", buf);
-    refresh();
 
     // truncate to rolling array size
     buf[DEBUGLEN-1]='\0';
@@ -94,6 +128,9 @@ void debug_write(const char *s, ...)
         if (++currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
 
     	bDebugDirty=true;									    // flag redraw
+
+        printw("%s\n", buf);
+        refresh();
     }
 
 }

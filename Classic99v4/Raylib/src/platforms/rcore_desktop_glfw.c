@@ -1257,7 +1257,8 @@ void PollInputEvents(void)
     // While window minimized, stop loop execution
     while (IsWindowState(FLAG_WINDOW_MINIMIZED) && !IsWindowState(FLAG_WINDOW_ALWAYS_RUN)) glfwWaitEvents();
 
-    CORE.Window.shouldClose = glfwWindowShouldClose(platform.handle);
+    // (mb) preserve shouldClose flag if already set
+    CORE.Window.shouldClose = glfwWindowShouldClose(platform.handle) || CORE.Window.shouldClose;
 
     // Reset close status for next frame
     glfwSetWindowShouldClose(platform.handle, GLFW_FALSE);

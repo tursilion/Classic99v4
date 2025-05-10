@@ -5,7 +5,7 @@
 #ifndef __PDCURSES_PANEL_H__
 #define __PDCURSES_PANEL_H__ 1
 
-#include <curses.h>
+#include <ncurses.h>    //(mb)
 
 #ifdef __cplusplus
 extern "C"

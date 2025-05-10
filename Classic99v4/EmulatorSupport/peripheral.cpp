@@ -3,7 +3,6 @@
 
 #include <cstdio>
 #include "peripheral.h"
-#include "automutex.h"
 #include "debuglog.h"
 
 // singleton dummy object for addresses with nothing mapped

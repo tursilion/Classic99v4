@@ -1,7 +1,6 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
-#include "Classic99v4.h"
 #include <cstdio>
 #include <raylib.h>
 #include "debuglog.h"
@@ -32,7 +31,7 @@ Classic99TV::Classic99TV()
     , windowYSize(0)
     , drawReady(false)
 {
-    windowLock = new std::mutex();
+    windowLock = new std::recursive_mutex();
     bgColor = BLACK;
 }
 Classic99TV::~Classic99TV() {
@@ -49,6 +48,7 @@ bool Classic99TV::init() {
     autoMutex lock(windowLock);
 
     layers.clear();
+    SetExitKey(KEY_NULL);  // don't trap escape
 
     if (!IsWindowReady()) {
         // we need to create a window
