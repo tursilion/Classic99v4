@@ -33,6 +33,8 @@
 #endif
 
 #if defined(SUPPORT_TRACELOG)
+    void rl_set_debug_write(void (*ptr)(const char*, va_list));    //(mb) override vprintf in log output
+
     #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
 
     #if defined(SUPPORT_TRACELOG_DEBUG)

@@ -248,6 +248,9 @@ void debug_thread() {
 
 //--- functions above this point are intended to be used by the debug_thread() only
 //--- functions below this point are intended to be called from anywhere in the application
+extern "C" {
+    void rl_set_debug_write(void (*ptr)(const char*, va_list));
+};
 
 void debug_init() {
     debugLock = new std::recursive_mutex();
@@ -261,6 +264,9 @@ void debug_init() {
     {
         autoMutex mutex(debugLock);
     }
+
+    // tell raylib it can redirect to us
+    rl_set_debug_write(debug_write_var);
 
     debug_write("Debug thread initialized");
 }
@@ -277,7 +283,9 @@ void debug_stop() {
 void debug_shutdown() {
     debug_quit = true;
     if (nullptr != debugThread) {
-        debugThread->join();
+        if (debugThread->joinable()) {
+            debugThread->join();
+        }
     }
     endwin();
     delete debugLock;
@@ -287,11 +295,14 @@ void debug_shutdown() {
 // TODO: add a disk log which can be configured on/off
 void debug_write(const char *s, ...)
 {
-    char buf[DEBUGLEN];
-
-    // full length debug output
     va_list argptr;
     va_start(argptr, s);
+    debug_write_var(s, argptr);
+}
+
+void debug_write_var(const char *s, va_list argptr) {
+    char buf[DEBUGLEN];
+
     vsnprintf(buf, DEBUGLEN-1, s, argptr);
     buf[DEBUGLEN-1]='\0';
 
@@ -310,7 +321,6 @@ void debug_write(const char *s, ...)
 
     	debug_dirty=true;									    // flag redraw
     }
-
 }
 
 // request a new debug view of the specified size

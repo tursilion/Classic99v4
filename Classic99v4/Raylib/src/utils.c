@@ -98,6 +98,12 @@ static int android_close(void *cookie);
 // Module Functions Definition - Utilities
 //----------------------------------------------------------------------------------
 
+// Replacement for vprintf to redirect debug (mb)
+void (*debug_write_var)(const char *s, va_list argptr) = NULL;
+void rl_set_debug_write(void (*ptr)(const char*, va_list)) {
+    debug_write_var = ptr;
+}
+
 // Set the current threshold (minimum) log level
 void SetTraceLogLevel(int logType) { logTypeLevel = logType; }
 
@@ -146,8 +152,15 @@ void TraceLog(int logType, const char *text, ...)
     unsigned int textSize = (unsigned int)strlen(text);
     memcpy(buffer + strlen(buffer), text, (textSize < (MAX_TRACELOG_MSG_LENGTH - 12))? textSize : (MAX_TRACELOG_MSG_LENGTH - 12));
     strcat(buffer, "\n");
-    vprintf(buffer, args);
-    fflush(stdout);
+
+    // (mb) to use external debug system
+    if (debug_write_var) {
+        debug_write_var(buffer, args);
+    } else {
+        vprintf(buffer, args);
+        fflush(stdout);
+    }
+
 #endif
 
     va_end(args);

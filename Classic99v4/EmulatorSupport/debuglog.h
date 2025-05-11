@@ -17,6 +17,7 @@ void debug_init();
 void debug_stop();
 void debug_shutdown();
 void debug_write(const char *s, ...);
+void debug_write_var(const char *s, va_list argptr);
 void debug_size(int &x, int &y);
 void fetch_debug(char *buf);
 

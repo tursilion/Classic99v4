@@ -52,7 +52,7 @@ bool Classic99TV::init() {
     if (!IsWindowReady()) {
         // we need to create a window
         // TODO: read window size and position from the configuration
-        debug_write("Creating window...");
+        debug_write("Creating window... please wait.");
 
         windowXSize = 284*4;    // todo: we might not need these anymore... except for load/save - see the draw loop
         windowYSize = 243*4;
