@@ -33,7 +33,7 @@ static int currentDebugLine;
 static std::recursive_mutex *debugLock;        // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, it's not thread safe
 static std::thread *debugThread;               // the actual thread object
 static std::vector<WindowTrack> debugPanes;
-static int topMost = 0;
+static unsigned int topMost = 0;
 static char *debug_buf = nullptr;     // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
 static bool mouse_btn_down = false;
@@ -111,6 +111,7 @@ void debug_update() {
         if (debugPanes.size() < 1) {
             int sr, sc;
             getmaxyx(stdscr, sr, sc);
+            (void)sr;
             char buf[64];
             strcpy(buf, "Classic99 v4xx - No Debug Panes Available");
             if (sc < 64) buf[sc]=0;
@@ -182,7 +183,11 @@ void debug_update() {
             continue;
         }
         char *adr = (line+firstOutLine)*c+debug_buf;
+#ifdef min
         int w = min(c, sc);
+#else
+        int w = std::min(c, sc);
+#endif
         strncpy(workbuf, adr, w);
         workbuf[w]='\0';
         mvprintw(line+2, 0, "%s", workbuf);     // +2 for menu
@@ -207,7 +212,7 @@ void debug_thread() {
 
             if (ch == KEY_MOUSE) {
                 MEVENT event;
-                if (nc_getmouse(&event) == OK) {
+                if (getmouse(&event) == OK) {
                     // we also get x,y movement while the button is down, but with bstate==0
                     if (event.bstate & BUTTON1_PRESSED) {
                         debug_write("Mouse click at %d,%d", event.x, event.y);
