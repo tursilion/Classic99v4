@@ -312,6 +312,12 @@ void debug_write_var(const char *s, va_list argptr) {
     vsnprintf(buf, DEBUGLEN-1, s, argptr);
     buf[DEBUGLEN-1]='\0';
 
+    size_t p = strlen(buf);
+    while ((p>0) && (buf[p-1] < ' ')) {
+        buf[p-1]='\0'; 
+        --p;
+    }
+
 #ifdef _WINDOWS
     // output to Windows debug listing...
     OutputDebugString(buf);
