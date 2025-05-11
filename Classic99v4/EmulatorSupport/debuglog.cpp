@@ -226,7 +226,7 @@ void debug_thread() {
             } else if (ch == KEY_RESIZE) {
                 debug_handle_resize();
             } else if (ch != ERR) {
-                debug_write("Got char: %c", ch);
+                //debug_write("Got char: %c", ch);
                 if (ch =='Q') {
                     RequestClose();
                     //TODO: obviously I don't want to quit on 'Q'

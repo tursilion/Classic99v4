@@ -222,6 +222,12 @@ const char *digpat[10][5] = {
 // ABGR format (little endian RGBA)
 #define HOT_PINK_TRANS 0x00ff00ff
 
+enum {
+    DEBUG_REGS = 0,
+    DEBUG_SPRITES,
+    DEBUG_DISPLAY
+};
+
 // So the TMS9918 only has two addresses - zero for data and 1 for registers
 
 // TODO: create a "InterestingData" that contains a list of information that other
@@ -693,8 +699,9 @@ bool TMS9918::init(int index) {
 
 	bShowFPS = 1;
 
-    debug_create_view(this, 0);     // for the register view
-    debug_create_view(this, 1);     // for the screen dump
+    debug_create_view(this, DEBUG_REGS);     // for the register view
+    debug_create_view(this, DEBUG_SPRITES);  // for the sprite list
+    debug_create_view(this, DEBUG_DISPLAY);  // for the screen dump
 
 	vdpReset(true);     // todo: need to allow warm reset
 
@@ -760,19 +767,22 @@ bool TMS9918::operate(double timestamp) {
 
 // release everything claimed in init, save NV data, etc
 bool TMS9918::cleanup() {
-    debug_unregister_view(this);
+    debug_unregister_view(this);    // this removes ALL views
 	pDisplay = nullptr;
 	return true;
 }
 
 // dimensions of a text mode output screen - either being 0 means none
 void TMS9918::getDebugSize(int &x, int &y, int user) {
-    if (user == 0) {
+    if (user == DEBUG_REGS) {
         // registers
     	x=44; y=12;
-    } else if (user == 1) {
+    } else if (user == DEBUG_DISPLAY) {
         // screen (either 32 or 40 columns)
         x=40; y=24;
+    } else if (user == DEBUG_SPRITES) {
+        // sprite list
+        x=48; y=34;
     } else {
         x=0; y=0;
     }
@@ -785,7 +795,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
     getDebugSize(x,y,user);
     memset(buffer, 0, x*y);
     
-    if (user == 0) {
+    if (user == DEBUG_REGS) {
         // registers
         char *base = buffer;
 	    buffer += sprintf(buffer, "VDP0   %02X   ", VDPREG[0]);
@@ -878,7 +888,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
         base += x; buffer = base;
 
 	    sprintf(buffer, "VDPAD: %04X", VDPADD);
-    } else if (user == 1) {
+    } else if (user == DEBUG_DISPLAY) {
         // screen dump - just the SIT for now
         // TODO: we can add color, including the TI Palette
         // TODO: can we add character definitions, is that possible?
@@ -906,6 +916,29 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
                 }
                 *(adr++)=ch;
             }
+        }
+    } else if (user == DEBUG_SPRITES) {
+        // display sprite sizes
+        int n=8;
+        if (VDPREG[1]&0x02) n*=2;
+        if (VDPREG[1]&0x01) n*=2;
+        sprintf(buffer, "%2dx%-2d %s %s", n, n, VDPREG[1]&2?"Double":"      ", VDPREG[1]&1?"Magnified":"");
+        buffer+=x;
+        buffer+=x;
+
+        // write out the sprite table
+        int off = SAL;
+        for (int i=1; i<=32; ++i) {
+            if (VDP[off] == 0xd0) {
+                sprintf(buffer, "%02d >%04X ** End of list (>d0) **", i, off);
+                break;
+            }
+            sprintf(buffer, "%02d >%04X %3d at %3d,%3d %11.11s %s %s", 
+                    i, off, VDP[off+2], VDP[off+1], VDP[off], 
+                    COLORNAMES[VDP[off+3]&0xf], VDP[off+3]&0x80?"Early":"     ",
+                    VDP[off+3]&0x70?"???":"");
+            buffer+=x;
+            off+=4;
         }
     }
 }

@@ -421,7 +421,7 @@ void TIKeyboard::getDebugWindow(char *buffer, int user) {
                 // the 99/4A has a couple of extra keys
                 // easy way to detect which keyboard we're on is to check joystick 1
                 if (is4A()) {
-                    if ((key == RL_KEY_LEFT_SHIFT) && (KeyDebug[r][c] == '*')) {
+                    if ((key == RL_KEY_LEFT_SHIFT) && (buffer[KeyDebug[r][c]] == '*')) {
                         // there's a second shift key, wired in parallel
                         buffer[3*KWSIZE+27] = '*';
                     }
