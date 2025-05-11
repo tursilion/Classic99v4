@@ -137,7 +137,7 @@ static void JoystickCallback(int jid, int event);                               
 //----------------------------------------------------------------------------------
 
 // Check if application should close
-// NOTE: By default, if KEY_ESCAPE pressed or window close icon clicked
+// NOTE: By default, if RL_KEY_ESCAPE pressed or window close icon clicked
 bool WindowShouldClose(void)
 {
     if (CORE.Window.ready) return CORE.Window.shouldClose;
@@ -1800,8 +1800,8 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
     else if(action == GLFW_REPEAT) CORE.Input.Keyboard.keyRepeatInFrame[key] = 1;
 
     // WARNING: Check if CAPS/NUM key modifiers are enabled and force down state for those keys
-    if (((key == KEY_CAPS_LOCK) && ((mods & GLFW_MOD_CAPS_LOCK) > 0)) ||
-        ((key == KEY_NUM_LOCK) && ((mods & GLFW_MOD_NUM_LOCK) > 0))) CORE.Input.Keyboard.currentKeyState[key] = 1;
+    if (((key == RL_KEY_CAPS_LOCK) && ((mods & GLFW_MOD_CAPS_LOCK) > 0)) ||
+        ((key == RL_KEY_NUM_LOCK) && ((mods & GLFW_MOD_NUM_LOCK) > 0))) CORE.Input.Keyboard.currentKeyState[key] = 1;
 
     // Check if there is space available in the key queue
     if ((CORE.Input.Keyboard.keyPressedQueueCount < MAX_KEY_PRESSED_QUEUE) && (action == GLFW_PRESS))

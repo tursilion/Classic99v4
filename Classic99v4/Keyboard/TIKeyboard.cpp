@@ -174,14 +174,14 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 				// just forcibly turn them off! Should only need to do this once
 				// TODO: decode is only needed for my PS/2 emulation
 
-				if (IsKeyDown(KEY_TAB)) {
+				if (IsKeyDown(RL_KEY_TAB)) {
 					joyFire=1;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xf0);	// key up
 					//	decode(VK_TAB);
 					//}
 				}
-				if (IsKeyDown(KEY_LEFT)) {
+				if (IsKeyDown(RL_KEY_LEFT)) {
 					joyX=-4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -189,7 +189,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 					//	decode(VK_LEFT);
 					//}
 				}
-				if (IsKeyDown(KEY_RIGHT)) {
+				if (IsKeyDown(RL_KEY_RIGHT)) {
 					joyX=4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -197,7 +197,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 					//	decode(VK_RIGHT);
 					//}
 				}
-				if (IsKeyDown(KEY_UP)) {
+				if (IsKeyDown(RL_KEY_UP)) {
 					joyY=4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -205,7 +205,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 					//	decode(VK_UP);
 					//}
 				}
-				if (IsKeyDown(KEY_DOWN)) {
+				if (IsKeyDown(RL_KEY_DOWN)) {
 					joyY=-4;
 					//if (0 == fJoystickActiveOnKeys) {
 					//	decode(0xe0);	// extended
@@ -249,7 +249,7 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
 	if ((addr == 0x07) && (alphaActive)) {
 		uint8_t ret = 0;
 
-		if (IsKeyDown(KEY_CAPS_LOCK))	{		// check CAPS LOCK (on)
+		if (IsKeyDown(RL_KEY_CAPS_LOCK))	{		// check CAPS LOCK (on)
 			ret = 1;
 		}
 
@@ -276,11 +276,11 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
         int key = KEYS[scanCol][addr-3];
         if (IsKeyDown(key)) {
             ret = 0;
-        } else if ((key == KEY_LEFT_ALT) && (IsKeyDown(KEY_RIGHT_ALT))) {
+        } else if ((key == RL_KEY_LEFT_ALT) && (IsKeyDown(RL_KEY_RIGHT_ALT))) {
             ret = 0;
-        } else if ((key == KEY_LEFT_SHIFT) && (IsKeyDown(KEY_RIGHT_SHIFT))) {
+        } else if ((key == RL_KEY_LEFT_SHIFT) && (IsKeyDown(RL_KEY_RIGHT_SHIFT))) {
             ret = 0;
-        } else if ((key == KEY_LEFT_CONTROL) && (IsKeyDown(KEY_RIGHT_CONTROL))) {
+        } else if ((key == RL_KEY_LEFT_CONTROL) && (IsKeyDown(RL_KEY_RIGHT_CONTROL))) {
             ret = 0;
         }
 	}

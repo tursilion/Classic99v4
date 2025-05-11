@@ -219,7 +219,7 @@ protected:
     // working with binary data
     template <class T> void loadStateVal(unsigned char *&buffer, T) = delete;
 
-    std::recursive_mutex *periphLock;          // our object lock
+    std::recursive_mutex *periphLock;   // our object lock
     Classic99System *theCore;           // pointer to the core - note all periphs need to be deleted before invalidating the core!
     double lastTimestamp;               // last time we ran to
     int page;                           // a semi-opaque value used by implementations for memory paging in breakpoints

@@ -167,22 +167,6 @@ bool TI994::initSystem() {
 }
 
 bool TI994::deInitSystem() {
-    // unmap all the hardware
-    ioSize = 0;
-    memorySize = 0;
-
-    // delete our arrays
-    delete[] memorySpaceRead;
-    delete[] memorySpaceWrite;
-    delete[] ioSpaceRead;
-    delete[] ioSpaceWrite;
-
-    // zero the pointers
-    memorySpaceRead = nullptr;
-    memorySpaceWrite = nullptr;
-    ioSpaceRead = nullptr;
-    ioSpaceWrite = nullptr;
-
     // free the hardware
     delete pPSG;
     delete pVDP;
@@ -203,6 +187,22 @@ bool TI994::deInitSystem() {
     pScratch = nullptr;
     theSpeaker = nullptr;
     theTV = nullptr;
+
+    // unmap all the hardware
+    ioSize = 0;
+    memorySize = 0;
+
+    // delete our arrays
+    delete[] memorySpaceRead;
+    delete[] memorySpaceWrite;
+    delete[] ioSpaceRead;
+    delete[] ioSpaceWrite;
+
+    // zero the pointers
+    memorySpaceRead = nullptr;
+    memorySpaceWrite = nullptr;
+    ioSpaceRead = nullptr;
+    ioSpaceWrite = nullptr;
 
     return true;
 }

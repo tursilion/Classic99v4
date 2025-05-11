@@ -48,15 +48,15 @@ printw
 
 int vwprintw(WINDOW *win, const char *fmt, va_list varglist)
 {
-    char printbuf[513];
+    char printbuf[1025];    // (mb) bigger
     int len;
 
     PDC_LOG(("vwprintw() - called\n"));
 
 #ifdef HAVE_VSNPRINTF
-    len = vsnprintf(printbuf, 512, fmt, varglist);
+    len = vsnprintf(printbuf, sizeof(printbuf)-1, fmt, varglist);   // (mb) sizeof
 #else
-    len = vsprintf(printbuf, fmt, varglist);
+    len = vsprintf(printbuf, fmt, varglist);    // (mb) this crashes on long strings
 #endif
     return (waddstr(win, printbuf) == ERR) ? ERR : len;
 }

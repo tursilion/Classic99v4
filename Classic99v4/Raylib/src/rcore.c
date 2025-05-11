@@ -661,7 +661,7 @@ void InitWindow(int width, int height, const char *title)
 
     // Initialize global input state
     memset(&CORE.Input, 0, sizeof(CORE.Input));     // Reset CORE.Input structure to 0
-    CORE.Input.Keyboard.exitKey = KEY_ESCAPE;
+    CORE.Input.Keyboard.exitKey = RL_KEY_ESCAPE;
     CORE.Input.Mouse.scale = (Vector2){ 1.0f, 1.0f };
     CORE.Input.Mouse.cursor = MOUSE_CURSOR_ARROW;
     CORE.Input.Gamepad.lastButtonPressed = GAMEPAD_BUTTON_UNKNOWN;

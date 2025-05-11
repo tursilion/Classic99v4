@@ -18,7 +18,8 @@ extern "C" {
 # endif
 #endif
 
-#if defined(PDC_99) || defined(__WATCOMC__)
+// (mb) Windows has snprintf!
+#if defined(PDC_99) || defined(__WATCOMC__) || defined(_WIN32)
 # ifndef HAVE_SNPRINTF
 #  define HAVE_SNPRINTF 1   /* have snprintf() */
 # endif

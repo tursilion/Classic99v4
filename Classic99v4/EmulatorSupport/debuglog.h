@@ -7,11 +7,32 @@
 #ifndef EMULATOR_SUPPORT_DEBUGLOG_H
 #define EMULATOR_SUPPORT_DEBUGLOG_H
 
+#include <ncurses.h>
+#include <panel.h>
+
+class Classic99Peripheral;
+class WindowTrack;
+
 void debug_init();
 void debug_shutdown();
 void debug_write(const char *s, ...);
 void debug_size(int &x, int &y);
 void fetch_debug(char *buf);
+
+WindowTrack *debug_create_view(Classic99Peripheral *pOwner);
+void debug_unregister_view(Classic99Peripheral *pOwner);
+
+// small class for internally tracking tui windows
+class WindowTrack {
+public:
+    WindowTrack(Classic99Peripheral *p);
+    WindowTrack() = delete;
+    ~WindowTrack();
+
+    int minr, minc;
+    Classic99Peripheral *pOwner;    // warning: can be NULL!
+    char szname[16];
+};
 
 #endif
 

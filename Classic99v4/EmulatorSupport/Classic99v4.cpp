@@ -24,6 +24,29 @@
 #include "../Systems/TexasInstruments/TI994A.h"
 #include "../Systems/TexasInstruments/TI994A_22.h"
 
+// TODO: all the cross platform stuff is nice, but we could do
+// better for the blind users - the TUI stuff probably won't play
+// nicely with text to speech systems. We should be able to have a
+// build option for the Windows version to integrate a menu. 
+// We have all the Win32 code in the old Classic99,
+// so that should not be too big a challenge. It's okay if it
+// has both the GUI menu and the TUI menu, I think. I'll just
+// have to make the Windows menu call into the TUI ops.
+// 
+// It would only be the menu, I think, I don't think I'd re-integrate
+// all the debug and configuration dialogs.
+// 
+// Alternately, maybe that's a question to ask. If the console can
+// be read aloud, and the interface to the menu is not too difficult
+// (keyboard interface? F10 and arrows?), then I wonder if it might
+// be possible to do it with just the TUI anyway?
+// 
+// I am not currently concerned about Linux/Mac... that starts
+// to get into the frameworks that I was so discouraged about
+// avoiding in the first place, and I've no idea if they even work.
+//
+// Documentation on set up and operation will be important to help.
+
 // we expect time steps of 15-20 milliseconds, so we'll set an upper limit of 100ms
 // Any more than that, and we discard the lost time. This is in microseconds.
 #define MAX_TIME_SKIP 100000

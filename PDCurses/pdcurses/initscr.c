@@ -339,10 +339,16 @@ int resize_term(int nlines, int ncols)
 {
     PDC_LOG(("resize_term() - called: nlines %d\n", nlines));
 
+    // (mb) moved from below. If the user resizes the console smaller than 2
+    // on either axis, PDC_resize_screen will fail, but if this flag is not
+    // cleared, the user never sees another KEY_RESIZE message, even if the
+    // user resizes larger. So we have to reset this either way.
+    SP->resized = FALSE;
+
     if (!stdscr || PDC_resize_screen(nlines, ncols) == ERR)
         return ERR;
 
-    SP->resized = FALSE;
+    //SP->resized = FALSE;
 
     SP->lines = PDC_get_rows();
     LINES = SP->lines - SP->linesrippedoff - SP->slklines;

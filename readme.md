@@ -38,19 +38,19 @@ In Windows, open Classic99v4.sln in Visual Studio 2022 (Community is fine), and 
 
 In Linux and Mac, open a terminal. cd to the Classic99 folder, then:
 
-    md build
+    mkdir build
     cd build
     cmake ..
     make
 
 Under Debian, I noted I needed to install these additional libraries. There may be others:
 
-    apt-get install cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+    apt-get install cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libncurses-dev
     
 For Raspberry PI, install these libs, and then run CMAKE with these commands:
 
     sudo apt-get install --no-install-recommends raspberrypi-ui-mods lxterminal gvfs
-    sudo apt-get install libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libasound2-dev mesa-common-dev libgl1-mesa-dev
+    sudo apt-get install libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libasound2-dev mesa-common-dev libgl1-mesa-dev libncurses-dev
 
     cd build
     cmake -DPLATFORM=Desktop -DGRAPHICS=GRAPHICS_API_OPENGL_21 ..
@@ -65,8 +65,8 @@ Tested Platforms
 - Windows     11          working     5/7/2025
 - Linux       Debian 12   working     5/7/2025
 - Linux       WSL2 Debian working     5/7/2025
-- Mac OSX     Sequoia15.2 working     5/7/2025    OpenGL build deprecated, audio not tested
-- PI 4	      R-PiOS 6.12 working     5/7/2025    Requires OpenGL 2.1 as noted above
+- Mac OSX     Sequoia15.2 working     5/7/2025    OpenGL build marked deprecated, audio not tested
+- PI 4	      R-PiOS 6.12 working     5/7/2025    Requires OpenGL 2.1 build as noted above
 
 Credits
 =======
@@ -90,13 +90,14 @@ applications, and to alter it and redistribute it freely, subject to the followi
 
   3. This notice may not be removed or altered from any source distribution.
 
-There is a very good chance that Classic99 uses modified source. Any modifications are tagged (mb).
+Classic99 uses modified source. Any modifications are tagged (mb).
 
 ---
 
 PDCurses is used in the Windows port and is available here: https://pdcurses.org/
 
-The core package and most ports are in the public domain, but a few files in the demos and X11 directories are subject to copyright under licenses described there.
+The core package and most ports are in the public domain, but a few files in the demos and X11 directories 
+are subject to copyright under licenses described there.
 
 This software is provided AS IS with NO WARRANTY whatsoever.
 
