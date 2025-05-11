@@ -859,11 +859,13 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
 	    buffer += sprintf(buffer, "VDP7   %02X   ", VDPREG[7]);
 	    if (VDPREG[0]&0x10) {
 		    // text mode, foreground matters
-		    buffer += sprintf(buffer, "%s on ", COLORNAMES[(VDPREG[7]*0xf0)>>4]);
+		    buffer += sprintf(buffer, "%s on ", COLORNAMES[(VDPREG[7]&0xf0)>>4]);
 	    } else if (VDPREG[7]&0xf0) {
 		    buffer += sprintf(buffer, "??? on ");	// not that this is terribly critical, but technically wrong
-	    }
-        buffer += sprintf(buffer, "%s", COLORNAMES[VDPREG[7]*0xf]);
+	    } else {
+            buffer += sprintf(buffer, "background: ");
+        }
+        buffer += sprintf(buffer, "%s", COLORNAMES[VDPREG[7]&0xf]);
         base += x; buffer = base;
         base += x; buffer = base;
 

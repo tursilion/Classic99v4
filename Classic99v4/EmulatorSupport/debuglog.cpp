@@ -69,6 +69,7 @@ WindowTrack::~WindowTrack() {
 //TODO: mousemask enables mouse input from the console, which in turn disables quickedit, needed
 //      for copy/paste. We'll need an option to disable that, or just a keypress to copy the screen
 //      might well be enough.
+//      I am starting to think maybe I don't need a mouse driven menu - keyboard driven is more than enough
 void debug_thread_init() {
     autoMutex mutex(debugLock);
 
@@ -78,7 +79,7 @@ void debug_thread_init() {
     noecho();               // no character echo
     keypad(stdscr, TRUE);   // enable extended keys
     nodelay(stdscr, TRUE);  // non-blocking getch
-    mousemask(BUTTON1_PRESSED|BUTTON1_RELEASED, NULL);   // respond to mouse clicks
+    //mousemask(BUTTON1_PRESSED|BUTTON1_RELEASED, NULL);   // respond to mouse clicks
     curs_set(0);            // invisible cursor
 
     // set up the panes system
