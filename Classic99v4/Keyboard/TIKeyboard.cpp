@@ -10,6 +10,8 @@
 // The CRU bits >0000 through >001f are repeated through the whole range!
 // from >0000 to >07FF
 
+// Extended keyboard isn't working... we'll sort that later
+
 #if 0
 
 BIT	HW	C99	Purpose						Status
@@ -44,6 +46,12 @@ TIKeyboard::TIKeyboard(Classic99System *core)
 	, alphaActive(false)
 	, bit17(false)
 {
+    joyx[0]=0;
+    joyy[0]=0;
+    joyx[1]=0;
+    joyy[1]=0;
+    joyfire[0]=0;
+    joyfire[1]=0;
 }
 TIKeyboard::~TIKeyboard() {
 }
@@ -217,6 +225,14 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 				// TODO: we can remove this here eventually...
 				fJoystickActiveOnKeys=180;		// frame countdown! Don't use PS2 arrow keys for this many frames
 			}
+
+            // TODO: technically left+right and up+down is perfectly possible on the TI hardware, but
+            // it's not here.
+
+            // set the keyboard map
+            joyx[index] = joyX;
+            joyy[index] = joyY;
+            joyfire[index] = joyFire;
 		}
 
 		// TODO: this is where we actually extract the data we actually care about...
@@ -245,32 +261,38 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
     (void)cycles;
     (void)rmw;
 
-    // First check if we are reading alpha lock - we do the inversion of caps lock
-	if ((addr == 0x07) && (alphaActive)) {
-		uint8_t ret = 0;
+    if (is4A()) {
+        // 4A specifics
 
-		if (IsKeyDown(RL_KEY_CAPS_LOCK))	{		// check CAPS LOCK (on)
-			ret = 1;
-		}
+        // First check if we are reading alpha lock - we do the inversion of caps lock
+	    if ((addr == 0x07) && (alphaActive)) {
+		    uint8_t ret = 0;
 
-		return ret;
-	}
+		    if (IsKeyDown(RL_KEY_CAPS_LOCK))	{		// check CAPS LOCK (on)
+			    ret = 1;
+		    }
 
-	// try the magic loopback - only the 99/4 needs this
-	if (addr == 17) {
-		// going to just flip flop this to get past whatever is wrong...
-		// TODO: Classic99 3xx does NOT have this problem...
-		// This could be related to the missing 9901 timer mode, perhaps
-		// Can usually reproduce the issue by entering TI BASIC and pressing 6. Yes, just that. No, it doesn't make sense.
-		// TODO: what the heck am I talking about here??
-		bit17 = !bit17;
-		return bit17 ? true : false;
-	}
+		    return ret;
+	    }
+    } else {
+        // 4 specifics
+
+    	// try the magic loopback - only the 99/4 needs this
+	    if (addr == 17) {
+		    // going to just flip flop this to get past whatever is wrong...
+		    // TODO: Classic99 3xx does NOT have this problem...
+		    // This could be related to the missing 9901 timer mode, perhaps
+		    // Can usually reproduce the issue by entering TI BASIC and pressing 6. Yes, just that. No, it doesn't make sense.
+		    // TODO: what the heck am I talking about here??
+		    bit17 = !bit17;
+		    return bit17 ? true : false;
+	    }
+    }
 
     // try joysticks... 
     uint8_t ret = CheckJoysticks(addr, scanCol);
     if (1 == ret) {
-		Array8x8 &KEYS = getKeyArray();
+		const Array8x8 &KEYS = getKeyArray();
         // nothing else matched, so check the keyboard array
         // Also manually check right versions of left keys
         int key = KEYS[scanCol][addr-3];
@@ -320,6 +342,8 @@ void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE
 
 bool TIKeyboard::init(int idx) {
 	setIndex("TIKeyboard", idx);
+    debug_create_view(this, 0);
+
     return true;
 }
 
@@ -329,17 +353,87 @@ bool TIKeyboard::operate(double timestamp) {
 }
 
 bool TIKeyboard::cleanup() {
+    debug_unregister_view(this);
     return true;
 }
 
-void TIKeyboard::getDebugSize(int &x, int &y) {
-    // we had a nice bitmapped keyboard map, but right now, not sure
-    x=0;
-    y=0;
+void TIKeyboard::getDebugSize(int &x, int &y, int user) {
+    (void)user;
+    x=KWSIZE;
+    y=5;
 }
 
-void TIKeyboard::getDebugWindow(char *buffer) {
-    // nothing at the moment
+// TODO: debug which column is currently active for scanning somehow
+// Maybe when we get color?
+void TIKeyboard::getDebugWindow(char *buffer, int user) {
+    const Array8x8 &KEYS = getKeyArray();
+    const Array8x8 &KeyDebug = getKeyDebugArray();
+    int r,c;
+	int JOY1COL = getJoy1Col();
+	int JOY2COL = getJoy2Col();
+    (void)user;
+
+    getDebugSize(c, r, 0);
+    memcpy(buffer, getKeyDebugString(), r*c);
+    // R/C might be swapped here, that's legacy from original Classic99 that it's all confused
+    for (int r=0; r<8; ++r) {
+        for (int c=0; c<8; ++c) {
+
+            if ((r == JOY1COL) || (r == JOY2COL)) {
+                // joystick update
+                int idx = 0;
+                if (r == JOY2COL) idx = 1;
+                switch (c) {
+                    case 0:
+                        // fire
+                        if (joyfire[idx]) buffer[KeyDebug[r][c]] = '*';
+                        break;
+                    case 1:
+                        // left
+                        if (joyx[idx] == -4) buffer[KeyDebug[r][c]] = '*';
+                        break;
+                    case 2:
+                        // right
+                        if (joyx[idx] == 4) buffer[KeyDebug[r][c]] = '*';
+                        break;
+                    case 3:
+                        // down
+                        if (joyy[idx] == -4) buffer[KeyDebug[r][c]] = '*';
+                        break;
+                    case 4:
+                        // up
+                        if (joyy[idx] == 4) buffer[KeyDebug[r][c]] = '*';
+                        break;
+                }
+            } else {
+                int key = KEYS[r][c];
+                if (IsKeyDown(key)) {
+                    // TODO: we can use a code to make an invert state instead
+                    buffer[KeyDebug[r][c]] = '*';   
+                } else if ((key == RL_KEY_LEFT_ALT) && (IsKeyDown(RL_KEY_RIGHT_ALT))) {
+                    buffer[KeyDebug[r][c]] = '*';   
+                } else if ((key == RL_KEY_LEFT_SHIFT) && (IsKeyDown(RL_KEY_RIGHT_SHIFT))) {
+                    buffer[KeyDebug[r][c]] = '*';   
+                } else if ((key == RL_KEY_LEFT_CONTROL) && (IsKeyDown(RL_KEY_RIGHT_CONTROL))) {
+                    buffer[KeyDebug[r][c]] = '*';
+                }
+            
+                // the 99/4A has a couple of extra keys
+                // easy way to detect which keyboard we're on is to check joystick 1
+                if (is4A()) {
+                    if ((key == RL_KEY_LEFT_SHIFT) && (KeyDebug[r][c] == '*')) {
+                        // there's a second shift key, wired in parallel
+                        buffer[3*KWSIZE+27] = '*';
+                    }
+                }
+            }
+        }
+    }
+
+    if (!IsKeyDown(RL_KEY_CAPS_LOCK)) {
+        // alpha lock is inverted here to make it easier to use
+        buffer[4*KWSIZE+ 7] = '*';
+    }
 }
 
 int TIKeyboard::saveStateSize() {

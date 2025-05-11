@@ -33,23 +33,27 @@ static int currentDebugLine;
 static std::recursive_mutex *debugLock;        // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, it's not thread safe
 static std::thread *debugThread;               // the actual thread object
 static std::vector<WindowTrack> debugPanes;
-static WindowTrack *topMost = nullptr;
+static int topMost = 0;
 static char *debug_buf = nullptr;     // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
+static bool mouse_btn_down = false;
 
 using namespace std::chrono_literals;
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
 
-WindowTrack::WindowTrack(Classic99Peripheral *p) 
-    : pOwner(p)
+WindowTrack::WindowTrack(Classic99Peripheral *p, int user) 
+    : minr(0)
+    , minc(0)
+    , userval(user)
+    , pOwner(p)
 {
     autoMutex lock(debugLock);
 
     szname[0] = '\0';
     if (NULL != p) {
-        p->getDebugSize(minc,minr);
+        p->getDebugSize(minc,minr,userval);
         strncpy(szname, p->getName(), sizeof(szname)-1);
         szname[sizeof(szname)-1] = '\0';
     } else {
@@ -62,6 +66,9 @@ WindowTrack::WindowTrack(Classic99Peripheral *p)
 WindowTrack::~WindowTrack() {
 }
 
+//TODO: mousemask enables mouse input from the console, which in turn disables quickedit, needed
+//      for copy/paste. We'll need an option to disable that, or just a keypress to copy the screen
+//      might well be enough.
 void debug_thread_init() {
     autoMutex mutex(debugLock);
 
@@ -71,13 +78,13 @@ void debug_thread_init() {
     noecho();               // no character echo
     keypad(stdscr, TRUE);   // enable extended keys
     nodelay(stdscr, TRUE);  // non-blocking getch
-    mousemask(BUTTON1_PRESSED, NULL);   // respond to mouse clicks
+    mousemask(BUTTON1_PRESSED|BUTTON1_RELEASED, NULL);   // respond to mouse clicks
     curs_set(0);            // invisible cursor
 
     // set up the panes system
     debugPanes.clear();
-    debug_create_view(NULL);
-    topMost = &debugPanes[0];
+    debug_create_view(NULL, 0);
+    topMost = 0;
 
     // our own setup
     memset(lines, 0, sizeof(lines));
@@ -97,19 +104,43 @@ void debug_handle_resize() {
 }
 
 void debug_update() {
-    if (topMost == nullptr) {
+    autoMutex mutex(debugLock);
+
+    if (topMost >= debugPanes.size()) {
+        topMost = 0;
         if (debugPanes.size() < 1) {
+            int sr, sc;
+            getmaxyx(stdscr, sr, sc);
+            char buf[64];
+            strcpy(buf, "Classic99 v4xx - No Debug Panes Available");
+            if (sc < 64) buf[sc]=0;
+            mvprintw(0, 0, buf);
+            clrtoeol();
             return;
         }
-        topMost = &debugPanes[0];
     }
 
+    // screen size information
+    int sr, sc;
+    getmaxyx(stdscr, sr, sc);
+
+    // handle the debug screen, get info and menu line
+    WindowTrack *top = &debugPanes[topMost];
     int r,c;
-    if (topMost->pOwner == nullptr) {
+    char buf[64];
+    if (top->pOwner == nullptr) {
+        snprintf(buf, sizeof(buf), "Classic99 v4xx - [tab] - Debug");
+        buf[sizeof(buf)-1] = '\0';
         debug_size(c, r);
     } else {
-        topMost->pOwner->getDebugSize(c,r);
+        snprintf(buf, sizeof(buf), "Classic99 v4xx - [tab] - %s", top->pOwner->getName());
+        buf[sizeof(buf)-1] = '\0';
+        top->pOwner->getDebugSize(c,r, top->userval);
     }
+    mvprintw(0, 0, buf);
+    clrtoeol();
+    mvhline(1, 0, ACS_HLINE, sc);
+
     int neededSize = r*c;
     if (neededSize > debug_buf_size) {
         if (nullptr != debug_buf) {
@@ -124,15 +155,13 @@ void debug_update() {
         }
     }
 
-    int sr, sc;
-    getmaxyx(stdscr, sr, sc);
-    sr -= 2;    // 2 lines for menu
+    sr -= 2;    // 2 lines for menu - get what's left
     if (sr <= 0) {
         // something went wrong! we lost the term! resized too small?
         return;
     }
     int firstOutLine = 0;
-    if (topMost->pOwner == nullptr) {
+    if (top->pOwner == nullptr) {
         fetch_debug(debug_buf);
         // for the debug log, we want to show the latest lines that fit
         // this will be true for things like the disassembly view later too, 
@@ -140,7 +169,7 @@ void debug_update() {
         firstOutLine = r-sr;
         if (firstOutLine < 0) firstOutLine = 0;
     } else {
-        topMost->pOwner->getDebugWindow(debug_buf);
+        top->pOwner->getDebugWindow(debug_buf, top->userval);
     }
 
     // now we need to write this into the actual screen window, whatever size we have
@@ -148,7 +177,9 @@ void debug_update() {
     for (int line = 0; line < sr; ++line) {
         if (line >= r) {
             // if the screen is taller than the debug
-            break;
+            move(line+2,0);
+            clrtoeol();
+            continue;
         }
         char *adr = (line+firstOutLine)*c+debug_buf;
         int w = min(c, sc);
@@ -180,6 +211,9 @@ void debug_thread() {
                     // we also get x,y movement while the button is down, but with bstate==0
                     if (event.bstate & BUTTON1_PRESSED) {
                         debug_write("Mouse click at %d,%d", event.x, event.y);
+                        mouse_btn_down = true;
+                    } else if (event.bstate & BUTTON1_RELEASED) {
+                        mouse_btn_down = false;
                     }
                     // TODO: eventually a menu system
                 }
@@ -190,12 +224,20 @@ void debug_thread() {
                 if (ch =='Q') {
                     RequestClose();
                     //TODO: obviously I don't want to quit on 'Q'
+                } else if (ch == '\t') {
+                    // change panel - again, this is all temporary test code
+                    topMost++;
+                    if (topMost >= debugPanes.size()) {
+                        topMost = 0;
+                    }
                 }
             }
-        }
 
-        // update the panel system
-        debug_update();
+            // update the panel system
+            if (!mouse_btn_down) {
+                debug_update();
+            }
+        }
 
         // sleep 5ms or whatever quantum is, it's only keypresses
         std::this_thread::sleep_for(5ms);
@@ -222,6 +264,16 @@ void debug_init() {
 
     debug_write("Debug thread initialized");
 }
+
+// stop debug, but don't clean up yet
+void debug_stop() {
+    // stop running the debug thread, so other objects can safely shut down
+    debug_quit = true;
+    if (nullptr != debugThread) {
+        debugThread->join();
+    }
+}
+
 void debug_shutdown() {
     debug_quit = true;
     if (nullptr != debugThread) {
@@ -249,15 +301,11 @@ void debug_write(const char *s, ...)
     OutputDebugString("\n");
 #endif
 
-    // truncate to rolling array size
-    buf[DEBUGLEN-1]='\0';
-
     {
         autoMutex lock(debugLock);
 
-        memset(&lines[currentDebugLine][0], ' ', DEBUGLEN);	    // clear line
-        strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN);    // copy in new line
-        lines[currentDebugLine][DEBUGLEN-1]='\0';               // zero terminate
+        memset(&lines[currentDebugLine][0], 0, DEBUGLEN);	    // clear line
+        strncpy(&lines[currentDebugLine][0], buf, DEBUGLEN-1);  // copy in new line
         if (++currentDebugLine >= DEBUGLINES) currentDebugLine = 0;
 
     	debug_dirty=true;									    // flag redraw
@@ -267,9 +315,9 @@ void debug_write(const char *s, ...)
 
 // request a new debug view of the specified size
 // TODO: Should this run through peripheral? I made a standard interface...
-WindowTrack *debug_create_view(Classic99Peripheral *pOwner) {
+WindowTrack *debug_create_view(Classic99Peripheral *pOwner, int userval) {
     autoMutex lock(debugLock);
-    debugPanes.emplace_back(pOwner);
+    debugPanes.emplace_back(pOwner, userval);
     return &debugPanes.back();
 }
 
@@ -285,28 +333,28 @@ void debug_unregister_view(Classic99Peripheral *pOwner) {
         }
     }
 
-    topMost = nullptr;
+    topMost = 0;
 }
 
 // size of the debug text output
 void debug_size(int &x, int &y) {
-    x = DEBUGLEN+1; // assumes each line includes \0 on output
+    x = DEBUGLEN;
     y = DEBUGLINES;
 }
 
 // fill in a text buffer
 void fetch_debug(char *buf) {
     // buf MUST be debug_size() x*y bytes long
-    memset(buf, '\0', DEBUGLINES*(DEBUGLEN+1));
+    memset(buf, '\0', DEBUGLINES*DEBUGLEN);
 
     {
         autoMutex mutex(debugLock);
 
         int line = currentDebugLine;
         for (int idx=0; idx<DEBUGLINES; ++idx) {
-            sprintf(buf, "%s", lines[line++]);
+            snprintf(buf, DEBUGLEN-1, "%s", lines[line++]);
             if (line >= DEBUGLINES) line=0;
-            buf += DEBUGLEN+1;
+            buf += DEBUGLEN;
         }
     }
 }

@@ -14,22 +14,24 @@ class Classic99Peripheral;
 class WindowTrack;
 
 void debug_init();
+void debug_stop();
 void debug_shutdown();
 void debug_write(const char *s, ...);
 void debug_size(int &x, int &y);
 void fetch_debug(char *buf);
 
-WindowTrack *debug_create_view(Classic99Peripheral *pOwner);
+WindowTrack *debug_create_view(Classic99Peripheral *pOwner, int user);
 void debug_unregister_view(Classic99Peripheral *pOwner);
 
 // small class for internally tracking tui windows
 class WindowTrack {
 public:
-    WindowTrack(Classic99Peripheral *p);
+    WindowTrack(Classic99Peripheral *p, int user);
     WindowTrack() = delete;
     ~WindowTrack();
 
     int minr, minc;
+    int userval;
     Classic99Peripheral *pOwner;    // warning: can be NULL!
     char szname[16];
 };

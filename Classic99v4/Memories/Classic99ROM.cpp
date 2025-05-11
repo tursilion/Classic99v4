@@ -61,14 +61,14 @@ bool Classic99ROM::cleanup() {
     return true;
 }
 
-void Classic99ROM::getDebugSize(int &x, int &y) {
+void Classic99ROM::getDebugSize(int &x, int &y, int user) {
     // not sure at the moment how this is going to work... might need to add
     // a view method as well as a debug window... or at least a variable offset
     x=0;
     y=0;
 }
 
-void Classic99ROM::getDebugWindow(char *buffer) {
+void Classic99ROM::getDebugWindow(char *buffer, int user) {
     // nothing at the moment
 }
 

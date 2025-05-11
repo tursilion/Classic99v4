@@ -169,8 +169,8 @@ public:
     virtual bool cleanup() { return true; }                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
-    virtual void getDebugSize(int &x, int &y) { x=0; y=0; }       // dimensions of a text mode output screen - either being 0 means none
-    virtual void getDebugWindow(char *buffer) { (void)buffer; }   // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+    virtual void getDebugSize(int &x, int &y, int user) { (void)user; x=0; y=0; }       // dimensions of a text mode output screen - either being 0 means none
+    virtual void getDebugWindow(char *buffer, int user) { (void)buffer; (void)user; }   // output the current debug information into the buffer, sized x*y - must include nul termination on each line
     virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically

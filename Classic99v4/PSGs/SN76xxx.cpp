@@ -443,7 +443,7 @@ bool SN76xxx::cleanup() {
 	return true;
 }
 
-void SN76xxx::getDebugSize(int &x, int &y) {
+void SN76xxx::getDebugSize(int &x, int &y, int user) {
 	// TODO: it might be nice to make the debug option a bitmap instead of text - then we just render
 	// it. This would allow graphics as well as text - for instance the sound could actually display
 	// a recent waveform, VDP could show graphical tables... to the same, multiple bitmaps per object
@@ -454,7 +454,7 @@ void SN76xxx::getDebugSize(int &x, int &y) {
 	x=11;
 	y=2;
 }
-void SN76xxx::getDebugWindow(char *buffer) {
+void SN76xxx::getDebugWindow(char *buffer, int user) {
 	// buffer should be sized to (x+2)*y (to allow \r\n endings)
 	sprintf(buffer, "%03X %03X %03X %01X\r\n %1X  %1X  %1X  %1X", 
 		nRegister[0], nRegister[1], nRegister[2], nRegister[3],

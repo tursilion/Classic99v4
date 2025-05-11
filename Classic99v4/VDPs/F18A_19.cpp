@@ -741,12 +741,12 @@ bool TMS9918::cleanup() {
 }
 
 // dimensions of a text mode output screen - either being 0 means none
-void TMS9918::getDebugSize(int &x, int &y) {
+void TMS9918::getDebugSize(int &x, int &y, int user) {
 	x=44; y=11;
 }
 
-// output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
-void TMS9918::getDebugWindow(char *buffer) {
+// output the current debug information into the buffer, sized x*y - must include nul termination on each line
+void TMS9918::getDebugWindow(char *buffer, int user) {
 	int tmp1,tmp2;
 
 	buffer += sprintf(buffer, "VDP0   %02X   ", VDPREG[0]);

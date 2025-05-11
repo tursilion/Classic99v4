@@ -151,17 +151,18 @@ bool TMS9900::cleanup() {
 }
 
 // dimensions of a text mode output screen - either being 0 means none
-void TMS9900::getDebugSize(int &x, int &y) {
+void TMS9900::getDebugSize(int &x, int &y, int user) {
     // TODO: Just going to use the existing version for now
     x = 32;
     y = 15;
 }
 
-// output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
-void TMS9900::getDebugWindow(char *buffer) {
+// output the current debug information into the buffer, sized x*y - must include nul termination on each line
+void TMS9900::getDebugWindow(char *buffer, int user) {
     // the buffer is guaranteed to be 32x30 with extra space for line endings
     // For all the stuff that's "missing", it's okay for the /debug system/ to composite
     // it, but there's no reason for the CPU to know about other chips...
+    (void)user;
 
     // prints the register information
     // spacing: <5 label><1 space><4 value><4 spaces><5 label><1 space><4 value>
@@ -202,7 +203,7 @@ void TMS9900::getDebugWindow(char *buffer) {
     // Instead of a buffer size check, we should put some poison values after the buffer and just
     // check if they are overwritten. 4 bytes is just one int.
     int x,y;
-    getDebugSize(x,y);
+    getDebugSize(x,y, 0);
     if (buffer > buffer+(x+2)*y) {
         debug_write("BUFFER OVERFLOW IN CPU DEBUG");
     }

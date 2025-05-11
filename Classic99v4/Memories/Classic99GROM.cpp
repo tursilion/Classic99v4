@@ -201,7 +201,7 @@ bool Classic99GROM::cleanup() {
     return true;
 }
 
-void Classic99GROM::getDebugSize(int &x, int &y) {
+void Classic99GROM::getDebugSize(int &x, int &y, int user) {
     // not sure at the moment how this is going to work... might need to add
     // a view method as well as a debug window... or at least a variable offset
     // We need a way to view the memory bytes, maybe edit them, as well as to
@@ -210,7 +210,7 @@ void Classic99GROM::getDebugSize(int &x, int &y) {
     y=0;
 }
 
-void Classic99GROM::getDebugWindow(char *buffer) {
+void Classic99GROM::getDebugWindow(char *buffer, int user) {
     // nothing at the moment
 }
 

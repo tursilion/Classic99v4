@@ -21,7 +21,11 @@ public:
     // ========== TIKeyboard interface ============
     int getJoy1Col() override;
     int getJoy2Col() override;
-    Array8x8 &getKeyArray() override; 
+    const Array8x8 &getKeyArray() override; 
+    const Array8x8 &getKeyDebugArray() override;
+    const char *getKeyDebugString() override;
+    bool is4A() override;
+
 };
 
 

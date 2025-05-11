@@ -148,6 +148,7 @@ int main(int argc, char **argv) {
     }
 
     // ... shutdown
+    debug_stop();
     pSys->deInitSystem();
     delete pSys;
     Cleanup();

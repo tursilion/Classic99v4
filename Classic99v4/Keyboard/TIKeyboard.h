@@ -9,7 +9,11 @@
 #ifndef TIKEYBOARD_H
 #define TIKEYBOARD_H
 
+#include "../EmulatorSupport/debuglog.h"
 #include "../EmulatorSupport/peripheral.h"
+
+// width of a keyboard line including the NUL terminator
+#define KWSIZE 36
 
 // used to define the key array, and make it easier to get a pointer to it ;)
 typedef int Array8x8[8][8];
@@ -48,8 +52,8 @@ public:
     bool cleanup() override;                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
-    void getDebugSize(int &x, int &y) override;             // dimensions of a text mode output screen - either being 0 means none
-    void getDebugWindow(char *buffer) override;             // output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
+    void getDebugSize(int &x, int &y, int user) override;             // dimensions of a text mode output screen - either being 0 means none
+    void getDebugWindow(char *buffer, int user) override;             // output the current debug information into the buffer, sized x*y - must include nul termination on each line
 	//virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
@@ -66,13 +70,17 @@ public:
 protected:
     virtual int getJoy1Col() = 0;
     virtual int getJoy2Col() = 0;
-    virtual Array8x8 &getKeyArray() = 0; 
+    virtual const Array8x8 &getKeyArray() = 0; 
+    virtual const Array8x8 &getKeyDebugArray() = 0;
+    virtual const char *getKeyDebugString() = 0;
+    virtual bool is4A() = 0;
 
 private:
     uint8_t CheckJoysticks(int addr, int scanCol);
 
     bool bJoy;
     int fJoystickActiveOnKeys;
+    int joyx[2],joyy[2],joyfire[2];
 
     int scanCol;
     bool alphaActive;

@@ -693,6 +693,9 @@ bool TMS9918::init(int index) {
 
 	bShowFPS = 1;
 
+    debug_create_view(this, 0);     // for the register view
+    debug_create_view(this, 1);     // for the screen dump
+
 	vdpReset(true);     // todo: need to allow warm reset
 
     return true;
@@ -757,103 +760,152 @@ bool TMS9918::operate(double timestamp) {
 
 // release everything claimed in init, save NV data, etc
 bool TMS9918::cleanup() {
+    debug_unregister_view(this);
 	pDisplay = nullptr;
 	return true;
 }
 
 // dimensions of a text mode output screen - either being 0 means none
-void TMS9918::getDebugSize(int &x, int &y) {
-	x=44; y=11;
+void TMS9918::getDebugSize(int &x, int &y, int user) {
+    if (user == 0) {
+        // registers
+    	x=44; y=12;
+    } else if (user == 1) {
+        // screen (either 32 or 40 columns)
+        x=40; y=24;
+    } else {
+        x=0; y=0;
+    }
 }
 
-// output the current debug information into the buffer, sized (x+2)*y to allow for windows style line endings
-void TMS9918::getDebugWindow(char *buffer) {
+// output the current debug information into the buffer, sized x*y - must include nul termination on each line
+void TMS9918::getDebugWindow(char *buffer, int user) {
 	int tmp1,tmp2;
+    int x,y;
+    getDebugSize(x,y,user);
+    memset(buffer, 0, x*y);
+    
+    if (user == 0) {
+        // registers
+        char *base = buffer;
+	    buffer += sprintf(buffer, "VDP0   %02X   ", VDPREG[0]);
+	    if (VDPREG[0] & 0xfc) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[0] & 0x02) buffer += sprintf(buffer, "BMP "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[0] & 0x01) buffer += sprintf(buffer, "EXT "); else buffer += sprintf(buffer, "    ");
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP0   %02X   ", VDPREG[0]);
-	if (VDPREG[0] & 0xfc) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[0] & 0x02) buffer += sprintf(buffer, "BMP "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[0] & 0x01) buffer += sprintf(buffer, "EXT "); else buffer += sprintf(buffer, "    ");
-	buffer += sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP1   %02X   ", VDPREG[1]);
+	    if (VDPREG[1] & 0x80) buffer += sprintf(buffer, "16k "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[1] & 0x40) buffer += sprintf(buffer, "EN "); else buffer += sprintf(buffer, "   ");
+	    if (VDPREG[1] & 0x20) buffer += sprintf(buffer, "EI "); else buffer += sprintf(buffer, "   ");
+	    if (VDPREG[1] & 0x10) buffer += sprintf(buffer, "TXT "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[1] & 0x08) buffer += sprintf(buffer, "MUL "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[1] & 0x04) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[1] & 0x02) buffer += sprintf(buffer, "DBL "); else buffer += sprintf(buffer, "    ");
+	    if (VDPREG[1] & 0x01) buffer += sprintf(buffer, "MAG "); else buffer += sprintf(buffer, "    ");
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP1   %02X   ", VDPREG[1]);
-	if (VDPREG[1] & 0x80) buffer += sprintf(buffer, "16k "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[1] & 0x40) buffer += sprintf(buffer, "EN "); else buffer += sprintf(buffer, "   ");
-	if (VDPREG[1] & 0x20) buffer += sprintf(buffer, "EI "); else buffer += sprintf(buffer, "   ");
-	if (VDPREG[1] & 0x10) buffer += sprintf(buffer, "TXT "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[1] & 0x08) buffer += sprintf(buffer, "MUL "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[1] & 0x04) buffer += sprintf(buffer, "??? "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[1] & 0x02) buffer += sprintf(buffer, "DBL "); else buffer += sprintf(buffer, "    ");
-	if (VDPREG[1] & 0x01) buffer += sprintf(buffer, "MAG "); else buffer += sprintf(buffer, "    ");
-	buffer += sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP2   %02X   SIT %04X ", VDPREG[2], (VDPREG[2]&0x0f)*0x400);
+	    if (VDPREG[2]&0xf0) buffer+=sprintf(buffer, "???");
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP2   %02X   SIT %04X", VDPREG[2], (VDPREG[2]&0x0f)*0x400);
-	if (VDPREG[2]&0xf0) buffer+=sprintf(buffer, "???");
-	buffer+= sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP3   %02X   CT  %04X Mask %04X ", VDPREG[3], CT, CTsize);
+	    if (VDPREG[0]&0x02) {
+		    // bitmap - check if the mask has holes in it
+		    tmp1 = 16;
+		    tmp2 = CTsize;
+		    while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
+		    if (tmp1 > 0) {
+			    while (tmp1--) {
+				    tmp2<<=1;
+				    if ((tmp2&0x8000)==0) {
+					    buffer+=sprintf(buffer, "??? ");
+					    break;
+				    }
+			    }
+		    }
+	    }
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP3   %02X   CT   %04X Mask %04X ", VDPREG[3], CT, CTsize);
-	if (VDPREG[0]&0x02) {
-		// bitmap - check if the mask has holes in it
-		tmp1 = 16;
-		tmp2 = CTsize;
-		while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
-		if (tmp1 > 0) {
-			while (tmp1--) {
-				tmp2<<=1;
-				if ((tmp2&0x8000)==0) {
-					buffer+=sprintf(buffer, "???");
-					break;
-				}
-			}
-		}
-	}
-	buffer+= sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP4   %02X   PDT %04X Mask %04X ", VDPREG[4], PDT, PDTsize);
+	    if (VDPREG[0]&0x02) {
+		    // bitmap - check if the mask has holes in it
+		    tmp1 = 16;
+		    tmp2 = PDTsize;
+		    while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
+		    if (tmp1 > 0) {
+			    while (tmp1--) {
+				    tmp2<<=1;
+				    if ((tmp2&0x8000)==0) {
+					    buffer+=sprintf(buffer, "???");
+					    break;
+				    }
+			    }
+		    }
+	    } else {
+		    // non-bitmap, just check unused bits
+		    if (VDPREG[4]&0xf8) buffer+=sprintf(buffer, "???");
+	    }
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP4   %02X   PDT  %02X Mask %04X", VDPREG[4], PDT, PDTsize);
-	if (VDPREG[0]&0x02) {
-		// bitmap - check if the mask has holes in it
-		tmp1 = 16;
-		tmp2 = PDTsize;
-		while ((tmp1--) && ((tmp2&0x8000)==0)) { tmp2<<=1; }
-		if (tmp1 > 0) {
-			while (tmp1--) {
-				tmp2<<=1;
-				if ((tmp2&0x8000)==0) {
-					buffer+=sprintf(buffer, "???");
-					break;
-				}
-			}
-		}
-	} else {
-		// non-bitmap, just check unused bits
-		if (VDPREG[4]&0xf8) buffer+=sprintf(buffer, "???");
-	}
-	buffer+= sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP5   %02X   SAL %04X ", VDPREG[5], SAL);
+	    if (VDPREG[5]&0x80) buffer+=sprintf(buffer, "???");
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP5   %02X   SAL %04X", VDPREG[5], SAL);
-	if (VDPREG[5]&0x80) buffer+=sprintf(buffer, "???");
-	buffer+= sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP6   %02X   SDT %04X ", VDPREG[6], SDT);
+	    if (VDPREG[6]&0xf8) buffer+=sprintf(buffer, "???");
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP6   %02X   SDT %04X", VDPREG[6], SDT);
-	if (VDPREG[6]&0xf8) buffer+=sprintf(buffer, "???");
-	buffer+= sprintf(buffer, "\r\n");
+	    buffer += sprintf(buffer, "VDP7   %02X   ", VDPREG[7]);
+	    if (VDPREG[0]&0x10) {
+		    // text mode, foreground matters
+		    buffer += sprintf(buffer, "%s on ", COLORNAMES[(VDPREG[7]*0xf0)>>4]);
+	    } else if (VDPREG[7]&0xf0) {
+		    buffer += sprintf(buffer, "??? on ");	// not that this is terribly critical, but technically wrong
+	    }
+        buffer += sprintf(buffer, "%s", COLORNAMES[VDPREG[7]*0xf]);
+        base += x; buffer = base;
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDP7   %02X   ", VDPREG[7]);
-	if (VDPREG[0]&0x10) {
-		// text mode, foreground matters
-		buffer += sprintf(buffer, "%s on ", COLORNAMES[(VDPREG[7]*0xf0)>>4]);
-	} else if (VDPREG[7]&0xf0) {
-		buffer += sprintf(buffer, "??? on ");	// not that this is terribly critical, but technically wrong
-	}
-	buffer += sprintf(buffer, "%s\r\n\r\n", COLORNAMES[VDPREG[7]&0x0f]);
+	    buffer += sprintf(buffer, "VDPST: %02X   ", VDPS);
+	    if (VDPS & 0x80) buffer += sprintf(buffer, "VBL "); else buffer += sprintf(buffer, "    ");
+	    if (VDPS & 0x40) buffer += sprintf(buffer, "5SP "); else buffer += sprintf(buffer, "    ");
+	    if (VDPS & 0x20) buffer += sprintf(buffer, "COL "); else buffer += sprintf(buffer, "    ");
+	    buffer += sprintf(buffer, "5thSP: %02X", VDPS&0x1f);
+        base += x; buffer = base;
+        base += x; buffer = base;
 
-	buffer += sprintf(buffer, "VDPST: %02X   ", VDPS);
-	if (VDPS & 0x80) buffer += sprintf(buffer, "VBL "); else buffer += sprintf(buffer, "    ");
-	if (VDPS & 0x40) buffer += sprintf(buffer, "5SP "); else buffer += sprintf(buffer, "    ");
-	if (VDPS & 0x20) buffer += sprintf(buffer, "COL "); else buffer += sprintf(buffer, "    ");
-	buffer += sprintf(buffer, "5thSP: %02X\r\n\r\n", VDPS&0x1f);
+	    sprintf(buffer, "VDPAD: %04X", VDPADD);
+    } else if (user == 1) {
+        // screen dump - just the SIT for now
+        // TODO: we can add color, including the TI Palette
+        // TODO: can we add character definitions, is that possible?
+        // assume the previous SIT table lookup is valid enough
+        int cols=32;
+        if (VDPREG[1] & 0x10) {			// MODE BIT 2
+            cols = 40;
+        }
 
-	buffer += sprintf(buffer, "VDPAD: %04X\r\n", VDPADD);
+        for (int r=0; r<24; ++r) {
+            char *adr = buffer+x*r;
+            for (int c=0; c<cols; ++c) {
+                int off = SIT+r*cols+c;
+                int ch;
+                if (off >= 0x4000) {
+                    ch = '?';
+                } else {
+                    ch = VDP[off];
+                    // TODO: debug input key for toggling basic offset
+                    // TODO: debug windows should have a help screen they can display
+                    // check for printable
+                    if ((ch < ' ') || (ch > '~')) {
+                        ch = '.';
+                    }
+                }
+                *(adr++)=ch;
+            }
+        }
+    }
 }
 
 // number of bytes needed to save state

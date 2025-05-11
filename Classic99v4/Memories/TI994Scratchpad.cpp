@@ -67,14 +67,14 @@ bool TI994Scratchpad::cleanup() {
     return true;
 }
 
-void TI994Scratchpad::getDebugSize(int &x, int &y) {
+void TI994Scratchpad::getDebugSize(int &x, int &y, int user) {
     // not sure at the moment how this is going to work... might need to add
     // a view method as well as a debug window... or at least a variable offset
     x=0;
     y=0;
 }
 
-void TI994Scratchpad::getDebugWindow(char *buffer) {
+void TI994Scratchpad::getDebugWindow(char *buffer, int user) {
     // nothing at the moment
 }
 
