@@ -793,7 +793,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
 	int tmp1,tmp2;
     int x,y;
     getDebugSize(x,y,user);
-    memset(buffer, 0, x*y);
+    (void)y;
     
     if (user == DEBUG_REGS) {
         // registers

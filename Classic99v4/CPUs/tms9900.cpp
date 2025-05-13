@@ -39,8 +39,12 @@ extern const Word BStatusLookup[256];               // byte statuses
 #endif
 
 // protect the disassembly backtrace
-// TODO: this is never initialized
 std::recursive_mutex *csDisasm; 
+
+enum {
+    DEBUG_REGISTERS,
+    DEBUG_DISASSEMBLY
+};
 
 // System interface
 
@@ -53,10 +57,15 @@ TMS9900::~TMS9900() {
 // claim resources from the core system, prepare the CPU
 bool TMS9900::init(int idx) {
     setIndex("TMS9900", idx);
+    csDisasm = new std::recursive_mutex();
+
 #ifdef BUILD_CPU
     buildcpu();
 #endif
     reset();
+
+    debug_create_view(this, DEBUG_REGISTERS);
+    debug_create_view(this, DEBUG_DISASSEMBLY);
 
     return true;
 }
@@ -146,68 +155,75 @@ bool TMS9900::operate(double timestamp) {
 
 // release everything claimed in init, save NV data, etc
 bool TMS9900::cleanup() {
-    // actually, nothing to do here
+    debug_unregister_view(this);    // this removes ALL views
     return true;
 }
 
 // dimensions of a text mode output screen - either being 0 means none
 void TMS9900::getDebugSize(int &x, int &y, int user) {
-    // TODO: Just going to use the existing version for now
-    x = 32;
-    y = 15;
+    if (user == DEBUG_REGISTERS) {
+        x = 44;
+        y = 15;
+    } else if (user == DEBUG_DISASSEMBLY) {
+        x = 0;
+        y = 0;
+    }
 }
 
 // output the current debug information into the buffer, sized x*y - must include nul termination on each line
 void TMS9900::getDebugWindow(char *buffer, int user) {
-    // the buffer is guaranteed to be 32x30 with extra space for line endings
     // For all the stuff that's "missing", it's okay for the /debug system/ to composite
     // it, but there's no reason for the CPU to know about other chips...
-    (void)user;
 
     // prints the register information
     // spacing: <5 label><1 space><4 value><4 spaces><5 label><1 space><4 value>
-    int WP = GetWP();
-    for (int idx=0; idx<8; idx++) {
-	    int val=ROMWORD(WP+idx*2, ACCESS_FREE);
-	    int val2=ROMWORD(WP+(idx+8)*2, ACCESS_FREE);
-        if (idx == 0) {
-    	    buffer += sprintf(buffer, " R%2d  %04X   R%2d  %04X\r\n", idx, val, idx+8, val2);
-        } else {
-    	    buffer += sprintf(buffer, " R%2d  %04X   R%2d  %04X\r\n", idx, val, idx+8, val2);
-        }
-    }
-
-    buffer += sprintf(buffer, "\r\n");
-
-    buffer += sprintf(buffer, "  PC  %04X\r\n", GetPC());
-    buffer += sprintf(buffer, "  WP  %04X\r\n", GetWP());
-    buffer += sprintf(buffer, "  ST  %04X\r\n", GetST());
-
-    buffer += sprintf(buffer, "\r\n");
-
-    // break down the status register
-    int val=GetST();
-    buffer += sprintf(buffer, "  ST : %s %s %s %s %s %s %s\r\n", 
-        (val&BIT_LGT)?"LGT":"   ", 
-        (val&BIT_AGT)?"AGT":"   ", 
-        (val&BIT_EQ)?"EQ":"  ",
-	    (val&BIT_C)?"C":" ", 
-        (val&BIT_OV)?"OV":"  ", 
-        (val&BIT_OP)?"OP":"  ", 
-        (val&BIT_XOP)?"XOP":" "
-    );
-    buffer += sprintf(buffer, " MASK: %X\r\n", val&ST_INTMASK);
-
-#ifdef _DEBUG
-    // TODO: move this to the code that calls getDebugWindow, so the overflow test is centralized
-    // Instead of a buffer size check, we should put some poison values after the buffer and just
-    // check if they are overwritten. 4 bytes is just one int.
     int x,y;
-    getDebugSize(x,y, 0);
-    if (buffer > buffer+(x+2)*y) {
-        debug_write("BUFFER OVERFLOW IN CPU DEBUG");
+    getDebugSize(x, y, 0);
+    (void)y;
+
+    if (user == DEBUG_REGISTERS) {
+        char *base = buffer;
+        int WP = GetWP();
+        for (int idx=0; idx<8; idx++) {
+	        int val=ROMWORD(WP+idx*2, ACCESS_FREE);
+	        int val2=ROMWORD(WP+(idx+8)*2, ACCESS_FREE);
+            if (idx == 0) {
+    	        buffer += sprintf(buffer, " R%2d  %04X   R%2d  %04X", idx, val, idx+8, val2);
+            } else {
+    	        buffer += sprintf(buffer, " R%2d  %04X   R%2d  %04X", idx, val, idx+8, val2);
+            }
+            base += x; buffer = base;
+        }
+
+        base += x; buffer = base;
+
+        buffer += sprintf(buffer, "  PC  %04X", GetPC());
+        base += x; buffer = base;
+        buffer += sprintf(buffer, "  WP  %04X", GetWP());
+        base += x; buffer = base;
+        buffer += sprintf(buffer, "  ST  %04X", GetST());
+        base += x; buffer = base;
+
+        base += x; buffer = base;
+
+        // break down the status register
+        int val=GetST();
+        buffer += sprintf(buffer, "  ST : %s %s %s %s %s %s %s", 
+            (val&BIT_LGT)?"LGT":"   ", 
+            (val&BIT_AGT)?"AGT":"   ", 
+            (val&BIT_EQ)?"EQ":"  ",
+	        (val&BIT_C)?"C":" ", 
+            (val&BIT_OV)?"OV":"  ", 
+            (val&BIT_OP)?"OP":"  ", 
+            (val&BIT_XOP)?"XOP":" "
+        );
+        base += x; buffer = base;
+    
+        sprintf(buffer, " MASK: %04X", val&ST_INTMASK);
+    } else if (user == DEBUG_DISASSEMBLY) {
+        // TODO: emit the current disassembly log
+
     }
-#endif
 }
 
 // number of bytes needed to save state
@@ -693,8 +709,9 @@ void TMS9900::TriggerInterrupt(int level) {
     // TODO: the debug disassembly log needs to be integrated into the debug system
     // we can just make the function call and let it decide whether to log or discard it
 #if 0
-    // todo: use automutex? WARNING: csDisasm is never 'new'd, need to fix when enabling
-    csDisasm->lock();
+    {
+        autoMutex lock(csDisasm);
+
         if (NULL != fpDisasm) {
             if ((disasmLogType == 0) || (pCurrentCPU->GetPC() > 0x2000)) {
                 fprintf(fpDisasm, "**** Interrupt Trigger, vector >%04X (%s), level %d\n",
@@ -703,7 +720,7 @@ void TMS9900::TriggerInterrupt(int level) {
                     level);
             }
         }
-    csDisasm->unlock();
+    }
 #endif
 
     // no more idling!

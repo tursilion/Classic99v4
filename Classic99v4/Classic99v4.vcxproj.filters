@@ -265,6 +265,9 @@
     <ClCompile Include="EmulatorSupport\speaker.cpp">
       <Filter>Emulator Support</Filter>
     </ClCompile>
+    <ClCompile Include="EmulatorSupport\9900disasm.cpp">
+      <Filter>Emulator Support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="License.txt" />

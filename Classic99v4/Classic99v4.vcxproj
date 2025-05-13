@@ -200,6 +200,7 @@
   <ItemGroup>
     <ClCompile Include="CPUs\tms9900.cpp" />
     <ClCompile Include="CPUs\tms9900build.cpp" />
+    <ClCompile Include="EmulatorSupport\9900disasm.cpp" />
     <ClCompile Include="EmulatorSupport\Classic99v4.cpp" />
     <ClCompile Include="EmulatorSupport\debuglog.cpp" />
     <ClCompile Include="EmulatorSupport\interestingData.cpp" />

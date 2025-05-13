@@ -1722,9 +1722,22 @@ static void WindowSizeCallback(GLFWwindow *window, int width, int height)
     if (IsWindowFullscreen()) return;
 
     // Set current screen size
-
     CORE.Window.screen.width = width;
     CORE.Window.screen.height = height;
+
+    // (mb): we need to undo the scaling - I wonder if it's safe to use the same value?
+    // Moving between monitors with different DPI probably won't work (not that it ever does)
+    // Unfortunately the code calculates the scale instead of looking it up, but we'll
+    // live with that for now. I think I'll probably have to disable highDPI.. it doesn't
+    // really need to apply anyway. But we'll try to fix it anyway. (This works well enough.)
+    if ((CORE.Window.flags & FLAG_WINDOW_HIGHDPI) > 0)
+    {
+#if !defined(__APPLE__)
+        // because of how it's defined, we can take the scale from CORE.Window.screenScale.m0, it's the same both ways
+        CORE.Window.screen.width = (int)(CORE.Window.screen.width / CORE.Window.screenScale.m0 + 0.5);
+        CORE.Window.screen.height = (int)(CORE.Window.screen.height / CORE.Window.screenScale.m0 + 0.5);
+#endif
+    }
 
     // NOTE: Postprocessing texture is not scaled to new size
 }

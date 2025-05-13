@@ -57,13 +57,13 @@ bool Classic99TV::init() {
         windowXSize = 284*4;    // todo: we might not need these anymore... except for load/save - see the draw loop
         windowYSize = 243*4;
 
-        SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_ALWAYS_RUN | FLAG_WINDOW_HIGHDPI);
+        // Don't do HIGHDPI - we don't need to worry about user scaling as the window is sizable anyway
+        SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_ALWAYS_RUN);
         InitWindow(windowXSize, windowYSize, "Classic99v4");            // TODO: actual size
         SetWindowMinSize(284, 243);
         SetExitKey(RL_KEY_NULL);  // don't trap escape
 
         debug_write("Screen is %d x %d", GetScreenWidth(), GetScreenHeight());
-
 
         // SetWindowPosition(x, y);                // TODO: actual position
 

@@ -10,7 +10,8 @@
 // The CRU bits >0000 through >001f are repeated through the whole range!
 // from >0000 to >07FF
 
-// Extended keyboard isn't working... we'll sort that later
+// TODO: Extended keyboard isn't working... we'll sort that later
+
 
 #if 0
 
@@ -425,14 +426,21 @@ void TIKeyboard::getDebugWindow(char *buffer, int user) {
                         // there's a second shift key, wired in parallel
                         buffer[3*KWSIZE+27] = '*';
                     }
+                } else {
+                    // and the 4 has two space keys (why? who knows??)
+                    if ((key == RL_KEY_SPACE) && (buffer[KeyDebug[r][c]] == '*')) {
+                        buffer[4*KWSIZE+13] = '*';
+                    }
                 }
             }
         }
     }
 
-    if (!IsKeyDown(RL_KEY_CAPS_LOCK)) {
-        // alpha lock is inverted here to make it easier to use
-        buffer[4*KWSIZE+ 7] = '*';
+    if (is4A()) {
+        if (!IsKeyDown(RL_KEY_CAPS_LOCK)) {
+            // alpha lock is inverted here to make it easier to use
+            buffer[4*KWSIZE+ 7] = '*';
+        }
     }
 }
 

@@ -36,14 +36,14 @@ static const Array8x8 keyDebugMap4 = {
 {    /* unused */	0,0,0,0, 0,0,0,0 },
 
 {    /* 1 */		3*KWSIZE+19, 2*KWSIZE+18, 1*KWSIZE+19, 0*KWSIZE+18, 3*KWSIZE+13, 2*KWSIZE+12, 1*KWSIZE+13, 0*KWSIZE+12},    // NHU7 CDR4
-{    /* Joy 1 */	3*KWSIZE+ 0, 1*KWSIZE+ 0, 1*KWSIZE+ 2, 2*KWSIZE+ 1, 0*KWSIZE+ 1, 0, 0, 0 },                     // FLRDU
-{    /* 3 */		3*KWSIZE+23, 2*KWSIZE+22, 1*KWSIZE+21, 0*KWSIZE+22, 3*KWSIZE+19, 2*KWSIZE+18, 1*KWSIZE+ 9, 0*KWSIZE+ 8 },   // .KI9 ZAW2
+{    /* Joy 1 */	3*KWSIZE+ 0, 1*KWSIZE+ 0, 1*KWSIZE+ 2, 2*KWSIZE+ 1, 0*KWSIZE+ 1, 0, 0, 0 },                                 // FLRDU
+{    /* 3 */		3*KWSIZE+23, 2*KWSIZE+22, 1*KWSIZE+23, 0*KWSIZE+22, 3*KWSIZE+ 9, 2*KWSIZE+ 8, 1*KWSIZE+ 9, 0*KWSIZE+ 8 },   // .KO9 ZAW2
 
-{    /* Joy 2 */	3*KWSIZE+31, 1*KWSIZE+31, 1*KWSIZE+33, 2*KWSIZE+32, 0*KWSIZE+32, 0, 0, 0 },                     // FLRDU
+{    /* Joy 2 */	3*KWSIZE+31, 1*KWSIZE+31, 1*KWSIZE+33, 2*KWSIZE+32, 0*KWSIZE+32, 0, 0, 0 },                                 // FLRDU
 	
-{    /* 5 */		3*KWSIZE+21, 2*KWSIZE+20, 1*KWSIZE+21, 0*KWSIZE+20, 3*KWSIZE+11, 2*KWSIZE+ 9, 1*KWSIZE+11, 0*KWSIZE+10 },   // MJI8 XSE3
+{    /* 5 */		3*KWSIZE+21, 2*KWSIZE+20, 1*KWSIZE+21, 0*KWSIZE+20, 3*KWSIZE+11, 2*KWSIZE+10, 1*KWSIZE+11, 0*KWSIZE+10 },   // MJI8 XSE3
 {    /* 6 */		3*KWSIZE+17, 2*KWSIZE+16, 1*KWSIZE+17, 0*KWSIZE+16, 3*KWSIZE+15, 2*KWSIZE+14, 1*KWSIZE+15, 0*KWSIZE+14 },   // BGY6 VFT5
-{    /* 7 */		3*KWSIZE+25, 2*KWSIZE+24, 1*KWSIZE+25, 0*KWSIZE+24, 3*KWSIZE+ 6, 2*KWSIZE+ 6, 1*KWSIZE+ 6, 0*KWSIZE+ 6 }    // rLP0 s Q1
+{    /* 7 */		3*KWSIZE+25, 2*KWSIZE+24, 1*KWSIZE+25, 0*KWSIZE+24, 3*KWSIZE+ 7, 2*KWSIZE+ 6, 1*KWSIZE+ 7, 0*KWSIZE+ 6 }    // rLP0 s Q1
 };
 
 // not much needed for construction

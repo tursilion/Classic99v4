@@ -10,6 +10,9 @@
 // TODO: an option to close the console (maybe with a keypress to reopen it?), or at least push it behind the main window
 // TODO: future: multiple consoles for multiple debug windows
 // TODO: maybe color someday? https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/color.html
+// TODO: implement optional split panel mode (maybe an F-key to toggle)
+// TODO: At startup/shutdown, record whether in split panel mode or not, and what the two panels are
+// TODO: each debug panel should implement an optional help screen - displayed if they support it, else help key is ignored
 
 #include "os.h"
 #include <raylib.h>
@@ -42,6 +45,8 @@ using namespace std::chrono_literals;
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
 // TODO: I'll probably create some kind of class to display all the debug windows, including this...
+// TODO: add the command prompt - if you type other than a command key, you get a command line
+//       implement as per windowproc.cpp line 3766 in the old Classic99
 
 WindowTrack::WindowTrack(Classic99Peripheral *p, int user) 
     : minr(0)
@@ -105,6 +110,8 @@ void debug_handle_resize() {
 }
 
 void debug_update() {
+    const int GUARDSIZE = 32;
+
     autoMutex mutex(debugLock);
 
     if (topMost >= debugPanes.size()) {
@@ -148,14 +155,20 @@ void debug_update() {
         if (nullptr != debug_buf) {
             free(debug_buf);
         }
-        // might convert these to ints later for attribute support
-        debug_buf = (char*)malloc(neededSize*sizeof(unsigned char));
+        // might convert these to ints later for attribute support - 32 bytes of guard data
+        debug_buf = (char*)malloc(neededSize*sizeof(unsigned char)+GUARDSIZE);
         if (nullptr == debug_buf) {
             debug_buf_size = 0;
         } else {
             debug_buf_size = neededSize;
         }
     }
+    if (debug_buf_size == 0) {
+        // we couldn't get a debug buffer, return
+        return;
+    }
+    memset(debug_buf, 0, neededSize);
+    memset(debug_buf+neededSize, 0xfd, GUARDSIZE);
 
     sr -= 2;    // 2 lines for menu - get what's left
     if (sr <= 0) {
@@ -172,6 +185,18 @@ void debug_update() {
         if (firstOutLine < 0) firstOutLine = 0;
     } else {
         top->pOwner->getDebugWindow(debug_buf, top->userval);
+    }
+
+    // just check a few guard bytes for damage - cancel this client if dead
+    if (*((unsigned int*)(debug_buf+neededSize)) != 0xfdfdfdfd) {
+        if (top->pOwner == nullptr) {
+            fprintf(stderr, "Buffer overflow damage from debug log!\n");
+            return;
+        }
+        debug_write("*** Buffer overflow damage from %s (%d) - disabling", top->pOwner->getName(), top->userval);
+        top->pOwner = nullptr;
+        // this will turn this pane into debug, but, it's not supposed to ship broken, so okay
+        return;
     }
 
     // now we need to write this into the actual screen window, whatever size we have
