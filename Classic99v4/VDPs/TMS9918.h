@@ -133,7 +133,8 @@ protected:
 #endif
 
     int VDPDebug=0;								// When set, displays all 256 chars
-    int bShowFPS=0;								// whether to show FPS
+    int bShowFPS=0;								// whether to show FPS TODO: This should go in the TV, it's not VDP specific
+    int measuredFPS = 0;                        // what we last measured
     int bEnable80Columns=1;						// Enable the beginnings of the 80 column mode - to replace someday with F18A
     int bEnable128k=0;							// disabled by default - it's a non-real-world combination of F18 and 9938, so HACK.
 

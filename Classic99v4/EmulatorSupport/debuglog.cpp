@@ -5,14 +5,19 @@
 // I'm just handling it myself. I only need to render the topmost window and I can more easily
 // assume the menu bar (ncurses menu isn't available in pdcurses anyway).
 
-// TODO: someday - also render the emulator window in a pane. Then we can have a startup option
-// to not initialize graphics and audio, and run entirely in an SSH window. That would be pretty fun.
-// TODO: an option to close the console (maybe with a keypress to reopen it?), or at least push it behind the main window
 // TODO: future: multiple consoles for multiple debug windows
 // TODO: maybe color someday? https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/color.html
 // TODO: implement optional split panel mode (maybe an F-key to toggle)
 // TODO: At startup/shutdown, record whether in split panel mode or not, and what the two panels are
 // TODO: each debug panel should implement an optional help screen - displayed if they support it, else help key is ignored
+// TODO: input keys can be directed to the individual debug handlers (for instance, the display debug can 'paste' keypresses
+//       to allow operation of the emulator purely in text mode)
+// TODO: menu bar acts as an input line for all the commands you used to be able to type
+
+// TODO: command line modes:
+// - nogui = don't open the graphical window (can use the debug window to operate)
+// - notui = don't open the console text window (if possible)
+// - winui = add the Win32 menu system to the UI (on the assumption this is more helpful than the console?)
 
 #include "os.h"
 #include <raylib.h>
@@ -22,6 +27,7 @@
 #include <vector>
 #include <string.h>
 #include <malloc.h>
+#include "Classic99v4.h"
 #include "automutex.h"
 #include "peripheral.h"
 #include "debuglog.h"
@@ -36,10 +42,11 @@ static int currentDebugLine;
 static std::recursive_mutex *debugLock;        // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, it's not thread safe
 static std::thread *debugThread;               // the actual thread object
 static std::vector<WindowTrack> debugPanes;
-static unsigned int topMost = 0;
-static char *debug_buf = nullptr;     // work buffer for fetching screens from the users
+static unsigned int topMost[2] = { 0, 0 };
+static unsigned int numWin = 1;         // only 1 or 2 is legal right now, some hard coding of this exists
+static unsigned int curWin = 0;         // current window is 0 or 1
+static char *debug_buf = nullptr;       // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
-static bool mouse_btn_down = false;
 
 using namespace std::chrono_literals;
 
@@ -63,7 +70,7 @@ WindowTrack::WindowTrack(Classic99Peripheral *p, int user)
         szname[sizeof(szname)-1] = '\0';
     } else {
         // it's our own debug window -- why not make this a peripheral?
-        debug_size(minc, minr);
+        debug_size(minc, minr, userval);
         strcpy(szname, "Debug");
     }
 }
@@ -89,8 +96,12 @@ void debug_thread_init() {
 
     // set up the panes system
     debugPanes.clear();
-    debug_create_view(NULL, 0);
-    topMost = 0;
+    debug_create_view(NULL, 0);     // debug log
+    debug_create_view(NULL, 1);     // help panel
+    topMost[0] = 0;
+    topMost[1] = 0;
+    numWin = 1;
+    curWin = 0;
 
     // our own setup
     memset(lines, 0, sizeof(lines));
@@ -114,110 +125,147 @@ void debug_update() {
 
     autoMutex mutex(debugLock);
 
-    if (topMost >= debugPanes.size()) {
-        topMost = 0;
-        if (debugPanes.size() < 1) {
-            int sr, sc;
-            getmaxyx(stdscr, sr, sc);
-            (void)sr;
-            char buf[64];
-            strcpy(buf, "Classic99 v4xx - No Debug Panes Available");
-            if (sc < 64) buf[sc]=0;
-            mvprintw(0, 0, buf);
-            clrtoeol();
-            return;
-        }
-    }
-
     // screen size information
     int sr, sc;
-    getmaxyx(stdscr, sr, sc);
-
-    // handle the debug screen, get info and menu line
-    WindowTrack *top = &debugPanes[topMost];
+    int end1;
     int r,c;
     char buf[64];
-    if (top->pOwner == nullptr) {
-        snprintf(buf, sizeof(buf), "Classic99 v4xx - [tab] - Debug");
-        buf[sizeof(buf)-1] = '\0';
-        debug_size(c, r);
+    getmaxyx(stdscr, sr, sc);
+    if (numWin == 1) {
+        end1 = sc;
+    } else if (numWin == 2) {
+        end1 = sc/2;
     } else {
-        snprintf(buf, sizeof(buf), "Classic99 v4xx - [tab] - %s", top->pOwner->getName());
-        buf[sizeof(buf)-1] = '\0';
-        top->pOwner->getDebugSize(c,r, top->userval);
+        numWin = 1;
+        end1 = sc;
     }
-    mvprintw(0, 0, buf);
-    clrtoeol();
-    mvhline(1, 0, ACS_HLINE, sc);
 
-    int neededSize = r*c;
-    if (neededSize > debug_buf_size) {
-        if (nullptr != debug_buf) {
-            free(debug_buf);
-        }
-        // might convert these to ints later for attribute support - 32 bytes of guard data
-        debug_buf = (char*)malloc(neededSize*sizeof(unsigned char)+GUARDSIZE);
-        if (nullptr == debug_buf) {
-            debug_buf_size = 0;
-        } else {
-            debug_buf_size = neededSize;
-        }
-    }
-    if (debug_buf_size == 0) {
-        // we couldn't get a debug buffer, return
+    if (debugPanes.size() < 1) {
+        // this is an error - we should always at least have debug
+        strcpy(buf, CLASSIC99VERSION " - No Debug Panes Available");
+        if (sc < 64) buf[sc]=0;
+        mvprintw(0, 0, buf);
+        clrtoeol();
+        refresh();
         return;
     }
-    memset(debug_buf, 0, neededSize);
-    memset(debug_buf+neededSize, 0xfd, GUARDSIZE);
+
+    mvprintw(0, 0, CLASSIC99VERSION " - [tab], [f6]");
+    clrtoeol();
+    mvhline(1, 0, ACS_HLINE, sc);
 
     sr -= 2;    // 2 lines for menu - get what's left
     if (sr <= 0) {
         // something went wrong! we lost the term! resized too small?
+        // there's not really any point printing here...
         return;
     }
-    int firstOutLine = 0;
-    if (top->pOwner == nullptr) {
-        fetch_debug(debug_buf);
-        // for the debug log, we want to show the latest lines that fit
-        // this will be true for things like the disassembly view later too, 
-        // so we might make it a flag on get size or get window
-        firstOutLine = r-sr;
-        if (firstOutLine < 0) firstOutLine = 0;
-    } else {
-        top->pOwner->getDebugWindow(debug_buf, top->userval);
-    }
 
-    // just check a few guard bytes for damage - cancel this client if dead
-    if (*((unsigned int*)(debug_buf+neededSize)) != 0xfdfdfdfd) {
+    for (unsigned int idx=0; idx<numWin; ++idx) {
+        int start = 0;
+        int width = sc;
+        if (idx > 0) {
+            start = end1+1;
+        }
+        if (numWin > 1) {
+            width = sc / 2 - idx;   // right pane is one character smaller
+        }
+        if (topMost[idx] >= debugPanes.size()) {
+            topMost[idx] = 0;
+        }
+
+        // handle the debug screen, get info and menu line
+        WindowTrack *top = &debugPanes[topMost[idx]];
         if (top->pOwner == nullptr) {
-            fprintf(stderr, "Buffer overflow damage from debug log!\n");
+            snprintf(buf, sizeof(buf), "[ Debug ]");
+            buf[sizeof(buf)-1] = '\0';
+            debug_size(c, r, top->userval);
+        } else {
+            snprintf(buf, sizeof(buf), "[ %s ]", top->pOwner->getName());
+            buf[sizeof(buf)-1] = '\0';
+            top->pOwner->getDebugSize(c,r, top->userval);
+        }
+        if (idx == curWin) {
+            // we assume this will fit
+            mvprintw(1, start+2, buf);
+        }
+
+        int neededSize = r*c;
+        if (neededSize > debug_buf_size) {
+            if (nullptr != debug_buf) {
+                free(debug_buf);
+            }
+            // might convert these to ints later for attribute support - 32 bytes of guard data
+            debug_buf = (char*)malloc(neededSize*sizeof(unsigned char)+GUARDSIZE);
+            if (nullptr == debug_buf) {
+                debug_buf_size = 0;
+            } else {
+                debug_buf_size = neededSize;
+            }
+        }
+        if (debug_buf_size == 0) {
+            // we couldn't get a debug buffer, return
+            mvprintw(0, 0, CLASSIC99VERSION " - Can't allocate debug memory");
+            clrtoeol();
+            refresh();
             return;
         }
-        debug_write("*** Buffer overflow damage from %s (%d) - disabling", top->pOwner->getName(), top->userval);
-        top->pOwner = nullptr;
-        // this will turn this pane into debug, but, it's not supposed to ship broken, so okay
-        return;
+        memset(debug_buf, 0, neededSize);
+        memset(debug_buf+neededSize, 0xfd, GUARDSIZE);
+
+        int firstOutLine = 0;
+        if (top->pOwner == nullptr) {
+            fetch_debug(debug_buf, top->userval);
+            // for the debug log, we want to show the latest lines that fit
+            // this will be true for things like the disassembly view later too, 
+            // so we might make it a flag on get size or get window
+            firstOutLine = r-sr;
+            if (firstOutLine < 0) firstOutLine = 0;
+        } else {
+            top->pOwner->getDebugWindow(debug_buf, top->userval);
+        }
+
+        // just check a few guard bytes for damage - cancel this client if dead
+        if (*((unsigned int*)(debug_buf+neededSize)) != 0xfdfdfdfd) {
+            if (top->pOwner == nullptr) {
+                fprintf(stderr, "Buffer overflow damage from debug log!\n");
+                return;
+            }
+            debug_write("*** Buffer overflow damage from %s (%d) - disabling", top->pOwner->getName(), top->userval);
+            top->pOwner = nullptr;
+            // this will turn this pane into debug, but, it's not supposed to ship broken, so okay
+            refresh();
+            return;
+        }
+
+        // now we need to write this into the actual screen window, whatever size we have
+        char *workbuf = (char*)alloca(sc+1);
+        for (int line = 0; line < sr; ++line) {
+            if (line >= r) {
+                // if the screen is taller than the debug
+                move(line+2,start);
+                clrtoeol();
+                continue;
+            }
+            char *adr = (line+firstOutLine)*c+debug_buf;
+    #ifdef min
+            int w = min(c, width);
+    #else
+            int w = std::min(c, width);
+    #endif
+            strncpy(workbuf, adr, w);
+            workbuf[w]='\0';
+            mvprintw(line+2, start, "%s", workbuf);     // +2 for menu
+            if (strlen(workbuf) < width) {
+                clrtoeol();
+            }
+        }
     }
 
-    // now we need to write this into the actual screen window, whatever size we have
-    char *workbuf = (char*)alloca(sc+1);
-    for (int line = 0; line < sr; ++line) {
-        if (line >= r) {
-            // if the screen is taller than the debug
-            move(line+2,0);
-            clrtoeol();
-            continue;
-        }
-        char *adr = (line+firstOutLine)*c+debug_buf;
-#ifdef min
-        int w = min(c, sc);
-#else
-        int w = std::min(c, sc);
-#endif
-        strncpy(workbuf, adr, w);
-        workbuf[w]='\0';
-        mvprintw(line+2, 0, "%s", workbuf);     // +2 for menu
-        clrtoeol();
+    // draw some more lines before we go
+    if (numWin > 1) {
+        mvvline(2, end1, ACS_VLINE, sr);
+        mvaddch(1, end1, ACS_TTEE);
     }
 
     refresh();
@@ -234,40 +282,83 @@ void debug_thread() {
         int ch;
         {
             autoMutex mutex(debugLock);
+            if (curWin > 1) curWin = 0;
             ch = getch();
 
-            if (ch == KEY_MOUSE) {
-                MEVENT event;
-                if (getmouse(&event) == OK) {
-                    // we also get x,y movement while the button is down, but with bstate==0
-                    if (event.bstate & BUTTON1_PRESSED) {
-                        debug_write("Mouse click at %d,%d", event.x, event.y);
-                        mouse_btn_down = true;
-                    } else if (event.bstate & BUTTON1_RELEASED) {
-                        mouse_btn_down = false;
-                    }
-                    // TODO: eventually a menu system
-                }
-            } else if (ch == KEY_RESIZE) {
-                debug_handle_resize();
-            } else if (ch != ERR) {
-                //debug_write("Got char: %c", ch);
-                if (ch =='Q') {
+            switch (ch) {
+                case ERR:
+                    // no key was ready
+                    break;
+
+                case KEY_RESIZE:
+                    // window resize event
+                    debug_handle_resize();
+                    break;
+
+                case 'Q':
                     RequestClose();
                     //TODO: obviously I don't want to quit on 'Q'
-                } else if (ch == '\t') {
+                    break;
+
+                case '\t':
+                    // Tab - change to next window (might eventually skip to next category with control?)
                     // change panel - again, this is all temporary test code
-                    topMost++;
-                    if (topMost >= debugPanes.size()) {
-                        topMost = 0;
+                    topMost[curWin]++;
+                    if (topMost[curWin] >= debugPanes.size()) {
+                        topMost[curWin] = 0;
                     }
-                }
+                    break;
+
+                case KEY_BTAB:
+                    // change panel backwards - again, this is all temporary test code
+                    topMost[curWin]--;
+                    if ((topMost[curWin] < 0) || (topMost[curWin] >= debugPanes.size())) {
+                        topMost[curWin] = (unsigned int)(debugPanes.size()-1);
+                    }
+                    break;
+
+                case CTL_TAB:
+                    // change panel to next device (skip multiple panes on same device)
+                    {
+                        Classic99Peripheral *p = debugPanes[topMost[curWin]].pOwner;
+                        for (int idx=0; idx<debugPanes.size(); ++idx) {
+                            topMost[curWin]++;
+                            if (topMost[curWin] >= debugPanes.size()) {
+                                topMost[curWin] = 0;
+                            }
+                            if (debugPanes[topMost[curWin]].pOwner != p) {
+                                break;
+                            }
+                        }
+                    }
+                    break;
+
+                case KEY_F(6):
+                    // turn on dual-panes, or switch between them
+                    if (numWin == 1) {
+                        numWin = 2;
+                    } else if (curWin == 0) {
+                        curWin = 1;
+                    } else {
+                        curWin = 0;
+                    }
+                    break;
+
+                case KEY_F(18):     // Shift F1 is actually F13, okay
+                    // turn off dual pane
+                    numWin = 1;
+                    curWin = 0;
+                    break;
+
+                default:
+                    // should be an actual key not handled above
+                    // TODO: pass it to the debug handler
+                    debug_write("Got char code %X", ch);
+                    break;
             }
 
             // update the panel system
-            if (!mouse_btn_down) {
-                debug_update();
-            }
+            debug_update();
         }
 
         // sleep 5ms or whatever quantum is, it's only keypresses
@@ -380,29 +471,56 @@ void debug_unregister_view(Classic99Peripheral *pOwner) {
         }
     }
 
-    topMost = 0;
+    topMost[0] = 0;
+    topMost[1] = 0;
 }
 
 // size of the debug text output
-void debug_size(int &x, int &y) {
-    x = DEBUGLEN;
-    y = DEBUGLINES;
+void debug_size(int &x, int &y, int nUser) {
+    if (nUser == 0) {
+        x = DEBUGLEN;
+        y = DEBUGLINES;
+    } else if (nUser == 1) {
+        x = 40;
+        y = 9;
+    } else {
+        x = 0;
+        y = 0;
+    }
 }
 
 // fill in a text buffer
-void fetch_debug(char *buf) {
-    // buf MUST be debug_size() x*y bytes long
-    memset(buf, '\0', DEBUGLINES*DEBUGLEN);
+void fetch_debug(char *buf, int nUser) {
+    int r, c;
+    debug_size(c, r, nUser);
 
-    {
+    if (nUser == 0) {
         autoMutex mutex(debugLock);
 
         int line = currentDebugLine;
-        for (int idx=0; idx<DEBUGLINES; ++idx) {
-            snprintf(buf, DEBUGLEN-1, "%s", lines[line++]);
-            if (line >= DEBUGLINES) line=0;
-            buf += DEBUGLEN;
+        for (int idx=0; idx<r; ++idx) {
+            snprintf(buf, c-1, "%s", lines[line++]);
+            if (line >= r) line=0;
+            buf += c;
         }
+    } else if (nUser == 1) {
+        // just navigation help
+        snprintf(buf, c-1, "Navigation keys");
+        buf += c;
+        buf += c;
+        snprintf(buf, c-1, "Tab       - next view");
+        buf += c;
+        snprintf(buf, c-1, "Sh-Tab    - previous view");
+        buf += c;
+        snprintf(buf, c-1, "Ctrl-Tab  - next device");
+        buf += c;
+        snprintf(buf, c-1, "F6        - Split panes or Change Active");
+        buf += c;
+        snprintf(buf, c-1, "Sh-F6     - Un-Split panes");
+        buf += c;
+        snprintf(buf, c-1, "Type      - Enter command");
+        buf += c;
+        snprintf(buf, c-1, "Type HELP - Command help to debug pane");
     }
 }
 

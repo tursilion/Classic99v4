@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     // Platform specific init goes here
 
     // now we can start starting
-    debug_write("Starting Classic99 version " VERSION);
+    debug_write("Starting " CLASSIC99VERSION);
 
     TI994 *pSys;
 

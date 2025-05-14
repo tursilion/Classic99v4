@@ -887,7 +887,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
         base += x; buffer = base;
         base += x; buffer = base;
 
-	    sprintf(buffer, "VDPAD: %04X", VDPADD);
+	    sprintf(buffer, "VDPAD: %04X  %3d/%02dhz", VDPADD, measuredFPS, hzRate);
     } else if (user == DEBUG_DISPLAY) {
         // screen dump - just the SIT for now
         // TODO: we can add color, including the TI Palette
@@ -1415,17 +1415,18 @@ bottom:
 
 	// TODO: replace with actual bottom of display frame - varies on F18A
 	if (gfxline == 191) {
+		static int cnt = 0;
+		static time_t lasttime = 0;
+		static char buf[32] = "";
+		++cnt;
+		if (time(NULL) != lasttime) {
+    		sprintf(buf, "%d", cnt);
+            measuredFPS = cnt;
+			cnt = 0;
+			time(&lasttime);
+        }
+
 		if (bShowFPS) {
-			static int cnt = 0;
-			static time_t lasttime = 0;
-			static char buf[32] = "";
-			++cnt;
-			if (time(NULL) != lasttime) {
-				sprintf(buf, "%d", cnt);
-				//debug_write("%d fps", cnt);
-				cnt = 0;
-				time(&lasttime);
-			}
 			// draw digits
 			pImg = pDisplay->getPixels();
 			{

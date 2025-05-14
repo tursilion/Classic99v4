@@ -10,14 +10,13 @@
 #include <raylib.h>
 #include <memory>
 #include <vector>
+#include "Classic99v4.h"
 #include "automutex.h"
 #include "autobitmap.h"
 
 // ... but I think I will build it so that each layer can have its own resolution and be scaled
 // to whatever the window is, rather than compositing a single bitmap. Then I simply don't care
 // and Allegro can manage the buffers.
-
-#define VERSION "400.000"
 
 // Replacement InvColorToInt from RayLib that inverts the byte order for little endian writes
 int InvColorToInt(Color color);
