@@ -28,9 +28,6 @@
 
 #include "debuglog.h"
 
-// config value for the Classic99 debug opcodes
-// TODO extern int enableDebugOpcodes;
-
 // internal symbol table
 std::map<int,std::string> Symbols;
 
@@ -174,8 +171,7 @@ void ImportMapFile(const char *fn) {
 	debug_write("Read %d symbols.", Symbols.size());
 }
 
-#define RDOP(A, bank) 0 // TODO ((bank) == -1 ? pGPU->GetSafeWord(A, bank) : pCPU->GetSafeWord(A, bank) )
-#define RDWORD(A, bank) 0 // TODO ((bank) == -1 ? pGPU->GetSafeWord(A, bank) : pCPU->GetSafeWord(A, bank) )
+#define RDWORD(A) bufferIn[A]
 
 #define BITS_0to3	((OP>>12) & 0xf)
 #define BITS_2to5	((OP>>10) & 0xf)
@@ -296,10 +292,10 @@ static const enum opcodes ops6to10[64]=
 	_ill,	_ill,	_idle,	_ill,	_rtwp,	_spi_en,_spi_ds,_ill	/*11000-11111*/
 };
 
-static int myPC;
+static int myPC;  // word offset into the currently processed buffer
 
 // look up an address in the symbol map - not thread or multi-call safe! only one return per statement.
-const char *adr2string(int base) {
+static const char *adr2string(int base) {
 	static char ret[128];
 	std::string str;
 
@@ -319,7 +315,7 @@ const char *adr2string(int base) {
 	return ret;
 }
 
-static char *print_arg (int mode, int arg, int bank)
+static char *print_arg (unsigned short *bufferIn, int mode, int arg)
 {
 	static char temp[128];
 	int	base;
@@ -333,7 +329,7 @@ static char *print_arg (int mode, int arg, int bank)
 			sprintf (temp, "*R%d", arg);
 			break;
 		case 0x2:	/* symbolic|indexed */
-			base = RDWORD(myPC, bank); myPC+=2;
+			base = RDWORD(myPC); myPC++;
 			if (arg) 	/* indexed */
 				sprintf (temp, "@>%04x%s(R%d)", base, adr2string(base), arg);
 			else		/* symbolic (direct) */
@@ -348,25 +344,31 @@ static char *print_arg (int mode, int arg, int bank)
 
 
 /*****************************************************************************
- *	Disassemble a single command and return the number of bytes it uses.
+ * Disassemble a single command and return the number of bytes it uses.
+ * This can handle both the 9900 and the F18A GPU
+ * buffer - pointer to a buffer at least DISASMWIDTH bytes (warning: this code does NOT check that width!)
+ * bufferIn - pointer to at least 6 bytes - memory to disassemble
+ * isF18A - true if this is an F18A GPU
+ * enableDebugOpcodes - true if Classic99 debug opcodes are enabled
+ * RETURN: number of words processed
  *****************************************************************************/
-int Dasm9900 (char *buffer, int pc, int bank)
+int Dasm9900(char *buffer, unsigned short *bufferIn, bool isF18A, bool enableDebugOpcodes)
 {
 	int	OP, opc;
 	int sarg, darg, smode, dmode;
 	int offset;
 
-	myPC = pc;
-	OP = RDOP(myPC, bank); myPC+=2;
+	myPC = 0;
+	OP = RDWORD(myPC); myPC++;
 
-	//if (pCurrentCPU == pGPU) { TODO
-//		offset=32;
-//	} else {
+	if (isF18A) {
+		offset=32;
+	} else {
 		offset=0;
-//	}
+	}
 
 	// classic99 opcodes have no addressing modes per sae
-	if (/*( TODO enableDebugOpcodes) && */ (OP >= 0x0110) && (OP <= 0x0114)) {
+	if ((enableDebugOpcodes) && (OP >= 0x0110) && (OP <= 0x0114)) {
 		// debugger opcode
 		switch (OP) {
 			case 0x0110: sprintf(buffer, "c99_norm"); break;
@@ -392,8 +394,8 @@ int Dasm9900 (char *buffer, int pc, int bank)
 			case 0x012f:
 			{
 				// dbg sequence is 012r,1001,adr
-				int jmp = RDWORD(myPC, bank); myPC += 2;
-				int adr = RDWORD(myPC, bank); myPC += 2;
+				int jmp = RDWORD(myPC); myPC ++;
+				int adr = RDWORD(myPC); myPC ++;
 				sprintf(buffer, "c99_dbg(%d) >%04x,R%d", jmp - 0x1000, adr, OP&0xf);
 			}
 			break;
@@ -406,9 +408,9 @@ int Dasm9900 (char *buffer, int pc, int bank)
 		darg = OPBITS(6,9);
 
  		sprintf (buffer, "%-4s ", token[opc]);
-		strcat (buffer, print_arg (smode, sarg, bank));
+		strcat (buffer, print_arg (bufferIn, smode, sarg));
 		strcat (buffer, ",");
-		strcat (buffer, print_arg (dmode, darg, bank));
+		strcat (buffer, print_arg (bufferIn, dmode, darg));
 	}
 	else if (BITS_0to1==0 && (opc = ops2to5[BITS_2to5+offset]) != _ill)
 	{
@@ -420,9 +422,9 @@ int Dasm9900 (char *buffer, int pc, int bank)
 			darg = 16;
 
 		if (opc==_xop || opc==_ldcr || opc==_stcr)
-			sprintf (buffer, "%-4s %s,%d", token[opc], print_arg (smode, sarg, bank), darg);
+			sprintf (buffer, "%-4s %s,%d", token[opc], print_arg (bufferIn, smode, sarg), darg);
 		else	/* _coc, _czc, _xor, _mpy, _div */
-			sprintf (buffer, "%-4s %s,R%d", token[opc], print_arg (smode, sarg, bank), darg);
+			sprintf (buffer, "%-4s %s,R%d", token[opc], print_arg (bufferIn, smode, sarg), darg);
 	}
 	else if (BITS_0to2==0 && (opc = ops3to7[BITS_3to7+offset]) != _ill)
 	{
@@ -463,7 +465,7 @@ int Dasm9900 (char *buffer, int pc, int bank)
 					// it's CALL or one of the others (formatted like B)
 					smode = OPBITS(10,11);
 					sarg = OPBITS(12,15);
-					sprintf (buffer, "%-4s %s", token[opc], print_arg (smode, sarg, bank));
+					sprintf (buffer, "%-4s %s", token[opc], print_arg (bufferIn, smode, sarg));
 				}
 				break;
 		}
@@ -473,7 +475,7 @@ int Dasm9900 (char *buffer, int pc, int bank)
 		smode = OPBITS(10,11);
 		sarg = OPBITS(12,15);
 
-		sprintf (buffer, "%-4s %s", token[opc], print_arg (smode, sarg, bank));
+		sprintf (buffer, "%-4s %s", token[opc], print_arg (bufferIn, smode, sarg));
 	}
 	else if (BITS_0to5==0 && (opc = ops6to10[BITS_6to10+offset]) != _ill)
 	{
@@ -481,12 +483,12 @@ int Dasm9900 (char *buffer, int pc, int bank)
 		{
 			case _li:   case _ai:   case _andi: case _ori:  case _ci:
 				darg = OPBITS(12,15);
-				sarg = RDWORD(myPC, bank); myPC+=2;
+				sarg = RDWORD(myPC); myPC++;
 
 				sprintf (buffer, "%-4s R%d,>%04x%s", token[opc], darg, sarg, adr2string(sarg));
 				break;
 			case _lwpi: case _limi:
-				sarg = RDWORD(myPC, bank); myPC+=2;
+				sarg = RDWORD(myPC); myPC++;
 
 				sprintf (buffer, "%-4s >%04x", token[opc], sarg);
 				break;
@@ -501,7 +503,9 @@ int Dasm9900 (char *buffer, int pc, int bank)
 		}
 	}
 	else
+    {
 		sprintf (buffer, "data >%04x%s", OP, adr2string(OP));
+    }
 
-	return myPC - pc;
+	return myPC;
 }

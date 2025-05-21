@@ -8,6 +8,7 @@
 #define TMS9900_H
 
 #include "../EmulatorSupport/peripheral.h"
+#include "../EmulatorSupport/9900disasm.h"
 
 // needed types, lots of code makes assumptions on these sizes
 typedef uint8_t Byte;
@@ -281,6 +282,8 @@ public:
 #endif
 
 protected:
+    void addRunLog(int pc);                         // update the running disassembly log
+
 	// CPU variables
 	Word PC;									    // Program Counter
 	Word WP;										// Workspace Pointer
@@ -304,6 +307,8 @@ private:
     Word BStatusLookup[256];                         // byte statuses
 #endif
 
+    ByteHistory RunLog[RUNLOGSIZE];                 // execution history
+    int runLogHead;                                 // points to the oldest element
     const int32_t SAVE_STATE_VERSION = 1;
 };
 

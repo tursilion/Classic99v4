@@ -164,6 +164,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CPUs\tms9900.h" />
+    <ClInclude Include="EmulatorSupport\9900disasm.h" />
     <ClInclude Include="EmulatorSupport\audioSrc.h" />
     <ClInclude Include="EmulatorSupport\autobitmap.h" />
     <ClInclude Include="EmulatorSupport\automutex.h" />

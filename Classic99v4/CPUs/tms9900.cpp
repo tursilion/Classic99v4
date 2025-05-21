@@ -39,7 +39,10 @@ extern const Word BStatusLookup[256];               // byte statuses
 #endif
 
 // protect the disassembly backtrace
-std::recursive_mutex *csDisasm; 
+static std::recursive_mutex *csDisasm; 
+
+// number of lines (including current) after backtrace
+#define FOWARDDISASM 15
 
 enum {
     DEBUG_REGISTERS,
@@ -48,7 +51,33 @@ enum {
 
 // System interface
 
-TMS9900::TMS9900(Classic99System *core) : Classic99Peripheral(core) {
+TMS9900::TMS9900(Classic99System *core) 
+    : Classic99Peripheral(core) 
+    , B(0)
+    , D(0)
+    , PC(0)
+    , S(0)
+    , ST(0)
+    , Td(0)
+    , Ts(0)
+    , WP(0)
+    , X_flag(0)
+    , idling(0)
+    , in(0)
+    , nCycleCount(0)
+    , nReturnAddress(0)
+    , skip_interrupt(0)
+    , runLogHead(0)
+{
+    // Filling the backtrace with nops is not strictly correct, but means I don't
+    // need to track a head and a tail for a circular list that will be full almost immediately
+    // after we start.
+    for (int idx=0; idx<RUNLOGSIZE; ++idx) {
+        RunLog[idx].pc = 0;
+        RunLog[idx].words[0] = 0x1000;  // NOP, or JMP $+2
+        RunLog[idx].words[1] = 0x1000;  // NOP, or JMP $+2
+        RunLog[idx].words[2] = 0x1000;  // NOP, or JMP $+2
+    }
 }
 
 TMS9900::~TMS9900() {
@@ -70,9 +99,20 @@ bool TMS9900::init(int idx) {
     return true;
 }
 
+// release everything claimed in init, save NV data, etc
+bool TMS9900::cleanup() {
+    debug_unregister_view(this);
+    delete csDisasm;
+    return true;
+}
+
 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
 bool TMS9900::operate(double timestamp) {
-    // handle first call or timestamp wraparound
+    // timestamp comes in in microseconds, but we run at 3MHz, so we need three times that
+    timestamp *= 3;
+
+    // handle first call or timestamp wraparound (doubles probably won't wrap around... but how long till they break?)
+    // Should be between 4 and 9 billion seconds, we should be okay.
     if ((lastTimestamp == 0) || (timestamp < lastTimestamp)) {
         lastTimestamp = timestamp;
         return true;
@@ -94,8 +134,7 @@ bool TMS9900::operate(double timestamp) {
 
     // run as many cycles as have elapsed
     ResetCycleCount();
-    // CPU runs at 3MHz, so each CPU cycle is 1/3 of a timestamp time
-    for ( ; lastTimestamp < timestamp; lastTimestamp += (GetCycleCount()*(1.0/3.0))) {
+    for ( ; lastTimestamp < timestamp; lastTimestamp += GetCycleCount()) {
         // prepare to count cycles this instruction
         ResetCycleCount();
 
@@ -143,6 +182,9 @@ bool TMS9900::operate(double timestamp) {
             }
         }
 
+        // before we execute, log the bytes
+        addRunLog(PC);
+
         // now actually execute the instruction
         in = ROMWORD(PC);       // "in" is also used by the opcodes!!
         ADDPC(2);
@@ -153,20 +195,14 @@ bool TMS9900::operate(double timestamp) {
     return true;
 }
 
-// release everything claimed in init, save NV data, etc
-bool TMS9900::cleanup() {
-    debug_unregister_view(this);    // this removes ALL views
-    return true;
-}
-
 // dimensions of a text mode output screen - either being 0 means none
 void TMS9900::getDebugSize(int &x, int &y, int user) {
     if (user == DEBUG_REGISTERS) {
         x = 44;
         y = 15;
     } else if (user == DEBUG_DISASSEMBLY) {
-        x = 0;
-        y = 0;
+        x = DISASMWIDTH;
+        y = -(RUNLOGSIZE+FOWARDDISASM);     // negative for bottom up
     }
 }
 
@@ -178,7 +214,7 @@ void TMS9900::getDebugWindow(char *buffer, int user) {
     // prints the register information
     // spacing: <5 label><1 space><4 value><4 spaces><5 label><1 space><4 value>
     int x,y;
-    getDebugSize(x, y, 0);
+    getDebugSize(x, y, user);
     (void)y;
 
     if (user == DEBUG_REGISTERS) {
@@ -221,8 +257,112 @@ void TMS9900::getDebugWindow(char *buffer, int user) {
     
         sprintf(buffer, " MASK: %04X", val&ST_INTMASK);
     } else if (user == DEBUG_DISASSEMBLY) {
-        // TODO: emit the current disassembly log
+        // We need to dump RUNLOGSIZE previous entries, and then 10 look ahead entries as well
+        // We'll need a way to place the transition at the right spot so that the cursor doesn't
+        // jump up and down
 
+        autoMutex lock(csDisasm);
+
+        // First, process the log and fill in any new disassembly requirements
+        // we can do this in any order, ignoring the head
+        for (int idx=0; idx<RUNLOGSIZE; ++idx) {
+            if (RunLog[idx].lines == 0) {
+                // this one needs to be processed
+                char buf[DISASMWIDTH];
+                memset(RunLog[idx].str, 0, sizeof(RunLog[idx].str));
+                int cnt = Dasm9900(buf, RunLog[idx].words, false, false);   // TODO: debug opcode enable on last argument
+                // TODO: cycle counts and prefix
+	            //if (obj.cycles > 0) {
+		        //    sprintf(buf1, "%c  %04X  %04X  %-27s (%d)\r\n", cPrefix, PC, pLclCPU->GetSafeWord(PC, obj.bank), buf2, obj.cycles);
+	            //} else {
+		            snprintf(RunLog[idx].str, x-1, "%c  %04X  %04X  %-27s", ' ', RunLog[idx].pc, RunLog[idx].words[0], buf);
+	            //}
+                ++RunLog[idx].lines;
+            
+                // max extra words should be no more than 2
+                if (cnt-- > 1) {
+                    snprintf(&RunLog[idx].str[x], x-1, "         %04X", RunLog[idx].words[1]);
+                    ++RunLog[idx].lines;
+                }
+                if (cnt-- > 1) {
+                    snprintf(&RunLog[idx].str[x*2], x-1, "         %04X", RunLog[idx].words[2]);
+                    ++RunLog[idx].lines;
+                }
+            }
+        }
+
+        // now, figure out where to start. We want RUNLOGSIZE lines from the history
+        int p = runLogHead;           // start at newest entry, but we'll step backwards
+        int cnt = 0;
+        int off = 0;
+
+        while (cnt < RUNLOGSIZE) {
+            --p;
+            if (p < 0) p = RUNLOGSIZE-1;
+
+            cnt += RunLog[p].lines;
+        }
+        if (cnt > RUNLOGSIZE) {
+            off = cnt-RUNLOGSIZE;   // should only be 1 or 2
+            if (off > 2) {
+                // something went very wrong...
+                off = 0;
+                ++p;
+            }
+        }
+
+        // now start emitting... first line is special cause of partial lines
+        if (off > 0) {
+            int bytes = (RunLog[p].lines-off)*DISASMWIDTH;  // DISASMWIDTH and x should be identical
+            memcpy(buffer, &RunLog[p].str[DISASMWIDTH*off], bytes);
+            buffer += bytes;
+        } else {
+            memcpy(buffer, &RunLog[p].str, DISASMWIDTH*RunLog[p].lines);
+            buffer += DISASMWIDTH*RunLog[p].lines;
+        }
+        ++p;
+        if (p >= RUNLOGSIZE) p=0;
+
+        // now the rest of them
+        while (p != runLogHead) {
+            memcpy(buffer, &RunLog[p].str, DISASMWIDTH*RunLog[p].lines);
+            buffer += DISASMWIDTH*RunLog[p].lines;
+            ++p;
+            if (p >= RUNLOGSIZE) p=0;
+        }
+
+        // forward looking is FOWARDDISASM lines
+        int left = FOWARDDISASM;
+        char prefix = '>';
+        int mypc = PC;      // TODO: this could potentially race?
+
+        while (left > 0) {
+            char buf[DISASMWIDTH];
+            unsigned short words[3];
+            words[0] = ROMWORD(mypc, ACCESS_FREE);
+            words[1] = ROMWORD(mypc+2, ACCESS_FREE);
+            words[2] = ROMWORD(mypc+4, ACCESS_FREE);
+            int cnt = Dasm9900(buf, words, false, false);   // TODO: debug opcode enable on last argument
+            snprintf(buffer, x-1, "%c  %04X  %04X  %-27s", prefix, mypc, words[0], buf);
+            prefix = ' ';
+            mypc += 2;
+            buffer += x;
+            --left;
+            
+            // max extra words should be no more than 2
+            if ((cnt-- > 1) && (left > 0)) {
+                snprintf(buffer, x-1, "         %04X", words[1]);
+                mypc += 2;
+                buffer += x;
+                --left;
+            }
+            if ((cnt-- > 1) && (left > 0)) {
+                snprintf(buffer, x-1, "         %04X", words[2]);
+                mypc += 2;
+                buffer += x;
+                --left;
+            }
+        }
     }
 }
 
@@ -647,7 +787,7 @@ int TMS9900::ROMWORD(Word src, MEMACCESSTYPE rmw) {
     // most common basic access
     // as above, read lsb first in a bit of 99/4A specific knowledge
     // the real TMS9900 is 16-bit only, but Classic99's architecture is 8 bit
-    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);                // odd byte
+    Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);        // odd byte
     Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, rmw);   // even byte
     return (msb<<8)|lsb;
 }
@@ -691,6 +831,34 @@ int TMS9900::GetCycleCount() {
     return nCycleCount;
 }
 
+void TMS9900::addRunLog(int PC) {
+    ByteHistory x;
+
+    // Note: negative PC means an interrupt with that vector address
+    // Note that the reset interrupt is >0000, but that will be filtered out
+    // to avoid confusing output.
+
+    x.pc = PC;
+    x.lines = 0;
+    if (PC >= 0) {
+        // capture the words only if it's not negative
+        // although we shouldn't execute >0000 either, not logging it
+        // in a crash condition could be confusing, and that's why we
+        // don't log 0 as a reset interrupt
+        x.words[0] = ROMWORD(PC, ACCESS_FREE);
+        x.words[1] = ROMWORD(PC+2, ACCESS_FREE);
+        x.words[2] = ROMWORD(PC+4, ACCESS_FREE);
+    }
+
+    // overwrite the oldest element and increment the head pointer
+    {
+        autoMutex lock(csDisasm);
+        memcpy(&RunLog[runLogHead], &x, sizeof(x));
+        ++runLogHead;
+        if (runLogHead >= RUNLOGSIZE) runLogHead = 0;
+    }
+}
+
 // interrupt handling
 void TMS9900::TriggerInterrupt(int level) {
     // Base cycles: 22
@@ -704,6 +872,11 @@ void TMS9900::TriggerInterrupt(int level) {
     // -1 is the LOAD vector
     // Datasheet confirms the mask is set to 0 for LOAD
     Word vector = (level*4);
+
+    // record the event except for reset (which is >0000)
+    if (vector != 0) {
+        addRunLog(-vector);
+    }
 
     // debug helper if logging
     // TODO: the debug disassembly log needs to be integrated into the debug system

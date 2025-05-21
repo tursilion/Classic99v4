@@ -139,6 +139,9 @@
     <ClInclude Include="EmulatorSupport\os.h">
       <Filter>Emulator Support</Filter>
     </ClInclude>
+    <ClInclude Include="EmulatorSupport\9900disasm.h">
+      <Filter>Emulator Support</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Classic99v4.rc">

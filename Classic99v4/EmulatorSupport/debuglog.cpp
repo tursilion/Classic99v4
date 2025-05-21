@@ -175,15 +175,21 @@ void debug_update() {
         }
 
         // handle the debug screen, get info and menu line
+        bool bottomUp = false;
         WindowTrack *top = &debugPanes[topMost[idx]];
         if (top->pOwner == nullptr) {
             snprintf(buf, sizeof(buf), "[ Debug ]");
             buf[sizeof(buf)-1] = '\0';
             debug_size(c, r, top->userval);
+            bottomUp = true;
         } else {
             snprintf(buf, sizeof(buf), "[ %s ]", top->pOwner->getName());
             buf[sizeof(buf)-1] = '\0';
             top->pOwner->getDebugSize(c,r, top->userval);
+            if (r < 0) {
+                bottomUp = true;
+                r = -r;
+            }
         }
         if (idx == curWin) {
             // we assume this will fit
@@ -214,13 +220,13 @@ void debug_update() {
         memset(debug_buf+neededSize, 0xfd, GUARDSIZE);
 
         int firstOutLine = 0;
-        if (top->pOwner == nullptr) {
-            fetch_debug(debug_buf, top->userval);
-            // for the debug log, we want to show the latest lines that fit
-            // this will be true for things like the disassembly view later too, 
-            // so we might make it a flag on get size or get window
+        if (bottomUp) {
+            // for the debug log and disasm, we want to show the latest lines that fit
             firstOutLine = r-sr;
             if (firstOutLine < 0) firstOutLine = 0;
+        }
+        if (top->pOwner == nullptr)  {
+            fetch_debug(debug_buf, top->userval);
         } else {
             top->pOwner->getDebugWindow(debug_buf, top->userval);
         }
@@ -481,7 +487,7 @@ void debug_size(int &x, int &y, int nUser) {
         x = DEBUGLEN;
         y = DEBUGLINES;
     } else if (nUser == 1) {
-        x = 40;
+        x = 42;
         y = 9;
     } else {
         x = 0;
