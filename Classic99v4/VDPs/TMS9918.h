@@ -32,15 +32,8 @@
 
 class TMS9918 : public Classic99Peripheral {
 public:
-    TMS9918(Classic99System *core) 
-        : Classic99Peripheral(core)
-        , bUse5SpriteLimit(true)
-        , pDisplay(nullptr)
-    {
-    }
-    virtual ~TMS9918() 
-    {
-    };
+    TMS9918(Classic99System *core);
+    virtual ~TMS9918();
     TMS9918() = delete;
 
     // you absolutely can read and write the TMS9918
@@ -68,8 +61,9 @@ public:
     virtual bool cleanup() override;                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
-    virtual void getDebugSize(int &x, int &y, int user) override;              // dimensions of a text mode output screen - either being 0 means none
-    virtual void getDebugWindow(char *buffer, int user) override;              // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    virtual void getDebugSize(int &x, int &y, int user) override;    // dimensions of a text mode output screen - either being 0 means none
+    virtual void getDebugWindow(char *buffer, int user) override;    // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    virtual void debugKey(int ch, int user) override;                // receive a keypress
     virtual void resetMemoryTracking() override;                     // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
@@ -123,8 +117,11 @@ protected:
     uint8_t VDPMemInited[128*1024];             // initialized memory map (todo: check size)
 
     // TODO: heatmap debug
-//    uint8_t HeatMap[256*256*3];					// memory access heatmap (red/green/blue = CPU/VDP/GROM)
+//    uint8_t HeatMap[256*256*3];       		// memory access heatmap (red/green/blue = CPU/VDP/GROM)
     int SprColFlag;								// Sprite collision flag
+    int debugScreenOffset;                      // BASIC offset (toggles between 0 and 96 for TI BASIC)
+    int debugVDPDebug;						    // When set, displays all 256 chars
+    int bShowFPS;								// whether to show FPS TODO: This should go in the TV, it's not VDP specific
 
 #if 0
     int bF18AActive = 0;						// was the F18 activated?
@@ -132,11 +129,9 @@ protected:
     int bInterleaveGPU = 1;						// whether to run the GPU and the CPU together (impedes debug - temporary option)
 #endif
 
-    int VDPDebug=0;								// When set, displays all 256 chars
-    int bShowFPS=0;								// whether to show FPS TODO: This should go in the TV, it's not VDP specific
-    int measuredFPS = 0;                        // what we last measured
-    int bEnable80Columns=1;						// Enable the beginnings of the 80 column mode - to replace someday with F18A
-    int bEnable128k=0;							// disabled by default - it's a non-real-world combination of F18 and 9938, so HACK.
+    int measuredFPS;                            // what we last measured
+    int bEnable80Columns;						// Enable the beginnings of the 80 column mode - to replace someday with F18A
+    int bEnable128k;							// disabled by default - it's a non-real-world combination of F18 and 9938, so HACK.
 
     // menu display
 //    extern int bEnableAppMode;

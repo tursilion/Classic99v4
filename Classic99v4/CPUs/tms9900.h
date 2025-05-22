@@ -118,6 +118,7 @@ public:
     // debug interface
     virtual void getDebugSize(int &x, int &y, int user) override;   // dimensions of a text mode output screen - either being 0 means none
     virtual void getDebugWindow(char *buffer, int user) override;   // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    virtual void debugKey(int ch, int user) override;               // receive a keypress
 	//virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
@@ -140,7 +141,7 @@ public:
 	virtual Byte RCPUBYTE(Word src);
 	virtual void WCPUBYTE(Word dest, Byte c);
 	virtual int ROMWORD(Word src, MEMACCESSTYPE rmw=ACCESS_READ);
-	virtual void WRWORD(Word dest, Word val);
+	virtual void WRWORD(Word dest, Word val, MEMACCESSTYPE rmw=ACCESS_WRITE);
 
 	virtual	void TriggerInterrupt(int level);
 
@@ -283,6 +284,7 @@ public:
 
 protected:
     void addRunLog(int pc);                         // update the running disassembly log
+    void addHeatmap(int pc);                        // heatmap for both bytes of the word
 
 	// CPU variables
 	Word PC;									    // Program Counter
@@ -299,6 +301,11 @@ protected:
 	int idling;										// set when an IDLE occurs
 	Word nReturnAddress;							// return address for step over
     int skip_interrupt;                             // interrupts are disabled for this many instructions
+
+    // debug
+    int debugAddress;                               // address for debug view
+    int debugHeatMapRow;                            // we don't process the whole heatmap every frame
+    char heatMap[64*64];                            // some kind of heatmap for CPU access - height MUST be a multiple of 8
 
 private:
 #ifdef BUILD_CPU

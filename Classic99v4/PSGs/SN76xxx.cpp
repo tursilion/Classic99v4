@@ -454,6 +454,7 @@ void SN76xxx::getDebugSize(int &x, int &y, int user) {
 	x=11;
 	y=2;
 }
+
 void SN76xxx::getDebugWindow(char *buffer, int user) {
 	// buffer should be sized to (x+2)*y (to allow \r\n endings)
 	sprintf(buffer, "%03X %03X %03X %01X\r\n %1X  %1X  %1X  %1X", 

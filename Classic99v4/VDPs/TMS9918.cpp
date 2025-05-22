@@ -244,6 +244,19 @@ enum {
 // is sufficient for all reasonable values...
 // Anyway, don't need to cover all possible cases, only the cases we care about.
 
+TMS9918::TMS9918(Classic99System *core) 
+    : Classic99Peripheral(core)
+    , bUse5SpriteLimit(true)
+    , pDisplay(nullptr)
+    , debugScreenOffset(0)
+    , debugVDPDebug(0)
+{
+}
+
+TMS9918::~TMS9918() 
+{
+}
+
 // return true if our interrupt line is active
 bool TMS9918::isIntActive() {
 	if ((VDPS&VDPS_INT) && (VDPREG[1] & 0x20)) {
@@ -788,6 +801,36 @@ void TMS9918::getDebugSize(int &x, int &y, int user) {
     }
 }
 
+// keypress from the TUI
+void TMS9918::debugKey(int ch, int user) {
+    // pass the keypress on to the inject system, if it's ASCII
+    if (user == DEBUG_REGS) {
+        // register screen
+    } else if (user == DEBUG_DISPLAY) {
+        // display screen
+        if (((ch >= ' ') && (ch <= '~')) || (ch == 13)) {
+            setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
+        } else if (ch == KEY_F(1)) {
+            if (debugScreenOffset) {
+                debugScreenOffset = 0;
+            } else {
+                debugScreenOffset = 96;
+            }
+        } else if (ch == KEY_F(9)) {
+            if (debugVDPDebug == 2) {
+                debugVDPDebug = 0;
+            } else if (debugVDPDebug == 1) {
+                debugVDPDebug = 2;
+            } else if (debugVDPDebug == 0) {
+                debugVDPDebug = 1;
+            }
+			theCore->getTV()->setDrawReady(true);
+        }
+    } else if (user == DEBUG_SPRITES) {
+        // sprite list
+    }
+}
+
 // output the current debug information into the buffer, sized x*y - must include nul termination on each line
 void TMS9918::getDebugWindow(char *buffer, int user) {
 	int tmp1,tmp2;
@@ -906,7 +949,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
                 if (off >= 0x4000) {
                     ch = '?';
                 } else {
-                    ch = VDP[off];
+                    ch = VDP[off] - debugScreenOffset;
                     // TODO: debug input key for toggling basic offset
                     // TODO: debug windows should have a help screen they can display
                     // check for printable
@@ -1468,7 +1511,7 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
 	{ 
 		for (i2=0; i2<256; i2+=8)	// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;              // debug character simply increments
                 if (o&0x100) {
                     // sprites in the second block
@@ -1481,6 +1524,10 @@ void TMS9918::VDPgraphics(int scanline, int isLayer2)
 			        fgc=VDP[CT+c];          // extract color
 			        bgc=fgc&0x0f;           // extract background color
 			        fgc>>=4;                // mask foreground color
+                }
+                if (debugVDPDebug == 2) {
+                    fgc = 1;
+                    bgc = 2;
                 }
 			} else {
 				ch=VDP[SIT+o];          // look up character
@@ -1579,7 +1626,7 @@ void TMS9918::VDPgraphicsII(int scanline, int isLayer2)
 
 		for (i2=0; i2<256; i2+=8)	// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;
 			} else {
 				ch=VDP[SIT+o];
@@ -1603,6 +1650,10 @@ void TMS9918::VDPgraphicsII(int scanline, int isLayer2)
     				fgc=VDP[c_add];
 	    			bgc=fgc&0x0f;
     				fgc>>=4;
+                }
+                if (debugVDPDebug == 2) {
+                    fgc = 1;
+                    bgc = 2;
                 }
 				{
 					if (fgc == 0) fgc = HOT_PINK_TRANS; else fgc=InvColorToInt(F18APalette[fgc]);
@@ -1651,7 +1702,7 @@ void TMS9918::VDPtext(int scanline, int isLayer2)
 	{ 
 		for (i2=8; i2<248; i2+=6)				// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch = o & 0xff;
 			} else {
 				ch=VDP[SIT+o];
@@ -1758,7 +1809,7 @@ void TMS9918::VDPtextII(int scanline, int isLayer2)
 
 		for (i2=8; i2<248; i2+=6)				// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;
 			} else {
 				ch=VDP[SIT+o];
@@ -1833,7 +1884,7 @@ void TMS9918::VDPtext80(int scanline, int isLayer2)
 	{ 
 		for (i2=8; i2<488; i2+=6)				// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;
 			} else {
 				ch=VDP[SIT+o];
@@ -1993,7 +2044,7 @@ void TMS9918::VDPmulticolor(int scanline, int isLayer2)
 	{ 
 		for (i2=0; i2<256; i2+=8)								// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;
 			} else {
 				ch=VDP[SIT+o];
@@ -2095,7 +2146,7 @@ void TMS9918::VDPmulticolorII(int scanline, int isLayer2)
 
 		for (i2=0; i2<256; i2+=8)								// x loop
 		{ 
-			if (VDPDebug) {
+			if (debugVDPDebug) {
 				ch=o&0xff;
 			} else {
 				ch=VDP[SIT+o];

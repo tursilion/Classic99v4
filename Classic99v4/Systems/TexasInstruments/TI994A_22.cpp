@@ -14,6 +14,10 @@
 TI994A22::TI994A22()
     : TI994()
 {
+    // set shared interesting data
+    setInterestingData(INDIRECT_KEY_INJECT_ADDRESS, 0x478);
+    setInterestingData(INDIRECT_KEY_KEY_ADDRESS, 0x83e0);
+    setInterestingData(INDIRECT_KEY_STATUS_ADDRESS, 0x83ec);
 }
 
 TI994A22::~TI994A22() {

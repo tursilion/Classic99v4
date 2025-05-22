@@ -81,6 +81,7 @@ public:
     // debug interface
     void getDebugSize(int &x, int &y, int user) override;             // dimensions of a text mode output screen - either being 0 means none
     void getDebugWindow(char *buffer, int user) override;             // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    //void debugKey(int ch, int user) override;               // receive a keypress
     //virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically

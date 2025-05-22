@@ -22,6 +22,10 @@ TI994::TI994()
     , pKey(nullptr)
     , pCPU(nullptr)
 {
+    // set shared interesting data
+    setInterestingData(INDIRECT_KEY_INJECT_ADDRESS, 0x356);
+    setInterestingData(INDIRECT_KEY_KEY_ADDRESS, 0x8375);
+    setInterestingData(INDIRECT_KEY_STATUS_ADDRESS, 0x83e0);
 }
 
 TI994::~TI994() {

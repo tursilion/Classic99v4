@@ -46,7 +46,9 @@ static std::recursive_mutex *csDisasm;
 
 enum {
     DEBUG_REGISTERS,
-    DEBUG_DISASSEMBLY
+    DEBUG_DISASSEMBLY,
+    DEBUG_MEMORY,
+    DEBUG_HEATMAP
 };
 
 // System interface
@@ -67,6 +69,8 @@ TMS9900::TMS9900(Classic99System *core)
     , nCycleCount(0)
     , nReturnAddress(0)
     , skip_interrupt(0)
+    , debugAddress(0)
+    , debugHeatMapRow(0)
     , runLogHead(0)
 {
     // Filling the backtrace with nops is not strictly correct, but means I don't
@@ -78,6 +82,7 @@ TMS9900::TMS9900(Classic99System *core)
         RunLog[idx].words[1] = 0x1000;  // NOP, or JMP $+2
         RunLog[idx].words[2] = 0x1000;  // NOP, or JMP $+2
     }
+    memset(heatMap, ' ', sizeof(heatMap));
 }
 
 TMS9900::~TMS9900() {
@@ -95,6 +100,8 @@ bool TMS9900::init(int idx) {
 
     debug_create_view(this, DEBUG_REGISTERS);
     debug_create_view(this, DEBUG_DISASSEMBLY);
+    debug_create_view(this, DEBUG_MEMORY);
+    debug_create_view(this, DEBUG_HEATMAP);
 
     return true;
 }
@@ -182,6 +189,41 @@ bool TMS9900::operate(double timestamp) {
             }
         }
 
+        // injection hacks for the 9900 happen here
+        int adr = getInterestingData(INDIRECT_KEY_INJECT_ADDRESS);
+        if (adr != DATA_UNSET) {
+            if (PC == adr) {
+                int key = getInterestingData(INDIRECT_KEY_PENDING_KEY);
+                if (key != DATA_UNSET) {
+                    int keymode = ROMWORD(0x8374, ACCESS_FREE) >> 8;
+                    if ((keymode == 0) || (keymode == 5)) {
+                        // if keyboard mode is 0 or 5, then it's legal to do it
+                        if (key == 10) key = 13;    // linefeed to carriage return
+                        if (((key >= ' ') && (key <= '~')) || (key == 13)) {
+                            int keyadr = getInterestingData(INDIRECT_KEY_KEY_ADDRESS);
+                            int statadr = getInterestingData(INDIRECT_KEY_STATUS_ADDRESS);
+                            int dat;
+
+                            if (keyadr & 1) {
+                                dat = (ROMWORD(keyadr, ACCESS_FREE) & 0xff00) | key;
+                            } else {
+                                dat = (ROMWORD(keyadr, ACCESS_FREE) & 0x00FF) | (key<<8);
+                            }
+                            WRWORD(keyadr, dat, ACCESS_FREE);
+                            
+                            if (statadr & 1) {
+                                dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x20;
+                            } else {
+                                dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x2000;
+                            }
+                            WRWORD(statadr, dat, ACCESS_FREE);
+                        }
+                    }
+                    setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
+                }
+            }
+        }
+
         // before we execute, log the bytes
         addRunLog(PC);
 
@@ -203,8 +245,41 @@ void TMS9900::getDebugSize(int &x, int &y, int user) {
     } else if (user == DEBUG_DISASSEMBLY) {
         x = DISASMWIDTH;
         y = -(RUNLOGSIZE+FOWARDDISASM);     // negative for bottom up
+    } else if (user == DEBUG_MEMORY) {
+        x = 40;
+        y = 34;
+    } else if (user == DEBUG_HEATMAP) {
+        x = 65;
+        y = 64;
     }
 }
+
+// receive a keypress from the TUI
+void TMS9900::debugKey(int ch, int user) {
+    if (user == DEBUG_REGISTERS) {
+        // nothing
+    } else if (user == DEBUG_DISASSEMBLY) {
+        // nothing
+    } else if (user == DEBUG_MEMORY) {
+        // up and down through memory
+        if (ch == KEY_PPAGE) {
+            if (debugAddress > 0) {
+                debugAddress -= 0x100;
+            } else {
+                debugAddress = 0xff00;
+            }
+        } else if (ch == KEY_NPAGE) {
+            if (debugAddress < 0xff00) {
+                debugAddress += 0x100;
+            } else {
+                debugAddress = 0;
+            }
+        }
+    } else if (user == DEBUG_HEATMAP) {
+        // nothing
+    }
+}
+
 
 // output the current debug information into the buffer, sized x*y - must include nul termination on each line
 void TMS9900::getDebugWindow(char *buffer, int user) {
@@ -362,6 +437,50 @@ void TMS9900::getDebugWindow(char *buffer, int user) {
                 buffer += x;
                 --left;
             }
+        }
+    } else if (user == DEBUG_MEMORY) {
+        // debugAddress should be between >0000 and >FF00, we'll show 256 bytes
+        for (int i1=0; i1<256; i1+=8) {
+            int b[8];
+            char str[9];
+            for (int i2=0; i2<4; ++i2) {
+                int w = ROMWORD(debugAddress+i1+i2*2);
+                b[i2*2] = (w&0xff00)>>8;
+                if ((b[i2*2] < ' ') || (b[i2*2] > '~')) {
+                    str[i2*2] = '.';
+                } else {
+                    str[i2*2] = b[i2*2]&0xff;
+                }
+
+                b[i2*2+1] = w&0xff;
+                if ((b[i2*2+1] < ' ') || (b[i2*2+1] > '~')) {
+                    str[i2*2+1] = '.';
+                } else {
+                    str[i2*2+1] = b[i2*2+1]&0xff;
+                }
+            }
+            str[8]='\0';
+            sprintf(buffer, "%04X: %02X %02X %02X %02X %02X %02X %02X %02X %s",
+                    debugAddress+i1, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], str);
+            buffer += x;
+        }
+    } else if (user == DEBUG_HEATMAP) {
+        for (int i=debugHeatMapRow; i<debugHeatMapRow+8; ++i) {
+            for (int i2=0; i2<64; ++i2) {
+                switch (heatMap[i*64+i2]) {
+                    case ' ': break;
+                    case 'O': heatMap[i*64+i2]='o'; break;
+                    case 'o': heatMap[i*64+i2]='.'; break;
+                    case '.': heatMap[i*64+i2]=' '; break;
+                }
+            }
+        }
+        debugHeatMapRow+=8;
+        if (debugHeatMapRow >= 64) debugHeatMapRow = 0;
+
+        for (int i=0; i<64; ++i) {
+            memcpy(buffer, &heatMap[i*64], 64);
+            buffer += x;
         }
     }
 }
@@ -747,6 +866,8 @@ Byte TMS9900::RCPUBYTE(Word src) {
     // the rest of Classic99 is built as an 8-bit machine. Hopefully
     // there are no cases where it will matter.
 
+    addHeatmap(src);
+
     // always read both bytes
     Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, ACCESS_READ);         // odd byte
     Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, ACCESS_READ);    // even byte
@@ -762,10 +883,12 @@ void TMS9900::WCPUBYTE(Word dest, Byte c) {
     // TMS9900 always writes a full word, and always reads before the write -
     // we have no choice here. We do the same 8-bit fakery as noted above.
 
+    addHeatmap(dest);
+
     // always read both bytes
     int adr = dest & 0xfffe;    // make even, but remember the original value
     Byte lsb = theCore->readMemoryByte(adr+1, nCycleCount, ACCESS_RMW);   // odd byte
-    Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);    // even byte
+    Byte msb = theCore->readMemoryByte(adr, nCycleCount, ACCESS_RMW);     // even byte
 
     // always write both bytes
     if (dest&1) {
@@ -787,18 +910,21 @@ int TMS9900::ROMWORD(Word src, MEMACCESSTYPE rmw) {
     // most common basic access
     // as above, read lsb first in a bit of 99/4A specific knowledge
     // the real TMS9900 is 16-bit only, but Classic99's architecture is 8 bit
+
+    addHeatmap(src);
     Byte lsb = theCore->readMemoryByte(src|1, nCycleCount, rmw);        // odd byte
     Byte msb = theCore->readMemoryByte(src&0xfffe, nCycleCount, rmw);   // even byte
     return (msb<<8)|lsb;
 }
 
-void TMS9900::WRWORD(Word dest, Word val) {
+void TMS9900::WRWORD(Word dest, Word val, MEMACCESSTYPE rmw) {
     // Don't read-before-write in here - do that explicitly when you need it!
     dest &= 0xfffe;     // make even, we don't need the original value
+    addHeatmap(dest);
 
     // now write the new data, in 99/4A order
-    theCore->writeMemoryByte(dest+1, nCycleCount, ACCESS_WRITE, val&0xff);
-    theCore->writeMemoryByte(dest, nCycleCount, ACCESS_WRITE, (val>>8)&0xff);
+    theCore->writeMemoryByte(dest+1, nCycleCount, rmw, val&0xff);
+    theCore->writeMemoryByte(dest, nCycleCount, rmw, (val>>8)&0xff);
 
     if (dest == 0x8356) setInterestingData(DATA_TMS9900_8356, val);
     else if (dest == 0x8370) setInterestingData(DATA_TMS9900_8370, val);
@@ -857,6 +983,14 @@ void TMS9900::addRunLog(int PC) {
         ++runLogHead;
         if (runLogHead >= RUNLOGSIZE) runLogHead = 0;
     }
+}
+
+void TMS9900::addHeatmap(int PC) {
+    // heatmap for both bytes of the word
+    // Since we divide by 16, that's automatically covered
+    // heapmap box is 64x64, string series is Oo.
+    PC/=16;     // each cell is 16 bytes
+    heatMap[PC] = 'O';
 }
 
 // interrupt handling

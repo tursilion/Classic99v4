@@ -31,6 +31,7 @@
 #include "automutex.h"
 #include "peripheral.h"
 #include "debuglog.h"
+#include "..\EmulatorSupport\interestingData.h"
 
 // size of debug log in memory - len is characters, lines is lines
 #define DEBUGLEN 1024
@@ -301,14 +302,13 @@ void debug_thread() {
                     debug_handle_resize();
                     break;
 
-                case 'Q':
-                    RequestClose();
-                    //TODO: obviously I don't want to quit on 'Q'
-                    break;
+//                case 'Q':
+//                    RequestClose();
+//                    //TODO: obviously I don't want to quit on 'Q'
+//                    break;
 
                 case '\t':
-                    // Tab - change to next window (might eventually skip to next category with control?)
-                    // change panel - again, this is all temporary test code
+                    // Tab - change to next window (use control-tab to skip to next device)
                     topMost[curWin]++;
                     if (topMost[curWin] >= debugPanes.size()) {
                         topMost[curWin] = 0;
@@ -316,7 +316,7 @@ void debug_thread() {
                     break;
 
                 case KEY_BTAB:
-                    // change panel backwards - again, this is all temporary test code
+                    // change panel backwards
                     topMost[curWin]--;
                     if ((topMost[curWin] < 0) || (topMost[curWin] >= debugPanes.size())) {
                         topMost[curWin] = (unsigned int)(debugPanes.size()-1);
@@ -358,8 +358,10 @@ void debug_thread() {
 
                 default:
                     // should be an actual key not handled above
-                    // TODO: pass it to the debug handler
                     debug_write("Got char code %X", ch);
+                    if (NULL != debugPanes[topMost[curWin]].pOwner) {
+                        debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval);
+                    }
                     break;
             }
 

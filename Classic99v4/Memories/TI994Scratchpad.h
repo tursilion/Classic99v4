@@ -44,14 +44,15 @@ public:
     bool cleanup() override;                                 // release everything claimed in init, save NV data, etc
 
     // debug interface
-    void getDebugSize(int &x, int &y, int user) override;             // dimensions of a text mode output screen - either being 0 means none
-    void getDebugWindow(char *buffer, int user) override;             // output the current debug information into the buffer, sized x*y - must include nul termination on each line
-	//virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
+    void getDebugSize(int &x, int &y, int user) override;    // dimensions of a text mode output screen - either being 0 means none
+    void getDebugWindow(char *buffer, int user) override;    // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    //void debugKey(int ch, int user) override;               // receive a keypress
+	//virtual void resetMemoryTracking() { }                 // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
-    int saveStateSize() override;                           // number of bytes needed to save state
-    bool saveState(unsigned char *buffer) override;         // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
-    bool restoreState(unsigned char *buffer) override;      // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
+    int saveStateSize() override;                            // number of bytes needed to save state
+    bool saveState(unsigned char *buffer) override;          // write state data into the provided buffer - guaranteed to be the size returned by saveStateSize
+    bool restoreState(unsigned char *buffer) override;       // restore state data from the provided buffer - guaranteed to be the size returned by saveStateSize
 
     // addresses are from the system point of view
     // While the CPU does not get any memory or IO breakpoints,

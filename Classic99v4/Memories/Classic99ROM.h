@@ -38,14 +38,15 @@ public:
     //virtual bool loadFileData(unsigned char *buffer, int address, int length) { (void)buffer; (void)address; (void)length; return false; }  // passed from core, copy data if you need it cause it's destroyed after this call, return false if something is wrong with it
 
     // interface
-    virtual bool init(int idx) override;                     // claim resources from the core system
-    bool operate(double timestamp) override;				 // process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
-    bool cleanup() override;                                 // release everything claimed in init, save NV data, etc
+    virtual bool init(int idx) override;                    // claim resources from the core system
+    bool operate(double timestamp) override;				// process until the timestamp, in microseconds, is reached. The offset is arbitrary, on first run just accept it and return, likewise if it goes negative
+    bool cleanup() override;                                // release everything claimed in init, save NV data, etc
 
     // debug interface
-    void getDebugSize(int &x, int &y, int user) override;             // dimensions of a text mode output screen - either being 0 means none
-    void getDebugWindow(char *buffer, int user) override;             // output the current debug information into the buffer, sized x*y - must include nul termination on each line
-	//virtual void resetMemoryTracking() { }                        // reset memory tracking, if the peripheral has any
+    void getDebugSize(int &x, int &y, int user) override;   // dimensions of a text mode output screen - either being 0 means none
+    void getDebugWindow(char *buffer, int user) override;   // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    //void debugKey(int ch, int user) override;               // receive a keypress
+	//virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
     int saveStateSize() override;                           // number of bytes needed to save state

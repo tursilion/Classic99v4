@@ -27,12 +27,18 @@ enum {
 
 // Special case debug data - may not be set in all cases
     DATA_TMS9900_8356,                      // contents of TMS9900 memory word >8356, special to TI disk emulation
-    DATA_TMS9900_8370,                      // contents of TMS9900 memory word >8356, special to TI disk emulation
+    DATA_TMS9900_8370,                      // contents of TMS9900 memory word >8370, special to TI disk emulation
 
 // Indirect data - must use get Indirect version
     INDIRECT_MAIN_CPU_INTERRUPTS_ENABLED,   // this will point to the correct index for the main CPU's interrupt enabled flag
     INDIRECT_MAIN_CPU_PC,                   // this will point to the correct index for the main CPU's PC
-                                        
+
+// Keyboard data for pasting (TODO: need a way to store a string, not just a keypress)
+    INDIRECT_KEY_INJECT_ADDRESS,            // CPU address at which to inject keypress to >8375 (differs per ROM)
+    INDIRECT_KEY_KEY_ADDRESS,               // CPU address at which to write keypress
+    INDIRECT_KEY_STATUS_ADDRESS,            // CPU address to update status code when key is pressed
+    INDIRECT_KEY_PENDING_KEY,               // ASCII value for a key to be injected into KSCAN
+
 // final value for size
     MAX_INTERESTING_DATA
 };
