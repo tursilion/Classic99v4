@@ -136,8 +136,6 @@ SN76xxx::SN76xxx(Classic99System *theCore)
     , nRegister()
     , nVolume()
     , max_volume(0)
-    , debugCount(0)
-    , debugIndex(0)
     , AudioSampleRate(44100)
     , nTappedBits(0x0003)
 	, latch_byte(0)
@@ -151,10 +149,15 @@ SN76xxx::SN76xxx(Classic99System *theCore)
 		nOutput[idx] = 1.0;
 	}
 
-    // clear the output for debug
-    memset(debugVal, 0, sizeof(debugVal));
-
 	csAudioBuf = new std::recursive_mutex();
+
+    // set up debug
+    debugBuildNoteTable();
+    for (int i=0; i<AUDIO_DEBUG_LINES; ++i) {
+        strcpy(debugOutput[i], "| --- 0 | --- 0 | --- 0 | --- 0 |");
+    }
+    debugTail = 0;
+    debugFrame = 0;
 }
 
 SN76xxx::~SN76xxx() {
@@ -185,20 +188,6 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 	}
 
 	while (nSamples) {
-        // debug window - 40 columns
-        debugCount += nClocksPerSample;
-        while (debugCount > 64) {
-            debugCount -= 64;
-            for (int i=0; i<4; ++i) {
-                debugVal[i][debugIndex] = nOutput[i]*nVolumeTable[nVolume[i]]*nFade[i];
-            }
-            if (debugIndex+1 >= sizeof(debugVal[0])/sizeof(debugVal[0][0])) {
-                debugIndex = 0;
-            } else {
-                ++debugIndex;
-            }
-        }
-
 		// emulate drift to zero
 		for (int idx=0; idx<4; idx++) {
 			if (nFade[idx] > 0.0) {
@@ -465,6 +454,49 @@ bool SN76xxx::cleanup() {
 	return true;
 }
 
+void SN76xxx::debugBuildNoteTable() {
+    // note scales are confusing. ;) But anyway, we'll start at
+    // A0 in the tempered scale which is 27.5 hz, or 4068 counts.
+    // That's the lowest this protocol supports (and is far lower
+    // than the TI can manage.)
+    // Note: this range from vgmcomp2, probably a bit wasteful here... but
+    // we can probably use the same code for other sound chips later
+    static const char *names[12] = { "C-","C#","D-","D#","E-","F-","F#","G-","G#","A-","A#","B-" };
+    int scale = 0;  // scale increments at C
+    int namepos = 9;    // A
+    double currentNote = 27.5;  // A
+
+    // so first init the table blank
+    for (int idx=0; idx<sizeof(NoteTable)/sizeof(NoteTable[0]); ++idx) {
+        strcpy(NoteTable[idx],"---");
+    }
+
+    // okay! Now we build, increasing frequency until it is under 20
+    int lastPer = 4095;
+    for (;;) {
+        int period = int(111860.8/currentNote+0.5);
+        if (period < 20) break;     // no longer tuned around here
+        int split = (lastPer-period) / 2;
+        for (int run = period-split; run<period+split; ++run) {
+            sprintf(NoteTable[run], "%s%d", names[namepos], scale);
+        }
+        ++namepos;
+        if (namepos > 11) {
+            namepos = 0;
+            ++scale;
+        }
+        currentNote = currentNote * pow(2, 1.0/12.0);
+        lastPer = period;
+    }
+    // close enough...
+}
+
+// MUST return a 3-character string
+const char *SN76xxx::debugGetNoteStr(int note, int vol) {
+    if (vol == 0xf) return "---";
+    return NoteTable[note&0xfff];
+}
+
 void SN76xxx::getDebugSize(int &x, int &y, int user) {
 	// TODO: it might be nice to make the debug option a bitmap instead of text - then we just render
 	// it. This would allow graphics as well as text - for instance the sound could actually display
@@ -472,39 +504,39 @@ void SN76xxx::getDebugSize(int &x, int &y, int user) {
 	// would also make sense. But then the user just selects the bitmaps they want, and can move
 	// them around as needed.
 
-	// two lines of registers, and an ASCII graphic
-	x=41;
-	y=34;
+	// two lines of registers, and a scrolling tracker-like view
+	x=38;
+	y=-(AUDIO_DEBUG_LINES+3);
 }
 
 void SN76xxx::getDebugWindow(char *buffer, int user) {
     int x, y;
     getDebugSize(x, y, user);
 
-    // two lines of status at the top
+    // 40x40 tracker output - update every 3rd call for roughly 60hz
+    ++debugFrame;
+    if (debugFrame >= 3) {
+        debugFrame = 0;
+        sprintf(debugOutput[debugTail++], "| %s %02X | %s %02X | %s %02X | %03X%c%02X |",
+                debugGetNoteStr(nRegister[0]&0x3ff, nVolume[0]), nVolume[0],
+                debugGetNoteStr(nRegister[1]&0x3ff, nVolume[1]), nVolume[1],
+                debugGetNoteStr(nRegister[2]&0x3ff, nVolume[2]), nVolume[2],
+                nRegister[3], (nRegister[3]&4)?' ':'~', nVolume[3] );
+        if (debugTail >= AUDIO_DEBUG_LINES) debugTail = 0;
+    }
+
+    int n=debugTail;
+    for (int i=0; i<AUDIO_DEBUG_LINES; ++i) {
+        strcpy(buffer, debugOutput[n++]);
+        if (n >= AUDIO_DEBUG_LINES) n=0;
+        buffer += x;
+    }
+
+    // two lines of status at the bottom plus a blank line
+    buffer += x;
     sprintf(buffer, "%03X %03X %03X %01X", nRegister[0], nRegister[1], nRegister[2], nRegister[3]);
     buffer += x;
     sprintf(buffer, " %1X   %1X   %1X  %1X", nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
-    buffer += x;
-    y-=2;
-
-    // now 40x30 'graphics' for the waveform outputs
-    // TODO: this is nice, but I think it might be better to use a scrolling
-    // tracker output instead tied to frame rate. Rip the tracker output
-    // testplayer in vgmcomp2
-    for (int r = 0; r<y; ++r) {
-        memset(buffer + r*x, ' ', x-1);
-    }
-    int h = y/4;
-    for (int i=0; i<4; ++i) {
-        for (int c = 0; c<x-1; ++c) {
-            int r = int(debugVal[i][c]*(h/2)+(h/2));
-            if (r < 0) r = 0;
-            if (r >= y) r = y-1;
-            buffer[r*x+c] = '-';
-        }
-        buffer += h*x;
-    }
 }
 
 // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically

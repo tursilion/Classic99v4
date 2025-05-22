@@ -14,6 +14,8 @@
 #include "../EmulatorSupport/audioSrc.h"
 #include "../EmulatorSupport/automutex.h"
 
+#define AUDIO_DEBUG_LINES 40
+
 class SN76xxx : public Classic99Peripheral, Classic99AudioSrc {
 public:
     SN76xxx(Classic99System *core); 
@@ -50,10 +52,12 @@ public:
     bool cleanup() override;                            // release everything claimed in init, save NV data, etc
 
     // debug interface
-    void getDebugSize(int &x, int &y, int user) override;         // dimensions of a text mode output screen - either being 0 means none
-    void getDebugWindow(char *buffer, int user) override;         // output the current debug information into the buffer, sized x*y - must include nul termination on each line
-    //void debugKey(int ch, int user) override;               // receive a keypress
-    //virtual void resetMemoryTracking() { }            // reset memory tracking, if the peripheral has any
+    void getDebugSize(int &x, int &y, int user) override;   // dimensions of a text mode output screen - either being 0 means none
+    void getDebugWindow(char *buffer, int user) override;   // output the current debug information into the buffer, sized x*y - must include nul termination on each line
+    //void debugKey(int ch, int user) override;             // receive a keypress
+    //virtual void resetMemoryTracking() { }                // reset memory tracking, if the peripheral has any
+    void debugBuildNoteTable();                             // initialize the note table for the debug screen
+    const char *debugGetNoteStr(int note, int vol);         // get the current note string
 
     // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
     int saveStateSize() override;                       // number of bytes needed to save state
@@ -90,9 +94,10 @@ protected:
     int max_volume;
 
     // debug
-    int debugCount;
-    int debugIndex;
-    double debugVal[4][40]; // TODO: should we make 5 and include DAC?
+    char NoteTable[4096][4]; // note names - we'll just lookup the whole range
+    char debugOutput[AUDIO_DEBUG_LINES][41];// actual output strings as a ring buffer
+    int debugTail;           // pointer to next entry in the ring buffer (no need for a tail, it'll always be full)
+    int debugFrame;          // frame count so that we can update every 3rd call
 
     // audio
     int AudioSampleRate;    // in hz

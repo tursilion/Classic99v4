@@ -343,6 +343,7 @@ void debug_thread() {
                     // turn on dual-panes, or switch between them
                     if (numWin == 1) {
                         numWin = 2;
+                        curWin = 1;
                     } else if (curWin == 0) {
                         curWin = 1;
                     } else {
