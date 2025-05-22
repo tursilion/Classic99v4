@@ -89,6 +89,11 @@ protected:
 							// we should test this against an external chip with a clean circuit.
     int max_volume;
 
+    // debug
+    int debugCount;
+    int debugIndex;
+    double debugVal[4][40]; // TODO: should we make 5 and include DAC?
+
     // audio
     int AudioSampleRate;    // in hz
 

@@ -136,6 +136,8 @@ SN76xxx::SN76xxx(Classic99System *theCore)
     , nRegister()
     , nVolume()
     , max_volume(0)
+    , debugCount(0)
+    , debugIndex(0)
     , AudioSampleRate(44100)
     , nTappedBits(0x0003)
 	, latch_byte(0)
@@ -148,6 +150,9 @@ SN76xxx::SN76xxx(Classic99System *theCore)
 		nFade[idx] = 1.0;
 		nOutput[idx] = 1.0;
 	}
+
+    // clear the output for debug
+    memset(debugVal, 0, sizeof(debugVal));
 
 	csAudioBuf = new std::recursive_mutex();
 }
@@ -180,6 +185,20 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 	}
 
 	while (nSamples) {
+        // debug window - 40 columns
+        debugCount += nClocksPerSample;
+        while (debugCount > 64) {
+            debugCount -= 64;
+            for (int i=0; i<4; ++i) {
+                debugVal[i][debugIndex] = nOutput[i]*nVolumeTable[nVolume[i]]*nFade[i];
+            }
+            if (debugIndex+1 >= sizeof(debugVal[0])/sizeof(debugVal[0][0])) {
+                debugIndex = 0;
+            } else {
+                ++debugIndex;
+            }
+        }
+
 		// emulate drift to zero
 		for (int idx=0; idx<4; idx++) {
 			if (nFade[idx] > 0.0) {
@@ -191,7 +210,6 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 		}
 
 		// tone channels
-
 		for (int idx=0; idx<3; idx++) {
             // Further Testing with the chip that SMS Power's doc covers (SN76489)
             // 0 outputs a 1024 count tone, just like the TI, but 1 DOES output a flat line.
@@ -292,7 +310,7 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 		double output;
 
 		// using division (single voices are quiet!)
-		// write out one sample
+		// write out one sample (TODO: also see the debug output above)
 		output = nOutput[0]*nVolumeTable[nVolume[0]]*nFade[0] +
 				nOutput[1]*nVolumeTable[nVolume[1]]*nFade[1] +
 				nOutput[2]*nVolumeTable[nVolume[2]]*nFade[2] +
@@ -430,6 +448,9 @@ bool SN76xxx::init(int idx) {
 		PlayAudioStream(stream->stream);
 	}
 
+    // register a debug screen
+    debug_create_view(this, 0);
+
 	return true;
 }
 
@@ -440,6 +461,7 @@ bool SN76xxx::operate(double timestamp) {
 
 bool SN76xxx::cleanup() {
 	// don't remove the stream, it's an auto
+    debug_unregister_view(this);
 	return true;
 }
 
@@ -450,16 +472,39 @@ void SN76xxx::getDebugSize(int &x, int &y, int user) {
 	// would also make sense. But then the user just selects the bitmaps they want, and can move
 	// them around as needed.
 
-	// for now, just the registers
-	x=11;
-	y=2;
+	// two lines of registers, and an ASCII graphic
+	x=41;
+	y=34;
 }
 
 void SN76xxx::getDebugWindow(char *buffer, int user) {
-	// buffer should be sized to (x+2)*y (to allow \r\n endings)
-	sprintf(buffer, "%03X %03X %03X %01X\r\n %1X  %1X  %1X  %1X", 
-		nRegister[0], nRegister[1], nRegister[2], nRegister[3],
-		nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
+    int x, y;
+    getDebugSize(x, y, user);
+
+    // two lines of status at the top
+    sprintf(buffer, "%03X %03X %03X %01X", nRegister[0], nRegister[1], nRegister[2], nRegister[3]);
+    buffer += x;
+    sprintf(buffer, " %1X  %1X  %1X  %1X", nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
+    buffer += x;
+    y-=2;
+
+    // now 40x30 'graphics' for the waveform outputs
+    // TODO: this is nice, but I think it might be better to use a scrolling
+    // tracker output instead tied to frame rate. Rip the tracker output
+    // testplayer in vgmcomp2
+    for (int r = 0; r<y; ++r) {
+        memset(buffer + r*x, ' ', x-1);
+    }
+    int h = y/4;
+    for (int i=0; i<4; ++i) {
+        for (int c = 0; c<x-1; ++c) {
+            int r = int(debugVal[i][c]*(h/2)+(h/2));
+            if (r < 0) r = 0;
+            if (r >= y) r = y-1;
+            buffer[r*x+c] = '-';
+        }
+        buffer += h*x;
+    }
 }
 
 // save and restore state - return size of 0 if no save, and return false if either act fails catastrophically
@@ -480,20 +525,20 @@ bool SN76xxx::saveState(unsigned char *buffer) {
     saveStateVal(buffer, nClock);
 
     for (int idx=0; idx<4; ++idx) {
-	saveStateVal(buffer, nCounter[idx]);
+	    saveStateVal(buffer, nCounter[idx]);
     }
 
     saveStateVal(buffer, nNoisePos);
     saveStateVal(buffer, LFSR);
 
     for (int idx=0; idx<4; ++idx) {
-	saveStateVal(buffer, nRegister[idx]);
+	    saveStateVal(buffer, nRegister[idx]);
     }
     for (int idx=0; idx<4; ++idx) {
-	saveStateVal(buffer, nVolume[idx]);
+	    saveStateVal(buffer, nVolume[idx]);
     }
     for (int idx=0; idx<4; ++idx) {
-	saveStateVal(buffer, nFade[idx]);
+	    saveStateVal(buffer, nFade[idx]);
     }
 
     saveStateVal(buffer, max_volume);
@@ -502,7 +547,7 @@ bool SN76xxx::saveState(unsigned char *buffer) {
     saveStateVal(buffer, latch_byte);
 
     for (int idx=0; idx<4; ++idx) {
-	saveStateVal(buffer, nOutput[idx]);
+	    saveStateVal(buffer, nOutput[idx]);
     }
 
     return true;
@@ -521,20 +566,20 @@ bool SN76xxx::restoreState(unsigned char *buffer) {
     loadStateVal(buffer, nClock);
 
     for (int idx=0; idx<4; ++idx) {
-	loadStateVal(buffer, nCounter[idx]);
+	    loadStateVal(buffer, nCounter[idx]);
     }
 
     loadStateVal(buffer, nNoisePos);
     loadStateVal(buffer, LFSR);
 
     for (int idx=0; idx<4; ++idx) {
- 	loadStateVal(buffer, nRegister[idx]);
+ 	    loadStateVal(buffer, nRegister[idx]);
     }
     for (int idx=0; idx<4; ++idx) {
- 	loadStateVal(buffer, nVolume[idx]);
+ 	    loadStateVal(buffer, nVolume[idx]);
     }
     for (int idx=0; idx<4; ++idx) {
-	loadStateVal(buffer, nFade[idx]);
+	    loadStateVal(buffer, nFade[idx]);
     }
 
     loadStateVal(buffer, max_volume);
@@ -543,7 +588,7 @@ bool SN76xxx::restoreState(unsigned char *buffer) {
     loadStateVal(buffer, latch_byte);
 
     for (int idx=0; idx<4; ++idx) {
-   	loadStateVal(buffer, nOutput[idx]);
+    	loadStateVal(buffer, nOutput[idx]);
     }
 
     return true;
