@@ -484,7 +484,7 @@ void SN76xxx::getDebugWindow(char *buffer, int user) {
     // two lines of status at the top
     sprintf(buffer, "%03X %03X %03X %01X", nRegister[0], nRegister[1], nRegister[2], nRegister[3]);
     buffer += x;
-    sprintf(buffer, " %1X  %1X  %1X  %1X", nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
+    sprintf(buffer, " %1X   %1X   %1X  %1X", nVolume[0], nVolume[1], nVolume[2], nVolume[3]);
     buffer += x;
     y-=2;
 

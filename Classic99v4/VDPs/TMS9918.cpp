@@ -1352,6 +1352,7 @@ void TMS9918::VDPdisplay(int scanline)
 
 	// count down scanlines to redraw
 	// todo: the redraw_needed code all seems pretty broken
+    redraw_needed = 1;  // TODO: hack to test - if PI still gets 60fps then remove redraw_needed
 	if (redraw_needed > 0) {
 		--redraw_needed;
 
