@@ -1,4 +1,6 @@
 target_sources(classic99v4 PUBLIC
+    9900disasm.cpp
+    9900disasm.h
     audioSrc.h
     autobitmap.h
     automutex.h

@@ -261,7 +261,7 @@ void debug_update() {
     #ifdef min
             int w = min((unsigned)c, width);
     #else
-            int w = std::min(c, width);
+            int w = std::min((unsigned)c, width);
     #endif
             strncpy(workbuf, adr, w);
             workbuf[w]='\0';

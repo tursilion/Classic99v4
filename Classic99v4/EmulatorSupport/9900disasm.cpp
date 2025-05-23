@@ -22,10 +22,9 @@
 // Modified by Tursi for Classic99 
 
 #include <stdio.h>
-#include <windows.h>
 #include <map>
+#include <cstring>
 #include <string>
-
 #include "debuglog.h"
 
 // internal symbol table
@@ -55,12 +54,9 @@ std::map<int,std::string> Symbols;
 //	     E     Symbol is in the XREF list                       NO
 //	     X     Symbol is an defined extended operation (DXOP)    ? - maybe yeah, maybe no, can be relocatable
 void ImportMapFile(const char *fn) {
-	FILE *fp;
-
 	Symbols.clear();
 
-	fp = NULL;
-	fopen_s(&fp, fn, "r");
+	FILE *fp = fopen(fn, "r");
 	if (NULL == fp) {
 		debug_write("Failed to open map file.");
 		return;

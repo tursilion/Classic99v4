@@ -106,6 +106,7 @@ From Matt - check this decrement:
 // TODO: Speech and SID need to be implemented as separate objects
 
 #include <cstdio>
+#include <cmath>
 #include "../EmulatorSupport/automutex.h"
 #include "SN76xxx.h"
 
@@ -485,7 +486,7 @@ void SN76xxx::debugBuildNoteTable() {
             namepos = 0;
             ++scale;
         }
-        currentNote = currentNote * pow(2, 1.0/12.0);
+        currentNote = currentNote * std::pow(2, 1.0/12.0);
         lastPer = period;
     }
     // close enough...
