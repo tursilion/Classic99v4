@@ -48,6 +48,9 @@ static unsigned int numWin = 1;         // only 1 or 2 is legal right now, some 
 static unsigned int curWin = 0;         // current window is 0 or 1
 static char *debug_buf = nullptr;       // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
+static bool inMenu = false;     // TODO: I think I need to think about this a little more... maybe inMenu just goes
+static bool menuColumn = 0;     // into a custom debug screen sequence.. tab and shift tab could still work, but so
+static bool menuRow = 0;        // do numbers which are listed in the menus? I may need a way to build forms too...?
 
 using namespace std::chrono_literals;
 
@@ -151,7 +154,7 @@ void debug_update() {
         return;
     }
 
-    mvprintw(0, 0, CLASSIC99VERSION " - [tab], [f6]");
+    mvprintw(0, 0, CLASSIC99VERSION " - [tab], [f6], [f10]");
     clrtoeol();
     mvhline(1, 0, ACS_HLINE, sc);
 
@@ -294,11 +297,12 @@ void debug_thread() {
 
             switch (ch) {
                 case ERR:
-                    // no key was ready
+                    // no key was ready - this is normal
                     break;
 
                 case KEY_RESIZE:
                     // window resize event
+                    inMenu = false;
                     debug_handle_resize();
                     break;
 
@@ -309,6 +313,7 @@ void debug_thread() {
 
                 case '\t':
                     // Tab - change to next window (use control-tab to skip to next device)
+                    inMenu = false;
                     topMost[curWin]++;
                     if (topMost[curWin] >= debugPanes.size()) {
                         topMost[curWin] = 0;
@@ -317,6 +322,7 @@ void debug_thread() {
 
                 case KEY_BTAB:
                     // change panel backwards
+                    inMenu = false;
                     topMost[curWin]--;
                     if ((topMost[curWin] < 0) || (topMost[curWin] >= debugPanes.size())) {
                         topMost[curWin] = (unsigned int)(debugPanes.size()-1);
@@ -325,6 +331,7 @@ void debug_thread() {
 
                 case CTL_TAB:
                     // change panel to next device (skip multiple panes on same device)
+                    inMenu = false;
                     {
                         Classic99Peripheral *p = debugPanes[topMost[curWin]].pOwner;
                         for (int idx=0; idx<debugPanes.size(); ++idx) {
@@ -340,6 +347,7 @@ void debug_thread() {
                     break;
 
                 case KEY_F(6):
+                    inMenu = false;
                     // turn on dual-panes, or switch between them
                     if (numWin == 1) {
                         numWin = 2;
@@ -351,7 +359,16 @@ void debug_thread() {
                     }
                     break;
 
+                case KEY_F(10):
+                    if (inMenu) {
+                        inMenu = false;
+                    } else {
+                        inMenu = true;
+                    }
+                    break;
+
                 case KEY_F(18):     // Shift F1 is actually F13, okay
+                    inMenu = false;
                     // turn off dual pane
                     numWin = 1;
                     curWin = 0;
@@ -361,8 +378,13 @@ void debug_thread() {
                     // should be an actual key not handled above
                     debug_write("Got char code %X", ch);
                     if (NULL != debugPanes[topMost[curWin]].pOwner) {
-                        debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval);
+                        if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
+                            break;
+                        }
                     }
+
+                    // if we get here, it was not consumed by the panel
+
                     break;
             }
 

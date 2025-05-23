@@ -255,7 +255,7 @@ void TMS9900::getDebugSize(int &x, int &y, int user) {
 }
 
 // receive a keypress from the TUI
-void TMS9900::debugKey(int ch, int user) {
+bool TMS9900::debugKey(int ch, int user) {
     if (user == DEBUG_REGISTERS) {
         // nothing
     } else if (user == DEBUG_DISASSEMBLY) {
@@ -268,16 +268,20 @@ void TMS9900::debugKey(int ch, int user) {
             } else {
                 debugAddress = 0xff00;
             }
+            return true;
         } else if (ch == KEY_NPAGE) {
             if (debugAddress < 0xff00) {
                 debugAddress += 0x100;
             } else {
                 debugAddress = 0;
             }
+            return true;
         }
     } else if (user == DEBUG_HEATMAP) {
         // nothing
     }
+
+    return false;
 }
 
 

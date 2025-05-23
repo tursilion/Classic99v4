@@ -802,7 +802,7 @@ void TMS9918::getDebugSize(int &x, int &y, int user) {
 }
 
 // keypress from the TUI
-void TMS9918::debugKey(int ch, int user) {
+bool TMS9918::debugKey(int ch, int user) {
     // pass the keypress on to the inject system, if it's ASCII
     if (user == DEBUG_REGS) {
         // register screen
@@ -810,12 +810,14 @@ void TMS9918::debugKey(int ch, int user) {
         // display screen
         if (((ch >= ' ') && (ch <= '~')) || (ch == 13)) {
             setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
+            return true;
         } else if (ch == KEY_F(1)) {
             if (debugScreenOffset) {
                 debugScreenOffset = 0;
             } else {
                 debugScreenOffset = 96;
             }
+            return true;
         } else if (ch == KEY_F(9)) {
             if (debugVDPDebug == 2) {
                 debugVDPDebug = 0;
@@ -825,10 +827,13 @@ void TMS9918::debugKey(int ch, int user) {
                 debugVDPDebug = 1;
             }
 			theCore->getTV()->setDrawReady(true);
+            return true;
         }
     } else if (user == DEBUG_SPRITES) {
         // sprite list
     }
+
+    return false;
 }
 
 // output the current debug information into the buffer, sized x*y - must include nul termination on each line
