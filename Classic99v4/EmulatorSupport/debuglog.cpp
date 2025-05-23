@@ -167,7 +167,7 @@ void debug_update() {
 
     for (unsigned int idx=0; idx<numWin; ++idx) {
         int start = 0;
-        int width = sc;
+        unsigned int width = sc;
         if (idx > 0) {
             start = end1+1;
         }
@@ -259,7 +259,7 @@ void debug_update() {
             }
             char *adr = (line+firstOutLine)*c+debug_buf;
     #ifdef min
-            int w = min(c, width);
+            int w = min((unsigned)c, width);
     #else
             int w = std::min(c, width);
     #endif
@@ -328,7 +328,7 @@ void debug_thread() {
                         topMost[curWin] = (unsigned int)(debugPanes.size()-1);
                     }
                     break;
-
+#if 0
                 case CTL_TAB:
                     // change panel to next device (skip multiple panes on same device)
                     inMenu = false;
@@ -345,6 +345,7 @@ void debug_thread() {
                         }
                     }
                     break;
+#endif
 
                 case KEY_F(6):
                     inMenu = false;
