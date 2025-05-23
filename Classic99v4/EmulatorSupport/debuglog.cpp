@@ -26,7 +26,7 @@
 #include <thread>
 #include <vector>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include "Classic99v4.h"
 #include "automutex.h"
 #include "peripheral.h"
