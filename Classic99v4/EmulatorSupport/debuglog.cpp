@@ -31,7 +31,7 @@
 #include "automutex.h"
 #include "peripheral.h"
 #include "debuglog.h"
-#include "..\EmulatorSupport\interestingData.h"
+#include "interestingData.h"
 
 // size of debug log in memory - len is characters, lines is lines
 #define DEBUGLEN 1024
