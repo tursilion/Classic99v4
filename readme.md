@@ -62,11 +62,18 @@ Tested Platforms
 
 - Platform    Version     Status      Date        Notes
 - -------------------------------------------------------------------------------------------------------------
-- Windows     11          working     5/7/2025
+- Windows     11          working     5/22/2025
 - Linux       Debian 12   working     5/7/2025
-- Linux       WSL2 Debian working     5/7/2025
-- Mac OSX     Sequoia15.2 working     5/7/2025    OpenGL build marked deprecated, audio not tested
+- Linux       WSL2 Debian working     5/22/2025
+- Mac OSX     Sequoia15.2 working     5/22/2025   OpenGL build marked deprecated, audio not tested
 - PI 4	      R-PiOS 6.12 working     5/7/2025    Requires OpenGL 2.1 build as noted above
+
+Notes
+=====
+
+These things don't work on Mac: Control-Tab, Shift-F6, FPS overlay
+These things don't work on WSL: Control-Tab
+
 
 Credits
 =======

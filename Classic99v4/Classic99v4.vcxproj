@@ -171,6 +171,7 @@
     <ClInclude Include="EmulatorSupport\autostream.h" />
     <ClInclude Include="EmulatorSupport\Classic99v4.h" />
     <ClInclude Include="EmulatorSupport\debuglog.h" />
+    <ClInclude Include="EmulatorSupport\debugmenu.h" />
     <ClInclude Include="EmulatorSupport\interestingData.h" />
     <ClInclude Include="EmulatorSupport\os.h" />
     <ClInclude Include="EmulatorSupport\peripheral.h" />
@@ -204,6 +205,7 @@
     <ClCompile Include="EmulatorSupport\9900disasm.cpp" />
     <ClCompile Include="EmulatorSupport\Classic99v4.cpp" />
     <ClCompile Include="EmulatorSupport\debuglog.cpp" />
+    <ClCompile Include="EmulatorSupport\debugmenu.cpp" />
     <ClCompile Include="EmulatorSupport\interestingData.cpp" />
     <ClCompile Include="EmulatorSupport\peripheral.cpp" />
     <ClCompile Include="EmulatorSupport\speaker.cpp" />

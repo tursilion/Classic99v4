@@ -5,19 +5,28 @@
 // I'm just handling it myself. I only need to render the topmost window and I can more easily
 // assume the menu bar (ncurses menu isn't available in pdcurses anyway).
 
-// TODO: future: multiple consoles for multiple debug windows
+// TODO: future: multiple consoles for multiple debug windows (UDP request/response)
 // TODO: maybe color someday? https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/color.html
-// TODO: implement optional split panel mode (maybe an F-key to toggle)
 // TODO: At startup/shutdown, record whether in split panel mode or not, and what the two panels are
 // TODO: each debug panel should implement an optional help screen - displayed if they support it, else help key is ignored
-// TODO: input keys can be directed to the individual debug handlers (for instance, the display debug can 'paste' keypresses
-//       to allow operation of the emulator purely in text mode)
 // TODO: menu bar acts as an input line for all the commands you used to be able to type
+
+// TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
+// TODO: I'll probably create some kind of class to display all the debug windows, including this...
+// TODO: add the command prompt - if you type other than a command key, you get a command line
+//       implement as per windowproc.cpp line 3766 in the old Classic99
+
+// TODO: Windows extension to inject real menu bar and file dialog etc for better integration?
 
 // TODO: command line modes:
 // - nogui = don't open the graphical window (can use the debug window to operate)
 // - notui = don't open the console text window (if possible)
 // - winui = add the Win32 menu system to the UI (on the assumption this is more helpful than the console?)
+
+// TODO: Some keypresses don't work on some systems:
+// Mac: Control-Tab, Shift-F6 (Maybe just over VNC?)
+// WSL: Control-Tab (not sure about real Linux, but probably. Probably also PI.)
+// Why don't they work? Can they be made to work? That's stupid.
 
 #include "os.h"
 #include <raylib.h>
@@ -31,6 +40,7 @@
 #include "automutex.h"
 #include "peripheral.h"
 #include "debuglog.h"
+#include "debugmenu.h"
 #include "interestingData.h"
 
 // size of debug log in memory - len is characters, lines is lines
@@ -40,7 +50,7 @@ static char lines[DEBUGLINES][DEBUGLEN];
 static bool debug_dirty = false;
 static volatile bool debug_quit = false;
 static int currentDebugLine;
-static std::recursive_mutex *debugLock;        // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, it's not thread safe
+       std::recursive_mutex *debugLock;        // our object lock - MUST HOLD FOR ALL NCURSES ACTIVITY, it's not thread safe
 static std::thread *debugThread;               // the actual thread object
 static std::vector<WindowTrack> debugPanes;
 static unsigned int topMost[2] = { 0, 0 };
@@ -48,16 +58,10 @@ static unsigned int numWin = 1;         // only 1 or 2 is legal right now, some 
 static unsigned int curWin = 0;         // current window is 0 or 1
 static char *debug_buf = nullptr;       // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
-static bool inMenu = false;     // TODO: I think I need to think about this a little more... maybe inMenu just goes
-static bool menuColumn = 0;     // into a custom debug screen sequence.. tab and shift tab could still work, but so
-static bool menuRow = 0;        // do numbers which are listed in the menus? I may need a way to build forms too...?
+static bool inMenu = false;     // TODO: I think I need to think about this a little more... 
+                                // TODO: I need a way to build forms too...
 
 using namespace std::chrono_literals;
-
-// TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
-// TODO: I'll probably create some kind of class to display all the debug windows, including this...
-// TODO: add the command prompt - if you type other than a command key, you get a command line
-//       implement as per windowproc.cpp line 3766 in the old Classic99
 
 WindowTrack::WindowTrack(Classic99Peripheral *p, int user) 
     : minr(0)
@@ -85,7 +89,6 @@ WindowTrack::~WindowTrack() {
 //TODO: mousemask enables mouse input from the console, which in turn disables quickedit, needed
 //      for copy/paste. We'll need an option to disable that, or just a keypress to copy the screen
 //      might well be enough.
-//      I am starting to think maybe I don't need a mouse driven menu - keyboard driven is more than enough
 void debug_thread_init() {
     autoMutex mutex(debugLock);
 
@@ -277,8 +280,6 @@ void debug_update() {
         mvvline(2, end1, ACS_VLINE, sr);
         mvaddch(1, end1, ACS_TTEE);
     }
-
-    refresh();
 }
 
 // the main loop that manages the debug system - debugLock must be created BEFORE calling
@@ -296,24 +297,25 @@ void debug_thread() {
             ch = getch();
 
             switch (ch) {
-                case ERR:
+                case -1:
                     // no key was ready - this is normal
                     break;
 
                 case KEY_RESIZE:
                     // window resize event
-                    inMenu = false;
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     debug_handle_resize();
                     break;
 
-//                case 'Q':
-//                    RequestClose();
-//                    //TODO: obviously I don't want to quit on 'Q'
-//                    break;
-
                 case '\t':
                     // Tab - change to next window (use control-tab to skip to next device)
-                    inMenu = false;
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     topMost[curWin]++;
                     if (topMost[curWin] >= debugPanes.size()) {
                         topMost[curWin] = 0;
@@ -322,16 +324,24 @@ void debug_thread() {
 
                 case KEY_BTAB:
                     // change panel backwards
-                    inMenu = false;
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     topMost[curWin]--;
                     if ((topMost[curWin] < 0) || (topMost[curWin] >= debugPanes.size())) {
                         topMost[curWin] = (unsigned int)(debugPanes.size()-1);
                     }
                     break;
-#if 0
+
+#ifdef CTL_TAB
+                // PDCurses specific - TODO: this makes it windows only
                 case CTL_TAB:
                     // change panel to next device (skip multiple panes on same device)
-                    inMenu = false;
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     {
                         Classic99Peripheral *p = debugPanes[topMost[curWin]].pOwner;
                         for (int idx=0; idx<debugPanes.size(); ++idx) {
@@ -348,11 +358,13 @@ void debug_thread() {
 #endif
 
                 case KEY_F(6):
-                    inMenu = false;
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     // turn on dual-panes, or switch between them
                     if (numWin == 1) {
-                        numWin = 2;
-                        curWin = 1;
+                        debug_control(DEBUG_CMD_EDIT_SPLIT_DEBUG);
                     } else if (curWin == 0) {
                         curWin = 1;
                     } else {
@@ -363,34 +375,49 @@ void debug_thread() {
                 case KEY_F(10):
                     if (inMenu) {
                         inMenu = false;
+                        debug_close_all_menu();
                     } else {
                         inMenu = true;
+                        menu_open_first();
+                        ch = -1;    // consume the key
                     }
                     break;
 
-                case KEY_F(18):     // Shift F1 is actually F13, okay
-                    inMenu = false;
+                case KEY_F(18):     // Shift F6 is actually F18, okay
+                    if (inMenu) {
+                        inMenu = false;
+                        debug_close_all_menu();
+                    }
                     // turn off dual pane
-                    numWin = 1;
-                    curWin = 0;
+                    debug_control(DEBUG_CMD_EDIT_COLLAPSE_DEBUG);
                     break;
 
                 default:
-                    // should be an actual key not handled above
-                    debug_write("Got char code %X", ch);
-                    if (NULL != debugPanes[topMost[curWin]].pOwner) {
-                        if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
-                            break;
+                    // should be an actual key not handled above - block if in menu
+                    if (!inMenu) {
+                        debug_write("Got char code %X", ch);
+                        if (NULL != debugPanes[topMost[curWin]].pOwner) {
+                            if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
+                                break;
+                            }
                         }
                     }
 
                     // if we get here, it was not consumed by the panel
-
                     break;
             }
 
             // update the panel system
             debug_update();
+
+            if (inMenu) {
+                if (menu_update(ch)) {
+                    inMenu = false;
+                }
+            }
+
+            // tell ncurses it can paint now
+            refresh();
         }
 
         // sleep 5ms or whatever quantum is, it's only keypresses
@@ -398,6 +425,83 @@ void debug_thread() {
     }
 
     endwin();
+}
+
+void debug_control(int command) {
+    autoMutex mutex(debugLock);
+
+    // Handle debug system menu commands
+    switch (command) {
+        case DEBUG_CMD_FILE_QUIT:
+            RequestClose();
+            debug_close_all_menu();
+            break;
+
+        case DEBUG_CMD_EDIT_SPLIT_DEBUG:
+            if (numWin == 1) {
+                numWin = 2;
+                curWin = 1;
+            }
+            debug_close_all_menu();
+            break;
+
+        case DEBUG_CMD_EDIT_COLLAPSE_DEBUG:
+            numWin = 1;
+            curWin = 0;
+            debug_close_all_menu();
+            break;
+
+        case DEBUG_CMD_HELP_ABOUT:
+            debug_write("********************************************************");
+            debug_write(" ");
+            debug_write(CLASSIC99VERSION);
+            debug_write("(C) 1994-2025 by Mike Brent (Tursilion)");
+            debug_write(" ");
+            debug_write("ROM data included under license from Texas Instruments");
+            debug_write(" ");
+            debug_write("Thanks to everyone who has helped over the years!");
+            debug_write(" ");
+            //debug_write("Joe Delekto - SAMS support");
+            //debug_write("Ralph Nebet and MESS - Speech support");
+            debug_write("John Butler - 9900 Disasm");
+            //debug_write("Derek Liauw Kie Fa - 2xSAI Renderer");
+            //debug_write("2xSAI code from the SNES9x project");
+            //debug_write("hq4x code by Maxim Stepin");
+            //debug_write("Shay Green for the TV filter");
+            //debug_write("RasmusM for F18A Sprites and more");
+            debug_write(" ");
+            //debug_write("Additional software:");
+            //debug_write("Mike Brent - MegaMan music, EPSGMod, Super Space Acer");
+            //debug_write("Mark Wills - TurboForth");
+            //debug_write("Richard Lynn Gilbertson - RXB");
+            //debug_write("Tony Knerr - XB2.7 Suite");
+            //debug_write("Lee Stewart - FbForth");
+            //debug_write("DataBioTics Ltd - TI Workshop");
+            //debug_write("Scott Adams - Adventure (see https://www.clopas.net)");
+            //debug_write("Harry Wilhelm - XB GEM");
+            debug_write(" ");
+            debug_write("tursilion@harmlesslion.com");
+            debug_write("https://harmlesslion.com/software/classic99");
+            debug_write(" ");
+            debug_write("********************************************************");
+            debug_control(DEBUG_CMD_FORCE_DEBUG);
+            debug_close_all_menu();
+            break;
+
+        case DEBUG_CMD_FORCE_DEBUG:
+            topMost[0]=0;
+            break;
+
+        case DEBUG_CMD_CART_APPS:
+        case DEBUG_CMD_CART_GAMES:
+        case DEBUG_CMD_CART_OPEN:
+        case DEBUG_CMD_PERIPHERAL_OPEN:
+        case DEBUG_CMD_FILE_COLDRESET:
+        default:
+            debug_write("Menu Key 0x%04X not implemented", command);
+            debug_close_all_menu();
+            break;
+    }
 }
 
 //--- functions above this point are intended to be used by the debug_thread() only
@@ -422,6 +526,9 @@ void debug_init() {
     // tell raylib it can redirect to us
     rl_set_debug_write(debug_write_var);
 
+    // init the menus
+    debug_init_menu();
+
     debug_write("Debug thread initialized");
 }
 
@@ -441,7 +548,10 @@ void debug_shutdown() {
             debugThread->join();
         }
     }
+
+    debug_deinit_menu();
     endwin();
+
     delete debugLock;
 }
 
