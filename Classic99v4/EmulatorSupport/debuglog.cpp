@@ -22,6 +22,8 @@
 // - nogui = don't open the graphical window (can use the debug window to operate)
 // - notui = don't open the console text window (if possible)
 // - winui = add the Win32 menu system to the UI (on the assumption this is more helpful than the console?)
+// - log (file) = log debug to file
+// - (add a logging menu option too)
 
 // TODO: Some keypresses don't work on some systems:
 // Mac: Control-Tab, Shift-F6 (Maybe just over VNC?)
@@ -488,8 +490,14 @@ void debug_control(int command) {
             debug_close_all_menu();
             break;
 
+        case DEBUG_CMD_HELP_KEYS:
+            topMost[0]=1;   // help keys is always screen 1
+            debug_close_all_menu();
+            break;
+
         case DEBUG_CMD_FORCE_DEBUG:
-            topMost[0]=0;
+            topMost[0]=0;   // debug is always screen 0
+            debug_close_all_menu();
             break;
 
         case DEBUG_CMD_CART_APPS:

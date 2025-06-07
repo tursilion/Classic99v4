@@ -36,18 +36,23 @@ MenuInit menuEdit[] = {
     {   "Collapse Debug",DEBUG_CMD_EDIT_COLLAPSE_DEBUG  },
     { "",-1 }
 };
+// TODO: we'll need a way to have user-defined systems - maybe a file list?
 MenuInit menuSystem[] = {
     {   "SYSTEM", 0,                                    },  // first row is title line
-    {   "Split Debug",   DEBUG_CMD_EDIT_SPLIT_DEBUG     },
-    {   "Collapse Debug",DEBUG_CMD_EDIT_COLLAPSE_DEBUG  },
+    {   "TI-99/4",       DEBUG_CMD_RESET_TI994          },
+    {   "TI-99/4A",      DEBUG_CMD_RESET_TI994A         },
+    {   "TI-99/4A v2.2", DEBUG_CMD_RESET_TI994A22       },
     { "",-1 }
 };
-// TODO: this is probably different for non-TI systems
-MenuInit menuCart[] = {
-    {   "CARTRIDGE",    0,                      },  // first row is title line
+// TODO: this is probably different for non-TI systems, will need to be dynamic perhaps
+// Maybe, like peripheral, this becomes a custom menu added by the system.
+// Then we can have carts, disks, tapes, etc as fits the system in question.
+MenuInit menuSoftware[] = {
+    {   "SOFTWARE",     0,                      },  // first row is title line
     {   "Apps",         DEBUG_CMD_CART_APPS     },
     {   "Games",        DEBUG_CMD_CART_GAMES    },
     {   "User (Open)",  DEBUG_CMD_CART_OPEN     },
+    {   "Eject",        DEBUG_CMD_CART_EJECT    },
     { "",-1 }
 };
 MenuInit menuPeripheral[] = {
@@ -57,6 +62,7 @@ MenuInit menuPeripheral[] = {
 MenuInit menuHelp[] = {
     {   "HELP",         0,                      },  // first row is title line
     {   "About",        DEBUG_CMD_HELP_ABOUT    },
+    {   "Keys",         DEBUG_CMD_HELP_KEYS     },
     { "",-1 }
 };
 
@@ -109,9 +115,23 @@ void MenuTrack::drawMenu(int r, int c) {
     if (height+r > sr) height=sr-r;
     if (height < 3) return;     // too small to draw
 
+    // calculate menu offset for drawing
+    int start = 0;
+    if (currentSelection > height-2) {
+        start = (currentSelection-(height-2-1))-1;
+    }
+
     // draw the box
-    mvhline(r, c, ACS_HLINE, width);
-    mvhline(r+height-1, c, ACS_HLINE, width);
+    if (start > 0) {
+        mvhline(r, c, '^', width);
+    } else {
+        mvhline(r, c, ACS_HLINE, width);
+    }
+    if (menuCnt-start > height-1) {
+        mvhline(r+height-1, c, 'v', width);
+    } else {
+        mvhline(r+height-1, c, ACS_HLINE, width);
+    }
     mvvline(r, c, ACS_VLINE, height);
     mvvline(r, c+width-1, ACS_VLINE, height);
     mvaddch(r, c, ACS_ULCORNER);
@@ -120,13 +140,13 @@ void MenuTrack::drawMenu(int r, int c) {
     mvaddch(r+height-1, c+width-1, ACS_LRCORNER);
 
     // i starts at 1, so we don't need to increment r
-    for (int i=1; i<menuCnt; ++i) {
+    for (int i=1; i<height-1; ++i) {
         char buf[MAXIMUM];
         memset(buf, 0, sizeof(buf));
         if (width-2 < sizeof(buf)) {
             mvhline(r+i, c+1, ' ', width-2);
-            strncpy(buf, pMenu[i].str, width-2);
-            if (i == currentSelection) {
+            strncpy(buf, pMenu[i+start].str, width-2);
+            if (i+start == currentSelection) {
                 // only happens once, so only do the extra attribute work once
                 attron(A_REVERSE);
                 mvprintw(r+i, c+2, buf);
@@ -377,7 +397,7 @@ void debug_init_menu() {
     debug_add_menu(menuFile);
     debug_add_menu(menuEdit);
     debug_add_menu(menuSystem);
-    debug_add_menu(menuCart);
+    debug_add_menu(menuSoftware);
     debug_add_menu(menuPeripheral);
     debug_add_menu(menuHelp);
 
