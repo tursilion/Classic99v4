@@ -471,6 +471,10 @@ void debug_control(int command) {
             //debug_write("hq4x code by Maxim Stepin");
             //debug_write("Shay Green for the TV filter");
             //debug_write("RasmusM for F18A Sprites and more");
+            debug_write("Raylib (https://www.raylib.com) (c) 2013-2024 Ramon Santamaria (@raysan5)");
+#ifdef WIN32
+            debug_write("PDCurses (https://pdcurses.org/) Public domain");
+#endif
             debug_write(" ");
             //debug_write("Additional software:");
             //debug_write("Mike Brent - MegaMan music, EPSGMod, Super Space Acer");

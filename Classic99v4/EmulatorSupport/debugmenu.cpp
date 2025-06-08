@@ -2,6 +2,8 @@
 // See License.txt, but the answer is "just ask me first". ;)
 
 // TODO: Windows extension to inject real menu bar and file dialog etc for better integration?
+// TODO: we can get native file selector dialogs here: https://github.com/btzy/nativefiledialog-extended
+//       This way we don't have to create an inferior dialog for file names
 
 #include "os.h"
 #include <raylib.h>
