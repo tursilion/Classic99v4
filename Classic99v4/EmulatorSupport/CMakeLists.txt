@@ -9,6 +9,8 @@ target_sources(classic99v4 PUBLIC
     Classic99v4.h
     debuglog.cpp
     debuglog.h
+    debugmenu.cpp
+    debugmenu.h
     interestingData.cpp
     interestingData.h
     peripheral.cpp

@@ -267,6 +267,7 @@ bool menu_update(int ch) {
             break;
 
         case '\r':
+        case '\n':  // Mac uses \n. Linux and Windows use \r. Of course.
             // ENTER
             if (currentMenu.pOwner != nullptr) {
                 currentMenu.pOwner->debugKey(currentMenu.getCurrentKey(), 0);
