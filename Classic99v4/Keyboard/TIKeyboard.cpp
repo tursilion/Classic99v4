@@ -36,11 +36,14 @@ BIT	HW	C99	Purpose						Status
 
 #endif
 
+#include "../EmulatorSupport/interestingData.h"
 #include "kb_994.h"
 
 #ifdef CONSOLE_BUILD
 bool IsKeyDown(int x) { return false; }
 #endif
+
+#define FAKE_KEY_SCAN_COUNT 16
 
 // not much needed for construction
 TIKeyboard::TIKeyboard(Classic99System *core) 
@@ -50,6 +53,9 @@ TIKeyboard::TIKeyboard(Classic99System *core)
     , scanCol(0)
 	, alphaActive(false)
 	, bit17(false)
+    , fakedKeyCountdown(0)
+    , fakedKey(0)
+    , fakedMeta(0)
 {
     joyx[0]=0;
     joyy[0]=0;
@@ -297,18 +303,77 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
     // try joysticks... 
     uint8_t ret = CheckJoysticks(addr, scanCol);
     if (1 == ret) {
-		const Array8x8 &KEYS = getKeyArray();
-        // nothing else matched, so check the keyboard array
-        // Also manually check right versions of left keys
-        int key = KEYS[scanCol][addr-3];
-        if (IsKeyDown(key)) {
-            ret = 0;
-        } else if ((key == RL_KEY_LEFT_ALT) && (IsKeyDown(RL_KEY_RIGHT_ALT))) {
-            ret = 0;
-        } else if ((key == RL_KEY_LEFT_SHIFT) && (IsKeyDown(RL_KEY_RIGHT_SHIFT))) {
-            ret = 0;
-        } else if ((key == RL_KEY_LEFT_CONTROL) && (IsKeyDown(RL_KEY_RIGHT_CONTROL))) {
-            ret = 0;
+        if (fakedKeyCountdown == 0) {
+            // check for a new faked key
+            fakedKey = getInterestingData(INDIRECT_KEY_PENDING_KEY);
+            if (fakedKey != DATA_UNSET) {
+                // TODO: do we have a similar prefix for control? Probably not too important.
+                if (fakedKey == 0x1b) {
+                    // ESC means the next keypress is an ALT key
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                } else {
+                    // figure out what keys to press
+                    if ((fakedKey == 10) || (fakedKey == 13)) {
+                        // CR or LF for enter
+                        fakedMeta = 0;
+                        fakedKey = RL_KEY_ENTER;
+                        fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
+                    } else 
+#ifdef _WIN32
+                    // pdcurses Windows only keys
+                    if ((fakedKey >= ALT_0) && (fakedKey <= ALT_Z)) {
+                        fakedMeta = RL_KEY_LEFT_ALT;
+                        if (fakedKey <= ALT_9) {
+                            fakedKey = fakedKey-ALT_0 + '0';
+                        } else {
+                            fakedKey = fakedKey-ALT_A + 'A';
+                        }
+                        fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
+                    } else
+#endif
+                    // else case from above carries into this if
+                    if ((fakedKey >= ' ') && (fakedKey <= '~')) {
+                        const int *table = getAsciiMap();
+                        int idx = (fakedKey-' ')*2;
+                        int k = table[idx];
+                        int m = table[idx+1];
+                        if (m) {
+                            fakedMeta = m;
+                        }
+                        if (k) {
+                            fakedKey = k;
+                            fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
+                        }
+                    }
+                }
+                if (fakedKeyCountdown) {
+                    debug_write("New fake key '%c' with meta %c", fakedKey, fakedMeta+'0');
+                }
+            }
+        }
+        if (fakedKeyCountdown) {
+            // There are two keys active - the metakey and the actual key
+		    const Array8x8 &KEYS = getKeyArray();
+            int key = KEYS[scanCol][addr-3];
+            if ((key != 0) && (fakedKey != 0) && (key == fakedKey)) {
+                ret = 0;
+            } else if ((key != 0) && (fakedMeta != 0) && (key == fakedMeta)) {
+                ret = 0;
+            } 
+        } else {
+		    const Array8x8 &KEYS = getKeyArray();
+            // nothing else matched, so check the keyboard array
+            // Also manually check right versions of left keys
+            int key = KEYS[scanCol][addr-3];
+            if (IsKeyDown(key)) {
+                ret = 0;
+            } else if ((key == RL_KEY_LEFT_ALT) && (IsKeyDown(RL_KEY_RIGHT_ALT))) {
+                ret = 0;
+            } else if ((key == RL_KEY_LEFT_SHIFT) && (IsKeyDown(RL_KEY_RIGHT_SHIFT))) {
+                ret = 0;
+            } else if ((key == RL_KEY_LEFT_CONTROL) && (IsKeyDown(RL_KEY_RIGHT_CONTROL))) {
+                ret = 0;
+            }
         }
 	}
 
@@ -343,6 +408,18 @@ void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE
             }
             break;
     }
+
+    if (fakedKeyCountdown) {
+        --fakedKeyCountdown;
+        if (0 == fakedKeyCountdown) {
+            // all done, clear the key
+            setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
+            fakedKey = 0;
+            fakedMeta = 0;
+            debug_write("Fake key off");
+        }
+    }
+
 }
 
 bool TIKeyboard::init(int idx) {
@@ -414,6 +491,7 @@ void TIKeyboard::getDebugWindow(char *buffer, int user) {
                 int key = KEYS[r][c];
                 if (IsKeyDown(key)) {
                     // TODO: we can use a code to make an invert state instead
+                    // TODO: could we map through the TUI input with some kind of table instead of checking IsKeyDown again?
                     buffer[KeyDebug[r][c]] = '*';   
                 } else if ((key == RL_KEY_LEFT_ALT) && (IsKeyDown(RL_KEY_RIGHT_ALT))) {
                     buffer[KeyDebug[r][c]] = '*';   

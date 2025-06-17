@@ -190,47 +190,73 @@ bool TMS9900::operate(double timestamp) {
         }
 
         // injection hacks for the 9900 happen here
-	// TODO: we need a way to know they are valid, in case it is a non-TI99 9900
+#if 0
+        // we'll use the CRU approach to pasting keys going forward...
         int adr = getInterestingData(INDIRECT_KEY_INJECT_ADDRESS);
         if (adr != DATA_UNSET) {
             if (PC == adr) {
                 int key = getInterestingData(INDIRECT_KEY_PENDING_KEY);
-                if (key != DATA_UNSET) {
+                if ((key != DATA_UNSET) && ((key&KEY_DATA_ALT_KEY) == 0)) {
                     static bool isAltKey = false;  // on console, alt comes in as ESC-key. We'll accept that.
+                    setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
                     int keymode = ROMWORD(0x8374, ACCESS_FREE) >> 8;
                     if ((keymode == 0) || (keymode == 5)) {
-			if (key == 0x1b) {
+
+#ifdef _WIN32
+                        // PDCurses alt keys are windows only - translate for code below
+                        if ((key >= ALT_0) && (key <= ALT_Z)) {
+                            isAltKey = true;
+                            if (key <= ALT_9) {
+                                key = key-ALT_9 + '0';
+                            } else {
+                                key = key-ALT_A + 'A';
+                            }
+                        }
+#endif
+
+            			if (key == 0x1b) {
+                            // ESC, Key is the way we receive ALT+KEY for console, not recommended elsewhere
                             isAltKey = true;
                         } else {
-                        // if keyboard mode is 0 or 5, then it's legal to do it
-                        if (key == 10) key = 13;    // linefeed to carriage return
-                        if (((key >= ' ') && (key <= '~')) || (key == 13)) {
-                            int keyadr = getInterestingData(INDIRECT_KEY_KEY_ADDRESS);
-                            int statadr = getInterestingData(INDIRECT_KEY_STATUS_ADDRESS);
-                            int dat;
-
-                            if ((key == '4')&&(isAltKey)) key = 4; // fctn-4 = TODO: is there a cleaner map?
-                            if (keyadr & 1) {
-                                dat = (ROMWORD(keyadr, ACCESS_FREE) & 0xff00) | key;
+                            if (isAltKey) {
+                                // okay, let's hack in alt keypresses for Alt-4 and Alt-= primarily
+                                // mixing these into paste strings is probably not going to work
+                                // the way you want it to...
+                                isAltKey = false;
+                                setInterestingData(INDIRECT_KEY_PENDING_KEY, KEY_DATA_ALT_KEY+key);
+                                // this will cause a delay in receipt, and they'll only work if KSCAN is being called
+                                // ... TODO: probably should just extend this mechanism to all keys,
+                                // they can work like the AVR keyboard interface does. It'll work
+                                // more reliably than the KSCAN injection too.
                             } else {
-                                dat = (ROMWORD(keyadr, ACCESS_FREE) & 0x00FF) | (key<<8);
-                            }
-                            WRWORD(keyadr, dat, ACCESS_FREE);
+                                // if keyboard mode is 0 or 5, then it's legal to do it
+                                if (key == 10) key = 13;    // linefeed to carriage return
+                                if (((key >= ' ') && (key <= '~')) || (key == 13)) {
+                                    int keyadr = getInterestingData(INDIRECT_KEY_KEY_ADDRESS);
+                                    int statadr = getInterestingData(INDIRECT_KEY_STATUS_ADDRESS);
+                                    int dat;
 
-                            if (statadr & 1) {
-                                dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x20;
-                            } else {
-                                dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x2000;
+                                    if (keyadr & 1) {
+                                        dat = (ROMWORD(keyadr, ACCESS_FREE) & 0xff00) | key;
+                                    } else {
+                                        dat = (ROMWORD(keyadr, ACCESS_FREE) & 0x00FF) | (key<<8);
+                                    }
+                                    WRWORD(keyadr, dat, ACCESS_FREE);
+
+                                    if (statadr & 1) {
+                                        dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x20;
+                                    } else {
+                                        dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x2000;
+                                    }
+                                    WRWORD(statadr, dat, ACCESS_FREE);
+                                }
                             }
-                            WRWORD(statadr, dat, ACCESS_FREE);
-                        }
-                        isAltKey = false;
                         }
                     }
-                    setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
                 }
             }
         }
+#endif
 
         // before we execute, log the bytes
         addRunLog(PC);

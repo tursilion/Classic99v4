@@ -156,7 +156,8 @@
 // Platform specific defines to handle GetApplicationDirectory()
 #if (defined(_WIN32) && !defined(PLATFORM_DESKTOP_RGFW)) || (defined(_MSC_VER) && defined(PLATFORM_DESKTOP_RGFW))
     #ifndef MAX_PATH
-        #define MAX_PATH 1025
+        // mb - make same size as Windows
+        #define MAX_PATH 260
     #endif
 __declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(void *hModule, void *lpFilename, unsigned long nSize);
 __declspec(dllimport) unsigned long __stdcall GetModuleFileNameW(void *hModule, void *lpFilename, unsigned long nSize);

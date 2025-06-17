@@ -810,10 +810,17 @@ bool TMS9918::debugKey(int ch, int user) {
     if (user == DEBUG_REGS) {
         // register screen
     } else if (user == DEBUG_DISPLAY) {
-        // display screen
-        if (((ch >= ' ') && (ch <= '~')) || (ch == 13)) {
+        // display screen - accept printable characters, enter (whether CR or LF),
+        // ESC (used for ALT keys on terminals)
+        if (((ch >= ' ') && (ch <= '~')) || (ch == 13) || (ch == 10) || (ch == 0x1b)) {
             setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
             return true;
+#ifdef _WIN32
+        // PDCurses alt keys are windows only
+        } else if ((ch >= ALT_0) && (ch <= ALT_Z)) {
+            setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
+            return true;
+#endif
         } else if (ch == KEY_F(1)) {
             if (debugScreenOffset) {
                 debugScreenOffset = 0;

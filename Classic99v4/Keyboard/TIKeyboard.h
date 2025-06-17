@@ -76,6 +76,7 @@ protected:
     virtual int getJoy1Col() = 0;
     virtual int getJoy2Col() = 0;
     virtual const Array8x8 &getKeyArray() = 0; 
+    virtual const int *getAsciiMap() = 0;
     virtual const Array8x8 &getKeyDebugArray() = 0;
     virtual const char *getKeyDebugString() = 0;
     virtual bool is4A() = 0;
@@ -91,6 +92,10 @@ private:
     bool alphaActive;
 
     bool bit17;
+
+    int fakedKeyCountdown;   // how many CRU scans to hold for
+    int fakedKey;            // what key (ASCII value)
+    int fakedMeta;           // what meta key (RL_KEY_xxx - shift, alt, control)
 };
 
 

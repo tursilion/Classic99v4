@@ -406,7 +406,6 @@ void debug_thread() {
                         debug_write("Got char code %X", ch);
                         if (NULL != debugPanes[topMost[curWin]].pOwner) {
                             // translate line feed to carriage return
-                            if (ch == 0x0a) ch = 0x0d;
                             if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
                                 break;
                             }
@@ -446,7 +445,7 @@ void debug_control(int command) {
 #ifndef CONSOLE_BUILD
             RequestClose();
 #else
-	    close_window = true;
+            close_window = true;
 #endif
             debug_close_all_menu();
             break;
