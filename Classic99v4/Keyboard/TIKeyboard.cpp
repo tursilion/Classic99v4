@@ -38,6 +38,10 @@ BIT	HW	C99	Purpose						Status
 
 #include "kb_994.h"
 
+#ifdef CONSOLE_BUILD
+bool IsKeyDown(int x) { return false; }
+#endif
+
 // not much needed for construction
 TIKeyboard::TIKeyboard(Classic99System *core) 
     : Classic99Peripheral(core)

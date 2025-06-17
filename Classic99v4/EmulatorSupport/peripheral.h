@@ -4,7 +4,9 @@
 #ifndef EMULATOR_SUPPORT_PERIPHERAL_H
 #define EMULATOR_SUPPORT_PERIPHERAL_H
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <atomic>
 #include "System.h"
 #include "automutex.h"

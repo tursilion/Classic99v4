@@ -1,7 +1,8 @@
 # CMakeLists.txt for Classic99
 # Note that we do not need to build PDCurses on non-Windows, we use native ncurses libs
 
-add_subdirectory(Raylib)
+# disable raylib for console only build
+#add_subdirectory(Raylib)
 add_subdirectory(CPUs)
 add_subdirectory(EmulatorSupport)
 add_subdirectory(Keyboard)

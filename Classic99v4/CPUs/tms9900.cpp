@@ -190,13 +190,18 @@ bool TMS9900::operate(double timestamp) {
         }
 
         // injection hacks for the 9900 happen here
+	// TODO: we need a way to know they are valid, in case it is a non-TI99 9900
         int adr = getInterestingData(INDIRECT_KEY_INJECT_ADDRESS);
         if (adr != DATA_UNSET) {
             if (PC == adr) {
                 int key = getInterestingData(INDIRECT_KEY_PENDING_KEY);
                 if (key != DATA_UNSET) {
+                    static bool isAltKey = false;  // on console, alt comes in as ESC-key. We'll accept that.
                     int keymode = ROMWORD(0x8374, ACCESS_FREE) >> 8;
                     if ((keymode == 0) || (keymode == 5)) {
+			if (key == 0x1b) {
+                            isAltKey = true;
+                        } else {
                         // if keyboard mode is 0 or 5, then it's legal to do it
                         if (key == 10) key = 13;    // linefeed to carriage return
                         if (((key >= ' ') && (key <= '~')) || (key == 13)) {
@@ -204,19 +209,22 @@ bool TMS9900::operate(double timestamp) {
                             int statadr = getInterestingData(INDIRECT_KEY_STATUS_ADDRESS);
                             int dat;
 
+                            if ((key == '4')&&(isAltKey)) key = 4; // fctn-4 = TODO: is there a cleaner map?
                             if (keyadr & 1) {
                                 dat = (ROMWORD(keyadr, ACCESS_FREE) & 0xff00) | key;
                             } else {
                                 dat = (ROMWORD(keyadr, ACCESS_FREE) & 0x00FF) | (key<<8);
                             }
                             WRWORD(keyadr, dat, ACCESS_FREE);
-                            
+
                             if (statadr & 1) {
                                 dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x20;
                             } else {
                                 dat = (ROMWORD(statadr, ACCESS_FREE) ) | 0x2000;
                             }
                             WRWORD(statadr, dat, ACCESS_FREE);
+                        }
+                        isAltKey = false;
                         }
                     }
                     setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);

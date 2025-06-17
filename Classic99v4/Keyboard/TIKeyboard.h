@@ -11,6 +11,10 @@
 
 #include "../EmulatorSupport/debuglog.h"
 #include "../EmulatorSupport/peripheral.h"
+#ifdef CONSOLE_BUILD
+// we need the key definitions
+#include "../Raylib/src/raykeys.h"
+#endif
 
 // width of a keyboard line including the NUL terminator
 #define KWSIZE 36

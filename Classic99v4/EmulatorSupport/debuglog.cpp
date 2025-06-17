@@ -31,7 +31,9 @@
 // Why don't they work? Can they be made to work? That's stupid.
 
 #include "os.h"
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <cstdio>
 #include <cstring>
 #include <thread>
@@ -64,6 +66,10 @@ static bool inMenu = false;     // TODO: I think I need to think about this a li
                                 // TODO: I need a way to build forms too...
 
 using namespace std::chrono_literals;
+
+#ifdef CONSOLE_BUILD
+extern volatile bool close_window;
+#endif
 
 WindowTrack::WindowTrack(Classic99Peripheral *p, int user) 
     : minr(0)
@@ -399,6 +405,8 @@ void debug_thread() {
                     if (!inMenu) {
                         debug_write("Got char code %X", ch);
                         if (NULL != debugPanes[topMost[curWin]].pOwner) {
+                            // translate line feed to carriage return
+                            if (ch == 0x0a) ch = 0x0d;
                             if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
                                 break;
                             }
@@ -435,7 +443,11 @@ void debug_control(int command) {
     // Handle debug system menu commands
     switch (command) {
         case DEBUG_CMD_FILE_QUIT:
+#ifndef CONSOLE_BUILD
             RequestClose();
+#else
+	    close_window = true;
+#endif
             debug_close_all_menu();
             break;
 
@@ -518,9 +530,11 @@ void debug_control(int command) {
 
 //--- functions above this point are intended to be used by the debug_thread() only
 //--- functions below this point are intended to be called from anywhere in the application
+#ifndef CONSOLE_BUILD
 extern "C" {
     void rl_set_debug_write(void (*ptr)(const char*, va_list));
 };
+#endif
 
 void debug_init() {
     debugLock = new std::recursive_mutex();
@@ -535,8 +549,10 @@ void debug_init() {
         autoMutex mutex(debugLock);
     }
 
+#ifndef CONSOLE_BUILD
     // tell raylib it can redirect to us
     rl_set_debug_write(debug_write_var);
+#endif
 
     // init the menus
     debug_init_menu();

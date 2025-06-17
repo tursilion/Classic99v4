@@ -219,8 +219,11 @@ const char *digpat[10][5] = {
 // some local defines
 #define REDRAW_LINES 262
 
+#ifndef CONSOLE_BUILD
+// TODO: why do we need this here?
 // ABGR format (little endian RGBA)
 #define HOT_PINK_TRANS 0x00ff00ff
+#endif
 
 enum {
     DEBUG_REGS = 0,
@@ -1195,6 +1198,7 @@ void TMS9918::resetMemoryTracking() {
 void TMS9918::vdpReset(bool isCold) {
     // on cold reset, reload everything. 
     if (isCold) {
+#ifndef CONSOLE_BUILD
 	    // todo: move the other system-level init (what does the VDP do?) into here
 	    // convert from 12-bit to float and load F18APalette
 	    for (int idx=0; idx<64; idx++) {
@@ -1209,6 +1213,7 @@ void TMS9918::vdpReset(bool isCold) {
 			c.a = 255;
 		    F18APalette[idx] = c;
 	    }
+#endif
 
 		memset(VDPREG, 0, sizeof(VDPREG));
         memset(VDP, 0, sizeof(VDP));

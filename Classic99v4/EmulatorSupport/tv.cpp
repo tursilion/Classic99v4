@@ -2,7 +2,11 @@
 // See License.txt, but the answer is "just ask me first". ;)
 
 #include <cstdio>
+
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
+
 #include "debuglog.h"
 #include "tv.h"
 #include "automutex.h"
@@ -17,10 +21,12 @@ int InvColorToInt(Color color)
 {
     int result = 0;
 
+#ifndef CONSOLE_BUILD
     result = (int)(((unsigned int)color.r) |
                    ((unsigned int)color.g << 8) |
                    ((unsigned int)color.b << 16) |
                     (unsigned int)color.a << 24);
+#endif
 
     return result;
 }
@@ -39,7 +45,9 @@ Classic99TV::~Classic99TV() {
     
     delete windowLock;
 
+#ifndef CONSOLE_BUILD
     CloseWindow();
+#endif
 }
 
 // initialize the window system - start by tearing down any layers we had
@@ -49,6 +57,7 @@ bool Classic99TV::init() {
 
     layers.clear();
 
+#ifndef CONSOLE_BUILD
     if (!IsWindowReady()) {
         // we need to create a window
         // TODO: read window size and position from the configuration
@@ -76,6 +85,7 @@ bool Classic99TV::init() {
 
     // TODO: configurable FPS
     SetTargetFPS(60);
+#endif
 
     drawReady = true;
 
@@ -102,6 +112,7 @@ bool Classic99TV::runWindowLoop() {
     // TODO: handle resize. Do we have to handle anything else window/os wise?
 
     if ((!dontDraw) && (drawReady)) {
+#ifndef CONSOLE_BUILD
         BeginDrawing();
 
             // clear the backdrop
@@ -118,10 +129,10 @@ bool Classic99TV::runWindowLoop() {
                     Vector2 origin = { 0.0f, 0.0f };
                     DrawTexturePro(texture, source, dest, origin, 0.0f, WHITE);
                 }
-
             //EndBlendMode();
 
         EndDrawing();   // by default, timing handled here - that means this will block!
+#endif
 
         // wait to be told it's okay to draw again
         drawReady = false;

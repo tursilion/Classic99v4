@@ -4,7 +4,9 @@
 #ifndef AUTOSTREAM_H
 #define AUTOSTREAM_H
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <cstring>
 #include "../EmulatorSupport/audioSrc.h"
 
@@ -21,28 +23,40 @@ public:
         buffer = (unsigned char*)malloc(bufferSize);
         if (NULL == buffer) throw;
         memset(buffer, 0, bufferSize);
+#ifndef CONSOLE_BUILD
         SetAudioStreamBufferSizeDefault(sampleCnt);
         stream = LoadAudioStream(freq, depth, conf);
+#endif
     }
     autoStream() = delete;
 
     ~autoStream() {
+#ifndef CONSOLE_BUILD
         StopAudioStream(stream);
         UnloadAudioStream(stream);
+#endif
         free(buffer);
     }
 
     // return true if the stream needs data
     bool checkStreamHungry() {
+#ifndef CONSOLE_BUILD
         return IsAudioStreamProcessed(stream);
+#else
+	return false;
+#endif
     }
 
     // finish filling in a stream buffer - assumes that buffer is filled with bufferSize new bytes!
     void updateBuffer() {
+#ifndef CONSOLE_BUILD
         UpdateAudioStream(stream, buffer, sampleCnt);
+#endif
     }
 
+#ifndef CONSOLE_BUILD
     AudioStream stream;
+#endif
     unsigned int sampleCnt;      // buffer size in samples
     unsigned int bufferSize;     // in bytes
     unsigned char *buffer;

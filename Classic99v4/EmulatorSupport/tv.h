@@ -7,12 +7,20 @@
 #ifndef TV_H
 #define TV_H
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <memory>
 #include <vector>
 #include "Classic99v4.h"
 #include "automutex.h"
 #include "autobitmap.h"
+
+#ifdef CONSOLE_BUILD
+typedef int Color;
+#define HOT_PINK_TRANS 0xff00ff00
+#define BLACK 0
+#endif
 
 // ... but I think I will build it so that each layer can have its own resolution and be scaled
 // to whatever the window is, rather than compositing a single bitmap. Then I simply don't care

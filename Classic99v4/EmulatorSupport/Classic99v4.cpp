@@ -12,7 +12,9 @@
 // Expects to build with Raylib
 // Today is 11/7/2020, 2/2/2021, 5/5/2025
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <cstdio>
 #include <chrono>
 #include <thread>
@@ -23,6 +25,11 @@
 #include "../Systems/TexasInstruments/TI994.h"
 #include "../Systems/TexasInstruments/TI994A.h"
 #include "../Systems/TexasInstruments/TI994A_22.h"
+
+#ifdef CONSOLE_BUILD
+volatile bool close_window = false;
+bool WindowShouldClose() { return close_window; }
+#endif
 
 // TODO: all the cross platform stuff is nice, but we could do
 // better for the blind users - the TUI stuff probably won't play

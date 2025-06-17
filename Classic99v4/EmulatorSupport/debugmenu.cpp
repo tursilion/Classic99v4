@@ -6,7 +6,9 @@
 //       This way we don't have to create an inferior dialog for file names
 
 #include "os.h"
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <cstdio>
 #include <cstring>
 #include <thread>

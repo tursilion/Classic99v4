@@ -1,7 +1,9 @@
 // Classic99 v4xx - Copyright 2021 by Mike Brent (HarmlessLion.com)
 // See License.txt, but the answer is "just ask me first". ;)
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <stdio.h>
 #include "interestingData.h"
 

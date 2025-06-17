@@ -7,7 +7,8 @@ project(classic99v4 VERSION 400.0.0)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
-find_package(OpenGL REQUIRED)
+# don't need openGL for console only build
+#find_package(OpenGL REQUIRED)
 find_package(Curses REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -21,6 +22,7 @@ add_executable(classic99v4)
 
 add_subdirectory(Classic99v4)
 set_target_properties(classic99v4 PROPERTIES OUTPUT_NAME classic99)
+target_compile_definitions(classic99v4 PUBLIC CONSOLE_BUILD)
 include_directories( ${CURSES_INCLUDE_DIRS} )
 
 # todo someday, perhaps
@@ -28,4 +30,5 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-TARGET_LINK_LIBRARIES(classic99v4 raylib ${CURSES_LIBRARIES} Threads::Threads)
+#TARGET_LINK_LIBRARIES(classic99v4 raylib ${CURSES_LIBRARIES} Threads::Threads)
+TARGET_LINK_LIBRARIES(classic99v4 ${CURSES_LIBRARIES} Threads::Threads)

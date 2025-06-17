@@ -3,7 +3,9 @@
 
 // This class sets up the 99/4((A)) keyboard
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include "kb_994A.h"
 
 static const Array8x8 KEYS = {  

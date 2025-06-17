@@ -9,7 +9,9 @@
 #ifndef TMS9918_H
 #define TMS9918_H
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <atomic>
 #include "../EmulatorSupport/System.h"
 #include "../EmulatorSupport/peripheral.h"

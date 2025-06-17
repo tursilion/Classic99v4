@@ -8,7 +8,9 @@
 #ifndef SPEAKER_H
 #define SPEAKER_H
 
+#ifndef CONSOLE_BUILD
 #include <raylib.h>
+#endif
 #include <memory>
 #include <vector>
 #include "autostream.h"

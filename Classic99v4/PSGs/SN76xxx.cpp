@@ -432,11 +432,13 @@ bool SN76xxx::init(int idx) {
 	// init the emulation
 	sound_init(AudioSampleRate);	// TODO: need configuration input
 
+#ifndef CONSOLE_BUILD
 	// get a stream running
 	stream = theCore->getSpeaker()->requestStream(this);
 	if ((nullptr != stream) && (nullptr != stream->buffer)) {
 		PlayAudioStream(stream->stream);
 	}
+#endif
 
     // register a debug screen
     debug_create_view(this, 0);
