@@ -46,7 +46,7 @@ In Linux and Mac, open a terminal. cd to the Classic99 folder, then:
 Under Debian, I noted I needed to install these additional libraries. There may be others:
 
     apt-get install cmake libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libncurses-dev
-    
+
 For Raspberry PI, install these libs, and then run CMAKE with these commands:
 
     sudo apt-get install --no-install-recommends raspberrypi-ui-mods lxterminal gvfs
@@ -56,6 +56,11 @@ For Raspberry PI, install these libs, and then run CMAKE with these commands:
     cmake -DPLATFORM=Desktop -DGRAPHICS=GRAPHICS_API_OPENGL_21 ..
 
 (See https://github.com/raysan5/raylib/wiki/Working-on-Raspberry-Pi)
+
+You can also build a console-only version - this will not include graphics or sound and will leave out raylib.
+This exists so that Classic99 can be run over SSH.
+    cd build
+    cmake -DCONSOLE_BUILD=ON ..
 
 Tested Platforms
 ================

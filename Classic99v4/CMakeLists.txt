@@ -2,7 +2,10 @@
 # Note that we do not need to build PDCurses on non-Windows, we use native ncurses libs
 
 # disable raylib for console only build
-#add_subdirectory(Raylib)
+if (NOT CONSOLE_BUILD)
+    add_subdirectory(Raylib)
+endif(NOT CONSOLE_BUILD)
+
 add_subdirectory(CPUs)
 add_subdirectory(EmulatorSupport)
 add_subdirectory(Keyboard)
