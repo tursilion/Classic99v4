@@ -4,6 +4,8 @@
 cmake_minimum_required(VERSION 3.13.0)
 project(classic99v4 VERSION 400.0.0)
 
+option(CONSOLE_BUILD "Build a console-only build - no gfx or sound" OFF)
+
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
@@ -22,7 +24,11 @@ add_executable(classic99v4)
 
 add_subdirectory(Classic99v4)
 set_target_properties(classic99v4 PROPERTIES OUTPUT_NAME classic99)
-target_compile_definitions(classic99v4 PUBLIC CONSOLE_BUILD)
+
+if (CONSOLE_BUILD)
+    target_compile_definitions(classic99v4 PUBLIC CONSOLE_BUILD)
+endif(CONSOLE_BUILD)   
+
 include_directories( ${CURSES_INCLUDE_DIRS} )
 
 # todo someday, perhaps
