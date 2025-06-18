@@ -403,7 +403,7 @@ void debug_thread() {
                 default:
                     // should be an actual key not handled above - block if in menu
                     if (!inMenu) {
-                        debug_write("Got char code %X", ch);
+                        //debug_write("Got char code %X", ch);
                         if (NULL != debugPanes[topMost[curWin]].pOwner) {
                             // translate line feed to carriage return
                             if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
@@ -512,6 +512,11 @@ void debug_control(int command) {
 
         case DEBUG_CMD_FORCE_DEBUG:
             topMost[0]=0;   // debug is always screen 0
+            debug_close_all_menu();
+            break;
+
+        case DEBUG_CMD_FORCE_VDP:
+            topMost[0]=5;   // TODO: need a better way to find this without assuming
             debug_close_all_menu();
             break;
 

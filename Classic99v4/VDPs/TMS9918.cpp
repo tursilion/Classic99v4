@@ -47,6 +47,7 @@ The reset also changes VR54 and VR55, but they are *not* loaded to the GPU PC (p
 #include <ctype.h>
 #include "../EmulatorSupport/peripheral.h"
 #include "../EmulatorSupport/debuglog.h"
+#include "../EmulatorSupport/debugmenu.h"
 #include "../EmulatorSupport/System.h"
 #include "../EmulatorSupport/interestingData.h"
 #include "../EmulatorSupport/tv.h"
@@ -718,6 +719,9 @@ bool TMS9918::init(int index) {
     debug_create_view(this, DEBUG_REGS);     // for the register view
     debug_create_view(this, DEBUG_SPRITES);  // for the sprite list
     debug_create_view(this, DEBUG_DISPLAY);  // for the screen dump
+#ifdef CONSOLE_BUILD
+    debug_control(DEBUG_CMD_FORCE_VDP);      // force VDP up if we're console only
+#endif
 
 	vdpReset(true);     // todo: need to allow warm reset
 
@@ -795,7 +799,7 @@ void TMS9918::getDebugSize(int &x, int &y, int user) {
     	x=44; y=12;
     } else if (user == DEBUG_DISPLAY) {
         // screen (either 32 or 40 columns)
-        x=40; y=24;
+        x=41; y=26;
     } else if (user == DEBUG_SPRITES) {
         // sprite list
         x=48; y=34;
@@ -810,18 +814,8 @@ bool TMS9918::debugKey(int ch, int user) {
     if (user == DEBUG_REGS) {
         // register screen
     } else if (user == DEBUG_DISPLAY) {
-        // display screen - accept printable characters, enter (whether CR or LF),
-        // ESC (used for ALT keys on terminals)
-        if (((ch >= ' ') && (ch <= '~')) || (ch == 13) || (ch == 10) || (ch == 0x1b)) {
-            setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
-            return true;
-#ifdef _WIN32
-        // PDCurses alt keys are windows only
-        } else if ((ch >= ALT_0) && (ch <= ALT_Z)) {
-            setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
-            return true;
-#endif
-        } else if (ch == KEY_F(1)) {
+        // display screen - pass keys we don't want on to the keyboard faker
+        if (ch == KEY_F(1)) {
             if (debugScreenOffset) {
                 debugScreenOffset = 0;
             } else {
@@ -836,7 +830,10 @@ bool TMS9918::debugKey(int ch, int user) {
             } else if (debugVDPDebug == 0) {
                 debugVDPDebug = 1;
             }
-			theCore->getTV()->setDrawReady(true);
+            theCore->getTV()->setDrawReady(true);
+            return true;
+        } else {
+            setInterestingData(INDIRECT_KEY_PENDING_KEY, ch);
             return true;
         }
     } else if (user == DEBUG_SPRITES) {
@@ -893,7 +890,7 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
 			    }
 		    }
 	    }
-        base += x; buffer = base;
+            base += x; buffer = base;
 
 	    buffer += sprintf(buffer, "VDP4   %02X   PDT %04X Mask %04X ", VDPREG[4], PDT, PDTsize);
 	    if (VDPREG[0]&0x02) {
@@ -949,38 +946,42 @@ void TMS9918::getDebugWindow(char *buffer, int user) {
     } else if (user == DEBUG_DISPLAY) {
         // screen dump - just the SIT for now
         // TODO: we can add color, including the TI Palette
-        // TODO: can we add character definitions, is that possible?
+        // TODO: can we add character definitions, is that possible? (What if we try to fake it?)
         // assume the previous SIT table lookup is valid enough
         int cols=32;
         if (VDPREG[1] & 0x10) {			// MODE BIT 2
             cols = 40;
         }
-
-        for (int r=0; r<24; ++r) {
-            char *adr = buffer+x*r;
-            for (int c=0; c<cols; ++c) {
-                int off = SIT+r*cols+c;
-                int ch;
-                if (off >= 0x4000) {
-                    ch = '?';
-                } else {
-                    ch = VDP[off] - debugScreenOffset;
-                    // TODO: debug input key for toggling basic offset
-                    // TODO: debug windows should have a help screen they can display
-                    // check for printable
-                    if ((ch < ' ') || (ch > '~')) {
-                        ch = '.';
+        if (VDPREG[1] & 0x40) {
+            for (int r=0; r<24; ++r) {
+                char *adr = buffer+x*r;
+                for (int c=0; c<cols; ++c) {
+		    int off = SIT+r*cols+c;
+                    int ch;
+                    if (off >= 0x4000) {
+                        ch = '?';
+                    } else {
+                        ch = VDP[off] - debugScreenOffset;
+                        // check for printable
+                        if ((ch < ' ') || (ch > '~')) {
+                            ch = '.';
+                        }
                     }
+                    *(adr++)=ch;
                 }
-                *(adr++)=ch;
             }
+        } else {
+            strcpy(&buffer[11*x], "           (blanked)");
         }
+        // watch KWSIZE (41 today including NUL)
+        //                     1234567890123456789012345678901234567890*
+        strcpy(&buffer[25*x], "F1-BASIC tog, F2-ALT+nxt, F3-CTRL+nxt");
     } else if (user == DEBUG_SPRITES) {
         // display sprite sizes
         int n=8;
         if (VDPREG[1]&0x02) n*=2;
         if (VDPREG[1]&0x01) n*=2;
-        sprintf(buffer, "%2dx%-2d %s %s", n, n, VDPREG[1]&2?"Double":"      ", VDPREG[1]&1?"Magnified":"");
+        sprintf(buffer, "Sprites: %2dx%-2d %s %s", n, n, VDPREG[1]&2?"Double":"      ", VDPREG[1]&1?"Magnified":"");
         buffer+=x;
         buffer+=x;
 

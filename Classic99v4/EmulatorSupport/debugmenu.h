@@ -13,6 +13,7 @@ class Classic99Peripheral;
 class MenuTrack;
 
 // top level menus - numbers can be reused by different subsystems
+// some of these are also just commands to debug that don't come from menus
 enum {
     DEBUG_CMD_FILE_COLDRESET = 0x7000,
     DEBUG_CMD_FILE_QUIT,
@@ -28,7 +29,8 @@ enum {
     DEBUG_CMD_PERIPHERAL_OPEN,
     DEBUG_CMD_HELP_ABOUT,
     DEBUG_CMD_HELP_KEYS,
-    DEBUG_CMD_FORCE_DEBUG
+    DEBUG_CMD_FORCE_DEBUG,
+    DEBUG_CMD_FORCE_VDP
 };
 
 // small structure for initializing menus

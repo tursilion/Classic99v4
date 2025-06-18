@@ -281,7 +281,7 @@ void TMS9900::getDebugSize(int &x, int &y, int user) {
         y = -(RUNLOGSIZE+FOWARDDISASM);     // negative for bottom up
     } else if (user == DEBUG_MEMORY) {
         x = 40;
-        y = 34;
+        y = 36;
     } else if (user == DEBUG_HEATMAP) {
         x = 65;
         y = 64;
@@ -502,6 +502,8 @@ void TMS9900::getDebugWindow(char *buffer, int user) {
                     debugAddress+i1, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], str);
             buffer += x;
         }
+        buffer += x;
+        strcpy(buffer, "PgUp and PgDn to navigate");
     } else if (user == DEBUG_HEATMAP) {
         for (int i=debugHeatMapRow; i<debugHeatMapRow+8; ++i) {
             for (int i2=0; i2<64; ++i2) {

@@ -43,7 +43,8 @@ BIT	HW	C99	Purpose						Status
 bool IsKeyDown(int x) { return false; }
 #endif
 
-#define FAKE_KEY_SCAN_COUNT 16
+// every 56 is roughly one scan, but TI scanning is software based so no guarantee
+#define FAKE_KEY_SCAN_COUNT 64*4
 
 // not much needed for construction
 TIKeyboard::TIKeyboard(Classic99System *core) 
@@ -307,61 +308,93 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
             // check for a new faked key
             fakedKey = getInterestingData(INDIRECT_KEY_PENDING_KEY);
             if (fakedKey != DATA_UNSET) {
-                // TODO: do we have a similar prefix for control? Probably not too important.
-                if (fakedKey == 0x1b) {
-                    // ESC means the next keypress is an ALT key
+                if ((fakedKey == KEY_F(2)) || (fakedKey == 0x1b)) {
+                    // F2 fallback.. Mac seems to use ESC<key>, but that's unreliable in SecureCRT
+                    // means the next keypress is an ALT key
                     fakedMeta = RL_KEY_LEFT_ALT;
-                } else {
+	            setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
+		} else if (fakedKey == KEY_F(3)) {
+                    // F3 means the next keypress is a CTRL key
+                    fakedMeta = RL_KEY_LEFT_CONTROL;
+	            setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
                     // figure out what keys to press
-                    if ((fakedKey == 10) || (fakedKey == 13)) {
-                        // CR or LF for enter
-                        fakedMeta = 0;
-                        fakedKey = RL_KEY_ENTER;
-                        fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
-                    } else 
+                } else if ((fakedKey == 10) || (fakedKey == 13)) {
+                    // CR or LF for enter
+                    fakedMeta = 0;
+                    fakedKey = RL_KEY_ENTER;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
+                } else if (fakedKey == KEY_LEFT) {
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                    fakedKey = RL_KEY_S;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+                } else if (fakedKey == KEY_RIGHT) {
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                    fakedKey = RL_KEY_D;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+                } else if (fakedKey == KEY_UP) {
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                    fakedKey = RL_KEY_E;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+                } else if (fakedKey == KEY_DOWN) {
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                    fakedKey = RL_KEY_X;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+		} else if (fakedKey < 26) {
+                    // typical for control-A through Control-Z (excluding CR/LF)
+                    fakedMeta = RL_KEY_LEFT_CONTROL;
+                    fakedKey = RL_KEY_A + fakedKey - 1;
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+                } else
 #ifdef _WIN32
-                    // pdcurses Windows only keys
-                    if ((fakedKey >= ALT_0) && (fakedKey <= ALT_Z)) {
-                        fakedMeta = RL_KEY_LEFT_ALT;
-                        if (fakedKey <= ALT_9) {
-                            fakedKey = fakedKey-ALT_0 + '0';
-                        } else {
-                            fakedKey = fakedKey-ALT_A + 'A';
-                        }
-                        fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
-                    } else
-#endif
-                    // else case from above carries into this if
-                    if ((fakedKey >= ' ') && (fakedKey <= '~')) {
-                        const int *table = getAsciiMap();
-                        int idx = (fakedKey-' ')*2;
-                        int k = table[idx];
-                        int m = table[idx+1];
-                        if (m) {
-                            fakedMeta = m;
-                        }
-                        if (k) {
-                            fakedKey = k;
-                            fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
-                        }
+                // pdcurses Windows only keys
+                if ((fakedKey >= ALT_0) && (fakedKey <= ALT_Z)) {
+                    fakedMeta = RL_KEY_LEFT_ALT;
+                    if (fakedKey <= ALT_9) {
+                        fakedKey = fakedKey-ALT_0 + '0';
+                    } else {
+                        fakedKey = fakedKey-ALT_A + 'A';
                     }
-                }
-                if (fakedKeyCountdown) {
-                    debug_write("New fake key '%c' with meta %c", fakedKey, fakedMeta+'0');
+                    fakedKeyCountdown = FAKE_KEY_SCAN_COUNT*2;
+                } else
+#endif
+                // else case from above carries into this if
+                if ((fakedKey >= ' ') && (fakedKey <= '~')) {
+                    const int *table = getAsciiMap();
+                    int idx = (fakedKey-' ')*2;
+                    int k = table[idx];
+                    int m = table[idx+1];
+                    if (m) {
+                        fakedMeta = m;
+                    }
+                    if (k) {
+                        fakedKey = k;
+                        fakedKeyCountdown = FAKE_KEY_SCAN_COUNT;
+                        if (fakedMeta) fakedKeyCountdown *= 2;
+                    }
                 }
             }
         }
         if (fakedKeyCountdown) {
             // There are two keys active - the metakey and the actual key
-		    const Array8x8 &KEYS = getKeyArray();
+            const Array8x8 &KEYS = getKeyArray();
             int key = KEYS[scanCol][addr-3];
-            if ((key != 0) && (fakedKey != 0) && (key == fakedKey)) {
+            if ((key != 0) && (fakedKey != 0) && (key == fakedKey) && (fakedKeyCountdown <= FAKE_KEY_SCAN_COUNT)) {
                 ret = 0;
             } else if ((key != 0) && (fakedMeta != 0) && (key == fakedMeta)) {
                 ret = 0;
-            } 
+            }
+
+            --fakedKeyCountdown;
+            if (0 == fakedKeyCountdown) {
+                // all done, clear the key
+                setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
+                fakedKey = 0;
+                fakedMeta = 0;
+            }
+
+
         } else {
-		    const Array8x8 &KEYS = getKeyArray();
+            const Array8x8 &KEYS = getKeyArray();
             // nothing else matched, so check the keyboard array
             // Also manually check right versions of left keys
             int key = KEYS[scanCol][addr-3];
@@ -375,7 +408,7 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
                 ret = 0;
             }
         }
-	}
+    }
 
     return ret;
 }
@@ -409,17 +442,6 @@ void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE
             break;
     }
 
-    if (fakedKeyCountdown) {
-        --fakedKeyCountdown;
-        if (0 == fakedKeyCountdown) {
-            // all done, clear the key
-            setInterestingData(INDIRECT_KEY_PENDING_KEY, DATA_UNSET);
-            fakedKey = 0;
-            fakedMeta = 0;
-            debug_write("Fake key off");
-        }
-    }
-
 }
 
 bool TIKeyboard::init(int idx) {
@@ -451,8 +473,8 @@ void TIKeyboard::getDebugWindow(char *buffer, int user) {
     const Array8x8 &KEYS = getKeyArray();
     const Array8x8 &KeyDebug = getKeyDebugArray();
     int r,c;
-	int JOY1COL = getJoy1Col();
-	int JOY2COL = getJoy2Col();
+    int JOY1COL = getJoy1Col();
+    int JOY2COL = getJoy2Col();
     (void)user;
 
     getDebugSize(c, r, 0);
@@ -500,7 +522,7 @@ void TIKeyboard::getDebugWindow(char *buffer, int user) {
                 } else if ((key == RL_KEY_LEFT_CONTROL) && (IsKeyDown(RL_KEY_RIGHT_CONTROL))) {
                     buffer[KeyDebug[r][c]] = '*';
                 }
-            
+
                 // the 99/4A has a couple of extra keys
                 // easy way to detect which keyboard we're on is to check joystick 1
                 if (is4A()) {
