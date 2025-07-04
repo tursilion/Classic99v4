@@ -8,7 +8,6 @@
 // TODO: future: multiple consoles for multiple debug windows (UDP request/response)
 // TODO: maybe color someday? https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/color.html
 // TODO: At startup/shutdown, record whether in split panel mode or not, and what the two panels are
-// TODO: each debug panel should implement an optional help screen - displayed if they support it, else help key is ignored
 // TODO: menu bar acts as an input line for all the commands you used to be able to type
 
 // TODO: someday this library may help us go to UTF8: https://github.com/neacsum/utf8
@@ -28,7 +27,7 @@
 // TODO: Some keypresses don't work on some systems:
 // Mac: Control-Tab, Shift-F6 (Maybe just over VNC?)
 // WSL: Control-Tab (not sure about real Linux, but probably. Probably also PI.)
-// Why don't they work? Can they be made to work? That's stupid.
+// Control-tab is PDCurses/Windows only. We'll ifdef it.
 
 #include "os.h"
 #ifndef CONSOLE_BUILD
@@ -36,10 +35,12 @@
 #endif
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <thread>
 #include <vector>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "Classic99v4.h"
 #include "automutex.h"
 #include "peripheral.h"
@@ -62,9 +63,9 @@ static unsigned int numWin = 1;         // only 1 or 2 is legal right now, some 
 static unsigned int curWin = 0;         // current window is 0 or 1
 static char *debug_buf = nullptr;       // work buffer for fetching screens from the users
 static int debug_buf_size = 0;
-static bool inMenu = false;     // TODO: I think I need to think about this a little more... 
-                                // TODO: I need a way to build forms too...
-
+static bool inMenu = false;
+static bool isTyping = false;
+static std::string inputString;
 using namespace std::chrono_literals;
 
 #ifdef CONSOLE_BUILD
@@ -290,6 +291,23 @@ void debug_update() {
     }
 }
 
+// todo: move this to its own file
+// process inputString as a command
+void processCmdLine(std::string &cmd) {
+    debug_write("Got cmd: %s", cmd.c_str());
+}
+
+// close any tui popups (menu, command line)
+void closePopups() {
+    if (inMenu) {
+        inMenu = false;
+        debug_close_all_menu();
+    }
+    if (isTyping) {
+         isTyping = false;
+    }
+}
+
 // the main loop that manages the debug system - debugLock must be created BEFORE calling
 void debug_thread() {
     threadname("debug_thread");
@@ -311,19 +329,13 @@ void debug_thread() {
 
                 case KEY_RESIZE:
                     // window resize event
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
-                    }
+                    closePopups();
                     debug_handle_resize();
                     break;
 
                 case '\t':
                     // Tab - change to next window (use control-tab to skip to next device)
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
-                    }
+                    closePopups();
                     topMost[curWin]++;
                     if (topMost[curWin] >= debugPanes.size()) {
                         topMost[curWin] = 0;
@@ -332,10 +344,7 @@ void debug_thread() {
 
                 case KEY_BTAB:
                     // change panel backwards
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
-                    }
+                    closePopups();
                     topMost[curWin]--;
                     if ((topMost[curWin] < 0) || (topMost[curWin] >= debugPanes.size())) {
                         topMost[curWin] = (unsigned int)(debugPanes.size()-1);
@@ -346,10 +355,7 @@ void debug_thread() {
                 // PDCurses specific - TODO: this makes it windows only
                 case CTL_TAB:
                     // change panel to next device (skip multiple panes on same device)
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
-                    }
+                    closePopups();
                     {
                         Classic99Peripheral *p = debugPanes[topMost[curWin]].pOwner;
                         for (int idx=0; idx<debugPanes.size(); ++idx) {
@@ -365,11 +371,18 @@ void debug_thread() {
                     break;
 #endif
 
-                case KEY_F(6):
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
+                case KEY_F(1):
+                    if (!inMenu) {
+                        if (isTyping) {
+                            isTyping = false;
+                        } else {
+                            isTyping = true;
+                        }
                     }
+                    break;
+
+                case KEY_F(6):
+                    closePopups();
                     // turn on dual-panes, or switch between them
                     if (numWin == 1) {
                         debug_control(DEBUG_CMD_EDIT_SPLIT_DEBUG);
@@ -381,6 +394,9 @@ void debug_thread() {
                     break;
 
                 case KEY_F(10):
+                    if (isTyping) {
+                      isTyping = false;
+                    }
                     if (inMenu) {
                         inMenu = false;
                         debug_close_all_menu();
@@ -392,27 +408,47 @@ void debug_thread() {
                     break;
 
                 case KEY_F(18):     // Shift F6 is actually F18, okay
-                    if (inMenu) {
-                        inMenu = false;
-                        debug_close_all_menu();
-                    }
+                    closePopups();
                     // turn off dual pane
                     debug_control(DEBUG_CMD_EDIT_COLLAPSE_DEBUG);
+                    break;
+
+                // todo: check for defines on these keys
+                case 0x15:  // control-u
+                    if (isTyping) {
+                        inputString.clear();
+                    }
+                    break;
+
+                case 0x107:  // backspace
+                case KEY_LEFT:
+                    if (isTyping) {
+                        if (inputString.length() > 0) {
+                            inputString.resize(inputString.length()-1);
+                        }
+                    }
                     break;
 
                 default:
                     // should be an actual key not handled above - block if in menu
                     if (!inMenu) {
-                        //debug_write("Got char code %X", ch);
+                        debug_write("Got char code 0x%X", ch);
                         if (NULL != debugPanes[topMost[curWin]].pOwner) {
-                            // translate line feed to carriage return
                             if (debugPanes[topMost[curWin]].pOwner->debugKey(ch, debugPanes[topMost[curWin]].userval)) {
                                 break;
                             }
                         }
+                        // if we get here, it was not consumed by the panel and we are not in menu
+                        if (isprint(ch)) {
+                            // update the command line
+                            isTyping = true;
+                            inputString += ch;
+                        } else if ((ch == '\r')||(ch == '\n')) {
+                            processCmdLine(inputString);
+                            inputString.clear();
+                            isTyping = false;
+                        }
                     }
-
-                    // if we get here, it was not consumed by the panel
                     break;
             }
 
@@ -422,6 +458,23 @@ void debug_thread() {
             if (inMenu) {
                 if (menu_update(ch)) {
                     inMenu = false;
+                }
+            }
+            if (isTyping) {
+		int sr,sc;
+                getmaxyx(stdscr, sr, sc);
+		std::string cmd = "Cmd: ";
+                cmd += inputString;
+                --sc;  // minus an extra space for cursor
+                if (sc > 0) {
+                    if (cmd.length() > sc) {
+                        cmd.resize(sc);  // minus cmd:_ and an extra space for cursor
+                    }
+                    mvprintw(0, 0, cmd.c_str());
+                    attron(A_REVERSE);
+                    printw(" ");
+                    attroff(A_REVERSE);
+                    clrtoeol();
                 }
             }
 
@@ -686,13 +739,15 @@ void fetch_debug(char *buf, int nUser) {
         buf += c;
         snprintf(buf, c-1, "Sh-Tab    - previous view");
         buf += c;
+#ifdef CTL_TAB
         snprintf(buf, c-1, "Ctrl-Tab  - next device");
         buf += c;
+#endif
         snprintf(buf, c-1, "F6        - Split panes or Change Active");
         buf += c;
         snprintf(buf, c-1, "Sh-F6     - Un-Split panes");
         buf += c;
-        snprintf(buf, c-1, "Type      - Enter command");
+        snprintf(buf, c-1, "F1        - Enter command");
         buf += c;
         snprintf(buf, c-1, "Type HELP - Command help to debug pane");
     }
