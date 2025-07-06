@@ -250,10 +250,10 @@ enum {
 
 TMS9918::TMS9918(Classic99System *core) 
     : Classic99Peripheral(core)
-    , bUse5SpriteLimit(true)
-    , pDisplay(nullptr)
     , debugScreenOffset(0)
     , debugVDPDebug(0)
+    , bUse5SpriteLimit(true)
+    , pDisplay(nullptr)
 {
 }
 
@@ -2365,9 +2365,9 @@ void TMS9918::DrawSprites(int scanline)
 		if (dblSize) {
 			pat=pat&0xfc;				// if double-sized, it must be a multiple of 4
 		}
-		int col=VDP[curSAL]&0xf;		// sprite color
+		unsigned int col=VDP[curSAL]&0xf;		// sprite color
 		if (col == 0) col = HOT_PINK_TRANS; else col=InvColorToInt(F18APalette[col]);
-	
+
 		if (VDP[curSAL]&0x80) {			// early clock
 			xx-=32;
 		}

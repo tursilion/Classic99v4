@@ -18,7 +18,7 @@ TI994Scratchpad::~TI994Scratchpad() {
 uint8_t TI994Scratchpad::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {
     // there are no extra cycles used by the TI's 16-bit RAM
     (void)isIO;
-    (void)cycles;
+    (void)((long)cycles);  // still unusued, dumb gcc workaround
     (void)rmw;
 
     // in theory, the address should be restricted to what we asked for, but in debug mode we better check
@@ -36,7 +36,7 @@ uint8_t TI994Scratchpad::read(int addr, bool isIO, volatile long &cycles, MEMACC
 void TI994Scratchpad::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
     // there are no extra cycles used by the TI's 16-bit RAM
     (void)isIO;
-    (void)cycles;
+    (void)((long)cycles);  // still unusued, dumb gcc workaround
     (void)rmw;
 
     // in theory, the address should be restricted to what we asked for, but in debug mode we better check

@@ -20,7 +20,7 @@ Classic99ROM::~Classic99ROM() {
 uint8_t Classic99ROM::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {
     // there are no extra cycles used by the TI's 16-bit ROM - this is why we don't need the write function
     (void)isIO;
-    (void)cycles;
+    (void)((long)cycles);    // still unused, dumb gcc workaround
     (void)rmw;
 
     // in theory, the address should be restricted to what we asked for, but in debug mode we better check

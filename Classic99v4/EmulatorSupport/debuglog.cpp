@@ -463,11 +463,12 @@ void debug_thread() {
             if (isTyping) {
 		int sr,sc;
                 getmaxyx(stdscr, sr, sc);
+                (void)sr;
 		std::string cmd = "Cmd: ";
                 cmd += inputString;
                 --sc;  // minus an extra space for cursor
                 if (sc > 0) {
-                    if (cmd.length() > sc) {
+                    if ((signed)cmd.length() > sc) {
                         cmd.resize(sc);  // minus cmd:_ and an extra space for cursor
                     }
                     mvprintw(0, 0, cmd.c_str());

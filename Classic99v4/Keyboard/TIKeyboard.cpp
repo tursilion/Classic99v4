@@ -270,7 +270,7 @@ uint8_t TIKeyboard::CheckJoysticks(int addr, int scanCol) {
 uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw) {
     // there are no extra cycles used by the TI's CRU
     (void)isIO;
-    (void)cycles;
+    (void)((long)cycles);    // still unused, dumb gcc workaround
     (void)rmw;
 
     if (is4A()) {
@@ -416,7 +416,7 @@ uint8_t TIKeyboard::read(int addr, bool isIO, volatile long &cycles, MEMACCESSTY
 void TIKeyboard::write(int addr, bool isIO, volatile long &cycles, MEMACCESSTYPE rmw, uint8_t data) {
     // there are no extra cycles used by the TI's CRU
     (void)isIO;
-    (void)cycles;
+    (void)((long)cycles);    // still unused, dumb gcc workaround
     (void)rmw;
 
     // only 4 bits matter here (but 21 isn't mapped on the 4)

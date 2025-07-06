@@ -22,7 +22,7 @@ include(CTest)
 enable_testing()
 add_executable(classic99v4)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++14")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++14 -Wno-format-truncation -Wno-stringop-truncation")
 
 if (CONSOLE_BUILD)
     # no raylib here

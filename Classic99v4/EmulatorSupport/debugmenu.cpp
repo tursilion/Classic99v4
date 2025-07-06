@@ -147,7 +147,7 @@ void MenuTrack::drawMenu(int r, int c) {
     for (int i=1; i<height-1; ++i) {
         char buf[MAXIMUM];
         memset(buf, 0, sizeof(buf));
-        if (width-2 < sizeof(buf)) {
+        if (width-2 < (signed)sizeof(buf)) {
             mvhline(r+i, c+1, ' ', width-2);
             strncpy(buf, pMenu[i+start].str, width-2);
             if (i+start == currentSelection) {
@@ -200,10 +200,10 @@ bool menu_update(int ch) {
     // the current live menu
     MenuTrack &currentMenu = openMenus.back();
     bool isRootMenu = (openMenus.size() == 1);
-    
+
     // inefficient, but it's a small search
     int currentIdx = -1;
-    for (int i=0; i<menuPanes.size(); ++i) {
+    for (unsigned int i=0; i<menuPanes.size(); ++i) {
         if (0 == strcmp(menuPanes[i].getMenuName(), openMenus.back().getMenuName())) {
             currentIdx = i;
             break;
@@ -258,7 +258,7 @@ bool menu_update(int ch) {
 
         case KEY_RIGHT:
             if (isRootMenu) {
-                if (currentIdx < menuPanes.size()-1) {
+                if (currentIdx < (signed)menuPanes.size()-1) {
                     debug_close_menu();
                     ++currentIdx;   // currentMenu becomes invalid, but that's okay
                     debug_open_menu(&menuPanes[currentIdx]);
@@ -286,6 +286,7 @@ bool menu_update(int ch) {
     // now draw the top line, highlight the active one and remember where it is
     int sr, sc;
     getmaxyx(stdscr, sr, sc);
+    (void)sr;
     move(0,0);
     clrtoeol();
 
@@ -297,7 +298,7 @@ bool menu_update(int ch) {
         szMatch = openMenus.back().getMenuName();
     }
 
-    for (int i=0; i<menuPanes.size(); ++i) {
+    for (unsigned int i=0; i<menuPanes.size(); ++i) {
         const char *str = menuPanes[i].getMenuName();
         int len = (int)strlen(str);
         if (len + dc >= sc) break;
@@ -317,7 +318,7 @@ bool menu_update(int ch) {
     // we'll try just stacking them, whatever...
     dr=1;
     dc=activeDC;
-    for (int i=0; i<openMenus.size(); ++i) {
+    for (unsigned int i=0; i<openMenus.size(); ++i) {
         // TODO: Peripheral menu needs to be special
         openMenus[i].drawMenu(dr, dc);
         dc += 4;

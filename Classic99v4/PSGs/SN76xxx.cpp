@@ -178,8 +178,8 @@ void SN76xxx::fillAudioBuffer(void *inBuf, int bufSize, int nSamples) {
 	double nTimePerClock=1000.0/(nClock/16.0);
 	double nTimePerSample=1000.0/(double)AudioSampleRate;
 	int nClocksPerSample = (int)(nTimePerSample / nTimePerClock + 0.5);		// +0.5 to round up if needed
-	int newdacpos = 0;
-	int inSamples = nSamples;
+	//int newdacpos = 0;
+	//int inSamples = nSamples;
 	short *buf = (short*)inBuf;
 
 	// sanity check the buffer
@@ -470,7 +470,7 @@ void SN76xxx::debugBuildNoteTable() {
     double currentNote = 27.5;  // A
 
     // so first init the table blank
-    for (int idx=0; idx<sizeof(NoteTable)/sizeof(NoteTable[0]); ++idx) {
+    for (unsigned int idx=0; idx<sizeof(NoteTable)/sizeof(NoteTable[0]); ++idx) {
         strcpy(NoteTable[idx],"---");
     }
 
