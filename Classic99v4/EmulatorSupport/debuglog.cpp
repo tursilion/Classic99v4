@@ -7,6 +7,7 @@
 
 // TODO: future: multiple consoles for multiple debug windows (UDP request/response)
 // TODO: maybe color someday? https://tldp.org/HOWTO/NCURSES-Programming-HOWTO/color.html
+//       Ncurses might only support 7 colors... check whether it supports the 256 color ANSI mode (we don't need RGB)
 // TODO: At startup/shutdown, record whether in split panel mode or not, and what the two panels are
 // TODO: menu bar acts as an input line for all the commands you used to be able to type
 
@@ -28,6 +29,7 @@
 // Mac: Control-Tab, Shift-F6 (Maybe just over VNC?)
 // WSL: Control-Tab (not sure about real Linux, but probably. Probably also PI.)
 // Control-tab is PDCurses/Windows only. We'll ifdef it.
+// TODO: should make command keys configurable
 
 #include "os.h"
 #ifndef CONSOLE_BUILD

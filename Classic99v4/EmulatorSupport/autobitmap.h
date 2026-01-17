@@ -8,6 +8,7 @@
 #include <raylib.h>
 #endif
 #include <cstring>
+#include <cstdlib>
 
 // Just a simple class that wraps the allegro bitmap for that fancy RAI the kids all love these days
 class autoBitmap {

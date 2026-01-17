@@ -8,6 +8,7 @@
 #include <raylib.h>
 #endif
 #include <cstring>
+#include <cstdlib>
 #include "../EmulatorSupport/audioSrc.h"
 
 // TODO: hard coded settings for now...
